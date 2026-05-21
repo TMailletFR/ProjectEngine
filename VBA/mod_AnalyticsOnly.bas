@@ -1,0 +1,484 @@
+Attribute VB_Name = "mod_AnalyticsOnly"
+Option Explicit
+
+' ============================================================
+' mod_AnalyticsOnly
+' ANALYTICS TOGGLE + ANALYTICS ONLY EXECUTION
+'
+' Objectif :
+' - Le toggle visible est dans WBS, au-dessus des colonnes analytics.
+' - L'état ON/OFF est conservé en mémoire VBA uniquement.
+' - CALC!AB1 n'est plus utilisé comme backend state.
+'
+' Comportement :
+'
+' OFF :
+' - ne recalcule pas Critical Path / floats / REX ;
+' - vide les colonnes analytics dans WBS ;
+' - vide aussi les colonnes analytics dans CALC si elles existent.
+'
+' ON :
+' - recalcule uniquement les analytics sur l'état courant de CALC ;
+' - pousse les analytics vers WBS ;
+' - ne relance pas le core planning complet.
+'
+' Principe important :
+' - Pas de duplication du moteur analytics.
+' - CalcBridge_RunAnalyticsAndPush reste la seule source
+'   de calcul CP / floats / REX.
+'
+' Shapes UI dans WBS :
+' - lbl_WBS_Analytics_Toggle
+' - shp_WBS_Analytics_BG
+' - shp_WBS_Analytics_Knob
+'
+' Colonnes analytics concernées :
+' - Critical Path
+' - Critical Path REX
+' - Total Float
+' - Free Float
+' - Total Float REX
+' - Free Float REX
+' - Deadline Float
+' ============================================================
+
+Private gAnalyticsEnabled As Boolean
+Private gAnalyticsStateInitialized As Boolean
+
+Private Const ANALYTICS_TOGGLE_WS As String = "WBS"
+Private Const ANALYTICS_LABEL_CELL As String = "AB1"
+Private Const ANALYTICS_TOGGLE_CELL As String = "AC1"
+
+Private Const ANALYTICS_LABEL_SHAPE As String = "lbl_WBS_Analytics_Toggle"
+Private Const ANALYTICS_BG_SHAPE As String = "shp_WBS_Analytics_BG"
+Private Const ANALYTICS_KNOB_SHAPE As String = "shp_WBS_Analytics_Knob"
+
+Public Function IsAnalyticsEnabled() As Boolean
+
+    If Not gAnalyticsStateInitialized Then
+        gAnalyticsEnabled = True
+        gAnalyticsStateInitialized = True
+    End If
+
+    IsAnalyticsEnabled = gAnalyticsEnabled
+
+End Function
+
+Public Sub SetAnalyticsEnabled(ByVal enabledValue As Boolean)
+
+    gAnalyticsEnabled = enabledValue
+    gAnalyticsStateInitialized = True
+
+End Sub
+
+Public Sub Toggle_Analytics()
+
+    Dim enabledNow As Boolean
+    Dim enabledNext As Boolean
+    Dim consoleMessages As Collection
+
+    On Error GoTo ErrHandler
+
+    Set consoleMessages = New Collection
+
+    enabledNow = IsAnalyticsEnabled()
+    enabledNext = Not enabledNow
+
+    SetAnalyticsEnabled enabledNext
+    Refresh_Analytics_Toggle_Visual
+
+    If enabledNext Then
+        Run_Analytics_Only consoleMessages
+    Else
+        Clear_Analytics_Outputs consoleMessages
+    End If
+
+    Refresh_Analytics_Toggle_Visual
+    CalcBridge_ShowPlanningConsole consoleMessages
+
+    Exit Sub
+
+ErrHandler:
+    CalcBridge_ShowSingleConsoleMessage _
+        "STOP", _
+        "Erreur dans Toggle_Analytics : " & Err.Description, _
+        "Error in Toggle_Analytics: " & Err.Description
+
+End Sub
+
+Public Sub Ensure_Analytics_Toggle()
+
+    On Error GoTo SafeExit
+
+    Ensure_Analytics_Toggle_Shapes
+    Refresh_Analytics_Toggle_Visual
+
+SafeExit:
+End Sub
+
+Public Sub Refresh_Analytics_Toggle_Visual()
+
+    Dim ws As Worksheet
+    Dim shpLabel As Shape
+    Dim shpBg As Shape
+    Dim shpKnob As Shape
+    Dim isOn As Boolean
+    Dim knobLeft As Double
+
+    On Error GoTo SafeExit
+
+    Set ws = ThisWorkbook.Worksheets(ANALYTICS_TOGGLE_WS)
+
+    On Error Resume Next
+    Set shpLabel = ws.Shapes(ANALYTICS_LABEL_SHAPE)
+    Set shpBg = ws.Shapes(ANALYTICS_BG_SHAPE)
+    Set shpKnob = ws.Shapes(ANALYTICS_KNOB_SHAPE)
+    On Error GoTo SafeExit
+
+    If shpBg Is Nothing Or shpKnob Is Nothing Then
+        Ensure_Analytics_Toggle_Shapes
+
+        On Error Resume Next
+        Set shpLabel = ws.Shapes(ANALYTICS_LABEL_SHAPE)
+        Set shpBg = ws.Shapes(ANALYTICS_BG_SHAPE)
+        Set shpKnob = ws.Shapes(ANALYTICS_KNOB_SHAPE)
+        On Error GoTo SafeExit
+    End If
+
+    If shpBg Is Nothing Then Exit Sub
+    If shpKnob Is Nothing Then Exit Sub
+
+    isOn = IsAnalyticsEnabled()
+
+    If Not shpLabel Is Nothing Then
+        With shpLabel
+            .TextFrame2.TextRange.Text = "Analytics"
+            .TextFrame2.TextRange.Font.Size = 9.5
+            .TextFrame2.TextRange.Font.Bold = msoTrue
+            .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+            .TextFrame2.VerticalAnchor = msoAnchorMiddle
+            .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+            .OnAction = "Toggle_Analytics"
+        End With
+    End If
+
+    If isOn Then
+        shpBg.Fill.ForeColor.RGB = RGB(112, 173, 71)
+        shpBg.Line.ForeColor.RGB = RGB(112, 173, 71)
+        knobLeft = shpBg.Left + shpBg.Width - shpKnob.Width - 3
+    Else
+        shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
+        knobLeft = shpBg.Left + 3
+    End If
+
+    shpBg.OnAction = "Toggle_Analytics"
+    shpKnob.OnAction = "Toggle_Analytics"
+
+    shpKnob.Left = knobLeft
+    shpKnob.Top = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
+
+SafeExit:
+End Sub
+
+Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Nothing)
+
+    Dim wsCalc As Worksheet
+    Dim tblCalc As ListObject
+    Dim mapCalc As Object
+    Dim linksBySuccId As Object
+    Dim localConsole As Collection
+    Dim showLocalConsole As Boolean
+
+    On Error GoTo ErrHandler
+
+    If consoleMessages Is Nothing Then
+        Set localConsole = New Collection
+        showLocalConsole = True
+    Else
+        Set localConsole = consoleMessages
+        showLocalConsole = False
+    End If
+
+    Set wsCalc = ThisWorkbook.Worksheets("CALC")
+    Set tblCalc = wsCalc.ListObjects("tbl_CALC")
+
+    If tblCalc.DataBodyRange Is Nothing Then
+        CalcBridge_AddConsoleMessage localConsole, "WARNING", _
+            BiMsg( _
+                "Analytics non recalculées : tbl_CALC est vide.", _
+                "Analytics not recalculated: tbl_CALC is empty.")
+
+        If showLocalConsole Then CalcBridge_ShowPlanningConsole localConsole
+        Exit Sub
+    End If
+
+    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
+    Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
+
+    CalcBridge_RunAnalyticsAndPush tblCalc, mapCalc, linksBySuccId, localConsole
+    CalcBridge_ComputeDeadlineAnalytics tblCalc, mapCalc, localConsole
+
+    Push_Analytics_Back_To_WBS
+
+    If showLocalConsole Then
+        CalcBridge_ShowPlanningConsole localConsole
+    End If
+
+    Exit Sub
+
+ErrHandler:
+    If localConsole Is Nothing Then Set localConsole = New Collection
+
+    CalcBridge_AddConsoleMessage localConsole, "STOP", _
+        BiMsg( _
+            "Erreur dans Run_Analytics_Only" & vbCrLf & _
+            "-> " & Err.Description, _
+            "Error in Run_Analytics_Only" & vbCrLf & _
+            "-> " & Err.Description)
+
+    CalcBridge_ShowPlanningConsole localConsole
+
+End Sub
+
+Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection = Nothing)
+
+    Dim wsCalc As Worksheet
+    Dim wsWBS As Worksheet
+    Dim tblCalc As ListObject
+    Dim tblWBS As ListObject
+    Dim analyticsCols As Variant
+    Dim i As Long
+    Dim allowedFields As Variant
+    Dim localConsole As Collection
+    Dim showLocalConsole As Boolean
+    Dim writeGuardStarted As Boolean
+
+    On Error GoTo ErrHandler
+
+    If consoleMessages Is Nothing Then
+        Set localConsole = New Collection
+        showLocalConsole = True
+    Else
+        Set localConsole = consoleMessages
+        showLocalConsole = False
+    End If
+
+    analyticsCols = AnalyticsColumnNames()
+
+    Set wsCalc = ThisWorkbook.Worksheets("CALC")
+    Set wsWBS = ThisWorkbook.Worksheets("WBS")
+
+    Set tblCalc = wsCalc.ListObjects("tbl_CALC")
+    Set tblWBS = wsWBS.ListObjects("tbl_WBS")
+
+    If Not tblCalc.DataBodyRange Is Nothing Then
+        For i = LBound(analyticsCols) To UBound(analyticsCols)
+            ClearListColumnIfExists tblCalc, CStr(analyticsCols(i))
+        Next i
+    End If
+
+    allowedFields = analyticsCols
+
+    If Not tblWBS.DataBodyRange Is Nothing Then
+
+        BeginAuthorizedWBSWrite "Clear_Analytics_Outputs", allowedFields
+        writeGuardStarted = True
+
+        For i = LBound(analyticsCols) To UBound(analyticsCols)
+            ClearListColumnIfExists tblWBS, CStr(analyticsCols(i))
+        Next i
+
+        EndAuthorizedWBSWrite
+        writeGuardStarted = False
+
+    End If
+
+    Exit Sub
+
+ErrHandler:
+    On Error Resume Next
+    If writeGuardStarted Then EndAuthorizedWBSWrite
+    On Error GoTo 0
+
+    If localConsole Is Nothing Then Set localConsole = New Collection
+
+    CalcBridge_AddConsoleMessage localConsole, "STOP", _
+        BiMsg( _
+            "Erreur dans Clear_Analytics_Outputs" & vbCrLf & _
+            "-> " & Err.Description, _
+            "Error in Clear_Analytics_Outputs" & vbCrLf & _
+            "-> " & Err.Description)
+
+    CalcBridge_ShowPlanningConsole localConsole
+
+End Sub
+
+Private Function AnalyticsColumnNames() As Variant
+
+    AnalyticsColumnNames = Array( _
+        "Critical Path", _
+        "Longest Path", _
+        "Critical Path REX", _
+        "Total Float", _
+        "Free Float", _
+        "Total Float REX", _
+        "Free Float REX", _
+        "Deadline Float" _
+    )
+
+End Function
+
+Private Sub ClearListColumnIfExists(ByVal tbl As ListObject, ByVal columnName As String)
+
+    Dim col As ListColumn
+
+    On Error Resume Next
+    Set col = tbl.ListColumns(columnName)
+    On Error GoTo 0
+
+    If Not col Is Nothing Then
+        If Not col.DataBodyRange Is Nothing Then
+            col.DataBodyRange.ClearContents
+        End If
+    End If
+
+End Sub
+
+Private Sub Ensure_Analytics_Toggle_Shapes()
+
+    Dim ws As Worksheet
+    Dim labelCell As Range
+    Dim toggleCell As Range
+    Dim shpLabel As Shape
+    Dim shpBg As Shape
+    Dim shpKnob As Shape
+
+    Dim labelLeft As Double
+    Dim labelTop As Double
+    Dim labelWidth As Double
+    Dim labelHeight As Double
+
+    Dim bgLeft As Double
+    Dim bgTop As Double
+    Dim bgWidth As Double
+    Dim bgHeight As Double
+    Dim knobSize As Double
+
+    On Error GoTo SafeExit
+
+    Set ws = ThisWorkbook.Worksheets(ANALYTICS_TOGGLE_WS)
+    Set labelCell = ws.Range(ANALYTICS_LABEL_CELL)
+    Set toggleCell = ws.Range(ANALYTICS_TOGGLE_CELL)
+
+    With labelCell
+        .ClearContents
+        .Interior.Pattern = xlNone
+        .Borders.LineStyle = xlNone
+    End With
+
+    With toggleCell
+        .ClearContents
+        .Interior.Pattern = xlNone
+        .Borders.LineStyle = xlNone
+    End With
+
+    labelLeft = labelCell.Left + 4
+    labelTop = labelCell.Top + 2
+    labelWidth = labelCell.Width - 4
+    labelHeight = labelCell.Height - 4
+
+    bgWidth = 42
+    bgHeight = 20
+    knobSize = 14
+
+    bgLeft = toggleCell.Left + ((toggleCell.Width - bgWidth) / 2)
+    bgTop = toggleCell.Top + ((toggleCell.Height - bgHeight) / 2)
+
+    On Error Resume Next
+    Set shpLabel = ws.Shapes(ANALYTICS_LABEL_SHAPE)
+    Set shpBg = ws.Shapes(ANALYTICS_BG_SHAPE)
+    Set shpKnob = ws.Shapes(ANALYTICS_KNOB_SHAPE)
+    On Error GoTo SafeExit
+
+    If shpLabel Is Nothing Then
+        Set shpLabel = ws.Shapes.AddTextbox( _
+            msoTextOrientationHorizontal, _
+            labelLeft, _
+            labelTop, _
+            labelWidth, _
+            labelHeight)
+        shpLabel.Name = ANALYTICS_LABEL_SHAPE
+    End If
+
+    With shpLabel
+        .Left = labelLeft
+        .Top = labelTop
+        .Width = labelWidth
+        .Height = labelHeight
+        .Line.Visible = msoFalse
+        .Fill.Visible = msoFalse
+        .Placement = xlMoveAndSize
+        .OnAction = "Toggle_Analytics"
+        .TextFrame2.VerticalAnchor = msoAnchorMiddle
+        .TextFrame2.MarginLeft = 0
+        .TextFrame2.MarginRight = 0
+        .TextFrame2.MarginTop = 0
+        .TextFrame2.MarginBottom = 0
+        .TextFrame2.TextRange.Text = "Analytics"
+        .TextFrame2.TextRange.Font.Size = 9.5
+        .TextFrame2.TextRange.Font.Bold = msoTrue
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+    End With
+
+    If shpBg Is Nothing Then
+        Set shpBg = ws.Shapes.AddShape( _
+            msoShapeRoundedRectangle, _
+            bgLeft, _
+            bgTop, _
+            bgWidth, _
+            bgHeight)
+        shpBg.Name = ANALYTICS_BG_SHAPE
+    End If
+
+    With shpBg
+        .Left = bgLeft
+        .Top = bgTop
+        .Width = bgWidth
+        .Height = bgHeight
+        .Adjustments.item(1) = 0.5
+        .Placement = xlMoveAndSize
+        .OnAction = "Toggle_Analytics"
+        .Line.Weight = 1
+        .Shadow.Visible = msoFalse
+    End With
+
+    If shpKnob Is Nothing Then
+        Set shpKnob = ws.Shapes.AddShape( _
+            msoShapeOval, _
+            bgLeft + 3, _
+            bgTop + ((bgHeight - knobSize) / 2), _
+            knobSize, _
+            knobSize)
+        shpKnob.Name = ANALYTICS_KNOB_SHAPE
+    End If
+
+    With shpKnob
+        .Width = knobSize
+        .Height = knobSize
+        .Placement = xlMoveAndSize
+        .OnAction = "Toggle_Analytics"
+        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.ForeColor.RGB = RGB(150, 150, 150)
+        .Line.Weight = 0.75
+        .Shadow.Visible = msoTrue
+        .Shadow.Blur = 4
+        .Shadow.OffsetX = 0
+        .Shadow.OffsetY = 1
+        .Shadow.Transparency = 0.45
+    End With
+
+SafeExit:
+End Sub
+
