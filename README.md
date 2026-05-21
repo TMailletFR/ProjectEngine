@@ -105,6 +105,14 @@ The engine is functional and under continuous hardening. APIs, workbook structur
 
 
 
+## Support the Project
+
+If ProjectEngine helps your work and you want to support ongoing development:
+
+![QRCode](Screenshots/qrcode.png)
+
+
+
 ## License
 
 
