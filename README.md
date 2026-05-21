@@ -8,7 +8,7 @@ Open-source Excel/VBA project planning engine for dependency-driven schedule cal
 
 ProjectEngine turns an Excel workbook into a lightweight planning engine with native VBA scheduling logic, Gantt rendering, S-curve analytics, constraints, floats, and runtime diagnostics.
 
-![ProjectEngine Demo](Screenshots/hero-gantt.gif)
+![ProjectEngine Demo](Screenshots/Hero-gantt.gif)
 
 
 
