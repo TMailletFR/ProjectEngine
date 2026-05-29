@@ -62,6 +62,7 @@ Public Sub Run_Calc_Core( _
         "ParentID", _
         "IsSummary", _
         "Task Type", _
+        "Cal", _
         "Actual Start", _
         "Actual Finish", _
         "Forecast Start", _
@@ -147,7 +148,8 @@ Public Sub Run_Calc_Core( _
             rowIdx = CLng(rowById(CStr(currentId)))
             Core_SetCalcTriplet dataArr, rowIdx, mapCol, _
                 calcStartById(CStr(currentId)), _
-                calcFinishById(CStr(currentId))
+                calcFinishById(CStr(currentId)), _
+                NormalizeCalendarType(Core_GetVal(dataArr, rowIdx, mapCol, "Cal"))
         End If
     Next currentId
 
@@ -246,10 +248,12 @@ Private Sub Core_ComputeOneLeafTask( _
 
     Dim effectiveDuration As Variant
     Dim taskTypeVal As String
+    Dim calType As String
 
     If Not rowById.Exists(taskId) Then Exit Sub
     rowIdx = CLng(rowById(taskId))
 
+    calType = NormalizeCalendarType(Core_GetVal(dataArr, rowIdx, mapCol, "Cal"))
     baselineStart = Core_GetVal(dataArr, rowIdx, mapCol, "Baseline Start")
     baselineDuration = Core_GetVal(dataArr, rowIdx, mapCol, "Baseline Duration")
     actualStart = Core_GetVal(dataArr, rowIdx, mapCol, "Actual Start")
@@ -322,7 +326,7 @@ Private Sub Core_ComputeOneLeafTask( _
 
                     Case "SS"
                         If calcStartById.Exists(predId) Then
-                            candidateStart = CDbl(calcStartById(predId)) + lagVal
+                            candidateStart = ApplyLag(calcStartById(predId), lagVal, calType, "SS")
 
                             If summarySourceId <> "" Then
                                 If summaryStartBySource.Exists(summarySourceId) Then
@@ -338,13 +342,13 @@ Private Sub Core_ComputeOneLeafTask( _
 
                     Case "FF"
                         If calcFinishById.Exists(predId) Then
-                            candidateFinish = CDbl(calcFinishById(predId)) + lagVal
+                            candidateFinish = ApplyLag(calcFinishById(predId), lagVal, calType, "FF")
                             predAllowedFinish = Core_MaxDateIfBoth(predAllowedFinish, candidateFinish)
                         End If
 
                     Case "FS", ""
                         If calcFinishById.Exists(predId) Then
-                            candidateStart = CDbl(calcFinishById(predId)) + 1 + lagVal
+                            candidateStart = ApplyLag(calcFinishById(predId), lagVal, calType, "FS")
                             normalAllowedStart = Core_MaxDateIfBoth(normalAllowedStart, candidateStart)
                         End If
 
@@ -560,7 +564,7 @@ Private Sub Core_ComputeOneLeafTask( _
             Exit Sub
         End If
 
-        mustFinishStart = CDbl(constraintMustFinish) - CDbl(effectiveDuration) + 1
+        mustFinishStart = SubtractWorkingDays(constraintMustFinish, effectiveDuration, calType)
 
         If HasValue(allowedFinish) Then
             If CDbl(allowedFinish) > CDbl(constraintMustFinish) Then
@@ -635,7 +639,7 @@ Private Sub Core_ComputeOneLeafTask( _
         calcStart = Empty
 
         If HasValue(allowedFinish) And HasValue(effectiveDuration) Then
-            calcStart = CDbl(allowedFinish) - CDbl(effectiveDuration) + 1
+            calcStart = SubtractWorkingDays(allowedFinish, effectiveDuration, calType)
         End If
 
         If HasValue(allowedStart) Then
@@ -682,7 +686,7 @@ Private Sub Core_ComputeOneLeafTask( _
             Exit Sub
         End If
 
-        calcFinish = CDbl(calcStart) + CDbl(effectiveDuration) - 1
+        calcFinish = AddWorkingDays(calcStart, effectiveDuration, calType)
     End If
 
     If HasValue(allowedFinish) Then
@@ -691,7 +695,7 @@ Private Sub Core_ComputeOneLeafTask( _
 
             If Not hasExplicitStart Then
                 If HasValue(effectiveDuration) Then
-                    calcStart = CDbl(calcFinish) - CDbl(effectiveDuration) + 1
+                    calcStart = SubtractWorkingDays(calcFinish, effectiveDuration, calType)
 
                     If HasValue(allowedStart) Then
                         If CDbl(calcStart) < CDbl(allowedStart) Then calcStart = allowedStart
@@ -1271,6 +1275,7 @@ Private Sub Core_ApplyLOEPostProcess( _
 
     Dim candidateStart As Variant
     Dim candidateFinish As Variant
+    Dim calType As String
 
     If loeIds Is Nothing Then Exit Sub
     If loeIds.Count = 0 Then Exit Sub
@@ -1279,6 +1284,7 @@ Private Sub Core_ApplyLOEPostProcess( _
 
         If Not rowById.Exists(CStr(loeId)) Then GoTo NextLOE
         rowIdx = CLng(rowById(CStr(loeId)))
+        calType = NormalizeCalendarType(Core_GetVal(dataArr, rowIdx, mapCol, "Cal"))
 
         ssCount = 0
         ffCount = 0
@@ -1329,7 +1335,7 @@ Private Sub Core_ApplyLOEPostProcess( _
                                 GoTo NextLOE
                             End If
 
-                            candidateStart = CDbl(calcStartById(predId)) + lagVal
+                            candidateStart = ApplyLag(calcStartById(predId), lagVal, calType, "SS")
 
                             If summarySourceId <> "" Then
                                 If summarySSStartBySource.Exists(summarySourceId) Then
@@ -1369,7 +1375,7 @@ Private Sub Core_ApplyLOEPostProcess( _
                                 GoTo NextLOE
                             End If
 
-                            candidateFinish = CDbl(calcFinishById(predId)) + lagVal
+                            candidateFinish = ApplyLag(calcFinishById(predId), lagVal, calType, "FF")
                             loeFinish = Core_MaxDateIfBoth(loeFinish, candidateFinish)
 
                         Case Else

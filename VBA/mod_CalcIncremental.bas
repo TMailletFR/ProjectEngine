@@ -126,6 +126,7 @@ Private Sub ValidateIncrementalCalcColumns(ByVal mapCalc As Object)
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", _
         "Baseline Duration", _
         "Actual Start", _
@@ -160,6 +161,7 @@ Private Sub ValidateIncrementalStateColumns(ByVal mapState As Object)
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", _
         "Baseline Duration", _
         "Actual Start", _
@@ -233,6 +235,7 @@ Private Function BuildCalcCurrentRowSignature( _
     s = s & "|ParentID=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("ParentID")), "TEXT")
     s = s & "|IsSummary=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("IsSummary")), "BOOLEAN")
     s = s & "|PredWBS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Predecessors WBS")), "PREDWBS")
+    s = s & "|Cal=" & NormalizeIncrementalSignatureValue(NormalizeCalendarType(arrCalc(rowIdx, mapCalc("Cal"))), "TEXT")
 
     s = s & "|BS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Baseline Start")), "DATE")
     s = s & "|BD=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Baseline Duration")), "NUMBER")

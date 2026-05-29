@@ -128,7 +128,8 @@ End Function
 
 Public Function Core_CalcInclusiveDuration( _
     ByVal startVal As Variant, _
-    ByVal finishVal As Variant) As Variant
+    ByVal finishVal As Variant, _
+    Optional ByVal calendarType As String = "") As Variant
 
     If Not HasValue(startVal) Then
         Core_CalcInclusiveDuration = Empty
@@ -140,7 +141,7 @@ Public Function Core_CalcInclusiveDuration( _
         Exit Function
     End If
 
-    Core_CalcInclusiveDuration = CLng(CDbl(finishVal) - CDbl(startVal) + 1)
+    Core_CalcInclusiveDuration = DateDiffWorkingDays(startVal, finishVal, calendarType)
 
 End Function
 
@@ -149,14 +150,15 @@ Public Sub Core_SetCalcTriplet( _
     ByVal rowIdx As Long, _
     ByVal mapCol As Object, _
     ByVal startVal As Variant, _
-    ByVal finishVal As Variant)
+    ByVal finishVal As Variant, _
+    Optional ByVal calendarType As String = "")
 
     Dim durVal As Variant
 
     Core_SetVal dataArr, rowIdx, mapCol, "Calculated Start", startVal
     Core_SetVal dataArr, rowIdx, mapCol, "Calculated Finish", finishVal
 
-    durVal = Core_CalcInclusiveDuration(startVal, finishVal)
+    durVal = Core_CalcInclusiveDuration(startVal, finishVal, calendarType)
     Core_SetVal dataArr, rowIdx, mapCol, "Calculated Duration", durVal
 
 End Sub

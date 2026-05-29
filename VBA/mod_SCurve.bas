@@ -1190,15 +1190,22 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
     Dim ratio As Double
     Dim chartObj As ChartObject
     Dim dateRange As Range
+    Dim dateCount As Long
+    Dim categoryIndex As Double
+    Dim r As Long
+    Dim currentDate As Double
+    Dim nextDate As Double
+    Dim axisBetweenCategories As Boolean
 
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
     Set chartObj = ch.Parent
     Set dateRange = ws.ListObjects(SCURVE_TABLE).ListColumns("Date").DataBodyRange
 
     todaySerial = CDbl(Date)
+    dateCount = dateRange.Rows.Count
 
     minDate = CDbl(dateRange.Cells(1, 1).value)
-    maxDate = CDbl(dateRange.Cells(dateRange.Rows.Count, 1).value)
+    maxDate = CDbl(dateRange.Cells(dateCount, 1).value)
 
     On Error Resume Next
     ws.Shapes("SCURVE_TODAY_LINE").Delete
@@ -1206,13 +1213,44 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
     If todaySerial < minDate Or todaySerial > maxDate Then Exit Sub
     If maxDate <= minDate Then Exit Sub
+    If dateCount < 2 Then Exit Sub
+
+    categoryIndex = 0#
+    For r = 1 To dateCount
+        currentDate = CDbl(dateRange.Cells(r, 1).value)
+
+        If currentDate = todaySerial Then
+            categoryIndex = CDbl(r)
+            Exit For
+        End If
+
+        If r < dateCount Then
+            nextDate = CDbl(dateRange.Cells(r + 1, 1).value)
+            If todaySerial > currentDate And todaySerial < nextDate Then
+                categoryIndex = CDbl(r) + ((todaySerial - currentDate) / (nextDate - currentDate))
+                Exit For
+            End If
+        End If
+    Next r
+
+    If categoryIndex = 0# Then Exit Sub
 
     plotLeft = chartObj.Left + ch.PlotArea.InsideLeft
     plotTop = chartObj.Top + ch.PlotArea.InsideTop
     plotWidth = ch.PlotArea.InsideWidth
     plotHeight = ch.PlotArea.InsideHeight
 
-    ratio = (todaySerial - minDate) / (maxDate - minDate)
+    axisBetweenCategories = False
+    On Error Resume Next
+    axisBetweenCategories = ch.Axes(xlCategory).axisBetweenCategories
+    On Error GoTo 0
+
+    If axisBetweenCategories Then
+        ratio = (categoryIndex - 0.5) / CDbl(dateCount)
+    Else
+        ratio = (categoryIndex - 1#) / CDbl(dateCount - 1)
+    End If
+
     xPos = plotLeft + (plotWidth * ratio)
 
     Set shp = ws.Shapes.AddLine(xPos, plotTop, xPos, plotTop + plotHeight)

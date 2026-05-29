@@ -118,6 +118,7 @@ Public Sub Write_CalcState_Snapshot_Console( _
         arrOut(r, mapState("ParentID")) = GetCalcStateVal(arrCalc, r, mapCalc, "ParentID")
         arrOut(r, mapState("IsSummary")) = GetCalcStateVal(arrCalc, r, mapCalc, "IsSummary")
         arrOut(r, mapState("Predecessors WBS")) = GetCalcStateVal(arrCalc, r, mapCalc, "Predecessors WBS")
+        arrOut(r, mapState("Cal")) = NormalizeCalendarType(GetCalcStateVal(arrCalc, r, mapCalc, "Cal"))
 
         arrOut(r, mapState("Baseline Start")) = GetCalcStateVal(arrCalc, r, mapCalc, "Baseline Start")
         arrOut(r, mapState("Baseline Duration")) = GetCalcStateVal(arrCalc, r, mapCalc, "Baseline Duration")
@@ -174,6 +175,7 @@ Private Function BuildCalcStateHeaders() As Variant
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", _
         "Baseline Duration", _
         "Actual Start", _
@@ -307,6 +309,7 @@ Private Sub ValidateCalcStateSourceColumns(ByVal mapCalc As Object)
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", _
         "Baseline Duration", _
         "Actual Start", _
@@ -341,6 +344,7 @@ Private Sub ValidateCalcStateTargetColumns(ByVal mapState As Object)
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", _
         "Baseline Duration", _
         "Actual Start", _
@@ -407,6 +411,7 @@ Private Sub ApplyCalcStateFormats(ByVal tbl As ListObject)
 
     tbl.ListColumns("IsSummary").Range.NumberFormat = "@"
     tbl.ListColumns("Predecessors WBS").Range.NumberFormat = "@"
+    tbl.ListColumns("Cal").Range.NumberFormat = "@"
     tbl.ListColumns("Constraint Active").Range.NumberFormat = "@"
     tbl.ListColumns("Start Constraint Type").Range.NumberFormat = "@"
     tbl.ListColumns("Finish Constraint Type").Range.NumberFormat = "@"
@@ -455,6 +460,7 @@ Private Function BuildCalcStateRowSignature( _
     s = s & "|ParentID=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "ParentID"), "TEXT")
     s = s & "|IsSummary=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "IsSummary"), "BOOLEAN")
     s = s & "|PredWBS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Predecessors WBS"), "PREDWBS")
+    s = s & "|Cal=" & NormalizeIncrementalSignatureValue(NormalizeCalendarType(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Cal")), "TEXT")
 
     s = s & "|BS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Baseline Start"), "DATE")
     s = s & "|BD=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Baseline Duration"), "NUMBER")

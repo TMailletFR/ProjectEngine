@@ -172,6 +172,7 @@ Private Function GetCalcHeaders() As Variant
     Dim arr
     arr = Array( _
         "ID", "WBS", "Task Name", "ParentID", "IsSummary", "Predecessors WBS", _
+        "Cal", _
         "Baseline Start", "Baseline Duration", "Baseline Finish", "Actual Start", "Actual Finish", "Actual Duration", _
         "Forecast Start", "Forecast Finish", "Deadline", "Calculated Start", "Calculated Finish", "Calculated Duration", _
         "Driving Logic", "Constraint Active", "Start Constraint Type", "Start Constraint Date", _
@@ -315,6 +316,7 @@ Private Sub Apply_tbl_CALC_ColumnFormats(ByVal tblCalc As ListObject)
     tblCalc.ListColumns("Predecessors WBS").Range.NumberFormat = "@"
     tblCalc.ListColumns("WBS").Range.NumberFormat = "@"
     tblCalc.ListColumns("Task Name").Range.NumberFormat = "@"
+    tblCalc.ListColumns("Cal").Range.NumberFormat = "@"
     tblCalc.ListColumns("Driving Logic").Range.NumberFormat = "@"
     tblCalc.ListColumns("Error flag").Range.NumberFormat = "@"
     tblCalc.ListColumns("ErrorMsg").Range.NumberFormat = "@"

@@ -94,10 +94,12 @@ Private Function BuildGroupedMessage( _
     wbsLine = BuildInlineWBSList(idsDict, idToWbs, 20)
 
     BuildGroupedMessage = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "IDs : " & idsLine & vbCrLf & _
         "WBS : " & wbsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "IDs: " & idsLine & vbCrLf & _
@@ -209,13 +211,16 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Dim linkKey As String
     Dim effectiveLag As Double
     Dim linkType As String
-    Dim candidateLateStart As Double
+    Dim candidateLateStart As Variant
     Dim constraintActive As String
     Dim startConstraintType As String
     Dim finishConstraintType As String
     Dim startConstraintDate As Variant
     Dim finishConstraintDate As Variant
     Dim constraintLateFinish As Variant
+    Dim taskCal As String
+    Dim succCal As String
+    Dim candidateDate As Variant
 
     Dim outTF() As Variant
     Dim outFF() As Variant
@@ -243,6 +248,7 @@ Public Sub ComputeCurrentFloatAndCritical( _
     For Each idKey In validIds.Keys
         rowIndex = idToRow(CStr(idKey))
         calcFinishVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Finish")))
+        taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If HasValue(calcFinishVal) Then
             If Not HasValue(projectCurrentFinish) Then
@@ -279,12 +285,13 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
         calcStartVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Start")))
         calcFinishVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Finish")))
+        taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(calcStartVal) Or Not HasValue(calcFinishVal) Then
             GoTo NextCurrentBackwardTask
         End If
 
-        currentDuration = CDbl(calcFinishVal) - CDbl(calcStartVal) + 1
+        currentDuration = CDbl(DateDiffWorkingDays(calcStartVal, calcFinishVal, taskCal))
         candidateLateFinish = Empty
 
         For Each succId In childrenById(taskId)
@@ -304,34 +311,38 @@ Public Sub ComputeCurrentFloatAndCritical( _
                     linkType = "FS"
                 End If
 
+                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+
                 Select Case linkType
 
                     Case "SS"
                         If currentLateStartById.Exists(CStr(succId)) Then
-                            candidateLateStart = CDbl(currentLateStartById(CStr(succId))) - effectiveLag
+                            candidateLateStart = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
 
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = candidateLateStart + currentDuration - 1
-                            ElseIf candidateLateStart + currentDuration - 1 < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = candidateLateStart + currentDuration - 1
+                                candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
+                            ElseIf CDbl(AddWorkingDays(candidateLateStart, currentDuration, taskCal)) < CDbl(candidateLateFinish) Then
+                                candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
                             End If
                         End If
 
                     Case "FF"
                         If currentLateFinishById.Exists(CStr(succId)) Then
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(currentLateFinishById(CStr(succId))) - effectiveLag
-                            ElseIf CDbl(currentLateFinishById(CStr(succId))) - effectiveLag < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(currentLateFinishById(CStr(succId))) - effectiveLag
+                                candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                            ElseIf CDbl(OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
+                                candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
                             End If
                         End If
 
                     Case Else
                         If currentLateStartById.Exists(CStr(succId)) Then
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(currentLateStartById(CStr(succId))) - effectiveLag - 1
-                            ElseIf CDbl(currentLateStartById(CStr(succId))) - effectiveLag - 1 < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(currentLateStartById(CStr(succId))) - effectiveLag - 1
+                                candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                            ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
+                                candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
                             End If
                         End If
 
@@ -376,7 +387,7 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
             If (startConstraintType = "Start No Later Than" Or startConstraintType = "Must Start On") _
                 And HasValue(startConstraintDate) Then
-                constraintLateFinish = CDbl(startConstraintDate) + currentDuration - 1
+                constraintLateFinish = AddWorkingDays(startConstraintDate, currentDuration, taskCal)
                 If CDbl(constraintLateFinish) < CDbl(currentLateFinishById(taskId)) Then
                     currentLateFinishById(taskId) = constraintLateFinish
                 End If
@@ -390,7 +401,7 @@ Public Sub ComputeCurrentFloatAndCritical( _
             End If
         End If
 
-        currentLateStartById(taskId) = CDbl(currentLateFinishById(taskId)) - currentDuration + 1
+        currentLateStartById(taskId) = SubtractWorkingDays(currentLateFinishById(taskId), currentDuration, taskCal)
 
 NextCurrentBackwardTask:
     Next idKey
@@ -403,7 +414,7 @@ NextCurrentBackwardTask:
         calcStartVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Start")))
 
         If HasValue(calcStartVal) And currentLateStartById.Exists(taskId) Then
-            currentTotalFloatById(taskId) = CDbl(currentLateStartById(taskId)) - CDbl(calcStartVal)
+            currentTotalFloatById(taskId) = CDbl(DateDiffWorkingDays(calcStartVal, currentLateStartById(taskId), NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))) - 1)
             outTF(rowIndex, 1) = currentTotalFloatById(taskId)
 
             If CDbl(currentTotalFloatById(taskId)) < 0 Then hasNegativeFloat = True
@@ -428,6 +439,7 @@ NextCurrentBackwardTask:
 
         calcStartVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Start")))
         calcFinishVal = GetCellValue(dataArr(rowIndex, mapCalc("Calculated Finish")))
+        taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(calcStartVal) Or Not HasValue(calcFinishVal) Then GoTo NextCurrentFreeFloatTask
 
@@ -458,12 +470,15 @@ NextCurrentBackwardTask:
                         linkType = "FS"
                     End If
 
+                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+
                     Select Case linkType
 
                         Case "SS"
                             succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
                             If HasValue(succStartVal) Then
-                                candidateFreeFloat = CDbl(succStartVal) - effectiveLag - CDbl(calcStartVal)
+                                candidateDate = ApplyLag(calcStartVal, effectiveLag, succCal, "SS")
+                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
 
                                 If Not HasValue(minFreeFloat) Then
                                     minFreeFloat = candidateFreeFloat
@@ -475,7 +490,8 @@ NextCurrentBackwardTask:
                         Case "FF"
                             succFinishVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Finish")))
                             If HasValue(succFinishVal) Then
-                                candidateFreeFloat = CDbl(succFinishVal) - effectiveLag - CDbl(calcFinishVal)
+                                candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FF")
+                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succFinishVal, succCal))
 
                                 If Not HasValue(minFreeFloat) Then
                                     minFreeFloat = candidateFreeFloat
@@ -487,7 +503,8 @@ NextCurrentBackwardTask:
                         Case Else
                             succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
                             If HasValue(succStartVal) Then
-                                candidateFreeFloat = CDbl(succStartVal) - effectiveLag - 1 - CDbl(calcFinishVal)
+                                candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FS")
+                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
 
                                 If Not HasValue(minFreeFloat) Then
                                     minFreeFloat = candidateFreeFloat
@@ -537,13 +554,13 @@ NextCurrentBackwardTask:
 
                 If (startConstraintType = "Start No Later Than" Or startConstraintType = "Must Start On") _
                     And HasValue(startConstraintDate) Then
-                    candidateFreeFloat = CDbl(startConstraintDate) - CDbl(calcStartVal)
+                    candidateFreeFloat = CDbl(DateDiffWorkingDays(calcStartVal, startConstraintDate, NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))) - 1)
                     If candidateFreeFloat < CDbl(minFreeFloat) Then minFreeFloat = candidateFreeFloat
                 End If
 
                 If (finishConstraintType = "Finish No Later Than" Or finishConstraintType = "Must Finish On") _
                     And HasValue(finishConstraintDate) Then
-                    candidateFreeFloat = CDbl(finishConstraintDate) - CDbl(calcFinishVal)
+                    candidateFreeFloat = CDbl(DateDiffWorkingDays(calcFinishVal, finishConstraintDate, NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))) - 1)
                     If candidateFreeFloat < CDbl(minFreeFloat) Then minFreeFloat = candidateFreeFloat
                 End If
             End If
@@ -578,15 +595,6 @@ NextCurrentFreeFloatTask:
     tblCalc.ListColumns("Total Float").DataBodyRange.value = outTF
     tblCalc.ListColumns("Free Float").DataBodyRange.value = outFF
     tblCalc.ListColumns("Critical Path").DataBodyRange.value = outCritical
-
-    If hasNegativeFloat Then
-        CalcEngine_AddOrShowConsoleMessage consoleMessages, "WARNING", _
-            BiMsg( _
-                "Float négatif détecté dans le planning actuel" & vbCrLf & _
-                "-> vérifier la logique, les dates, les lags ou les prévisions", _
-                "Negative float detected in the current schedule" & vbCrLf & _
-                "-> check logic, dates, lags or forecasts")
-    End If
 
 End Sub
 
@@ -766,6 +774,8 @@ Private Function CalcEngine_IsDrivingLongestPathLink( _
     Dim succFinish As Variant
     Dim predStart As Variant
     Dim predFinish As Variant
+    Dim succCal As String
+    Dim expectedDate As Variant
 
     If Not idToRow.Exists(succId) Then Exit Function
     If Not idToRow.Exists(predId) Then Exit Function
@@ -777,21 +787,25 @@ Private Function CalcEngine_IsDrivingLongestPathLink( _
     succFinish = GetCellValue(dataArr(succRow, mapCalc("Calculated Finish")))
     predStart = GetCellValue(dataArr(predRow, mapCalc("Calculated Start")))
     predFinish = GetCellValue(dataArr(predRow, mapCalc("Calculated Finish")))
+    succCal = NormalizeCalendarType(dataArr(succRow, mapCalc("Cal")))
 
     Select Case UCase$(Trim$(linkType))
         Case "SS"
             If HasValue(succStart) And HasValue(predStart) Then
-                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(CDbl(succStart), CDbl(predStart) + effectiveLag)
+                expectedDate = ApplyLag(predStart, effectiveLag, succCal, "SS")
+                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(succStart, expectedDate)
             End If
 
         Case "FF"
             If HasValue(succFinish) And HasValue(predFinish) Then
-                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(CDbl(succFinish), CDbl(predFinish) + effectiveLag)
+                expectedDate = ApplyLag(predFinish, effectiveLag, succCal, "FF")
+                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(succFinish, expectedDate)
             End If
 
         Case Else
             If HasValue(succStart) And HasValue(predFinish) Then
-                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(CDbl(succStart), CDbl(predFinish) + 1 + effectiveLag)
+                expectedDate = ApplyLag(predFinish, effectiveLag, succCal, "FS")
+                CalcEngine_IsDrivingLongestPathLink = CalcEngine_DatesEqual(succStart, expectedDate)
             End If
     End Select
 
@@ -849,10 +863,10 @@ Public Sub ComputeCriticalPathREX( _
     Dim effectiveLag As Double
     Dim linkKey As String
     Dim linkType As String
-    Dim candidateStart As Double
+    Dim candidateStart As Variant
     Dim bestStart As Variant
     Dim candidateLateFinish As Variant
-    Dim candidateLateStart As Double
+    Dim candidateLateStart As Variant
     Dim hasValidPred As Boolean
 
     Dim hasNegativeFloat As Boolean
@@ -860,6 +874,9 @@ Public Sub ComputeCriticalPathREX( _
     Dim ff As Variant
     Dim minFF As Variant
     Dim candidateFF As Double
+    Dim taskCal As String
+    Dim succCal As String
+    Dim candidateDate As Variant
 
     Dim outTF() As Variant
     Dim outFF() As Variant
@@ -893,6 +910,7 @@ Public Sub ComputeCriticalPathREX( _
 
         baselineDuration = GetCellValue(dataArr(rowIndex, mapCalc("Baseline Duration")))
         baselineStart = GetCellValue(dataArr(rowIndex, mapCalc("Baseline Start")))
+        taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(baselineDuration) Then
             If IsMilestoneTaskType(dataArr, mapCalc, rowIndex) Then
@@ -929,11 +947,13 @@ Public Sub ComputeCriticalPathREX( _
                     linkType = "FS"
                 End If
 
+                succCal = taskCal
+
                 Select Case linkType
 
                     Case "SS"
                         If rexStartById.Exists(CStr(predId)) Then
-                            candidateStart = CDbl(rexStartById(CStr(predId))) + effectiveLag
+                            candidateStart = ApplyLag(rexStartById(CStr(predId)), effectiveLag, taskCal, "SS")
 
                             If Not HasValue(bestStart) Then
                                 bestStart = candidateStart
@@ -944,7 +964,8 @@ Public Sub ComputeCriticalPathREX( _
 
                     Case "FF"
                         If rexFinishById.Exists(CStr(predId)) Then
-                            candidateStart = CDbl(rexFinishById(CStr(predId))) + effectiveLag - CDbl(baselineDuration) + 1
+                            candidateDate = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FF")
+                            candidateStart = SubtractWorkingDays(candidateDate, baselineDuration, taskCal)
 
                             If Not HasValue(bestStart) Then
                                 bestStart = candidateStart
@@ -955,7 +976,7 @@ Public Sub ComputeCriticalPathREX( _
 
                     Case Else
                         If rexFinishById.Exists(CStr(predId)) Then
-                            candidateStart = CDbl(rexFinishById(CStr(predId))) + 1 + effectiveLag
+                            candidateStart = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FS")
 
                             If Not HasValue(bestStart) Then
                                 bestStart = candidateStart
@@ -986,7 +1007,7 @@ Public Sub ComputeCriticalPathREX( _
             startVal = baselineStart
         End If
 
-        finishVal = CDbl(startVal) + CDbl(baselineDuration) - 1
+        finishVal = AddWorkingDays(startVal, baselineDuration, taskCal)
 
         rexStartById(taskId) = startVal
         rexFinishById(taskId) = finishVal
@@ -1017,6 +1038,7 @@ NextRexForward:
         rowIndex = idToRow(taskId)
 
         baselineDuration = GetCellValue(dataArr(rowIndex, mapCalc("Baseline Duration")))
+        taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(baselineDuration) Then
             If IsMilestoneTaskType(dataArr, mapCalc, rowIndex) Then
@@ -1046,34 +1068,38 @@ NextRexForward:
                     linkType = "FS"
                 End If
 
+                succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+
                 Select Case linkType
 
                     Case "SS"
                         If rexLateStartById.Exists(CStr(succId)) Then
-                            candidateLateStart = CDbl(rexLateStartById(CStr(succId))) - effectiveLag
+                            candidateLateStart = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
 
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = candidateLateStart + CDbl(baselineDuration) - 1
-                            ElseIf candidateLateStart + CDbl(baselineDuration) - 1 < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = candidateLateStart + CDbl(baselineDuration) - 1
+                                candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                            ElseIf CDbl(AddWorkingDays(candidateLateStart, baselineDuration, taskCal)) < CDbl(candidateLateFinish) Then
+                                candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
                             End If
                         End If
 
                     Case "FF"
                         If rexLateFinishById.Exists(CStr(succId)) Then
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(rexLateFinishById(CStr(succId))) - effectiveLag
-                            ElseIf CDbl(rexLateFinishById(CStr(succId))) - effectiveLag < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(rexLateFinishById(CStr(succId))) - effectiveLag
+                                candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                            ElseIf CDbl(OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
+                                candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
                             End If
                         End If
 
                     Case Else
                         If rexLateStartById.Exists(CStr(succId)) Then
                             If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(rexLateStartById(CStr(succId))) - effectiveLag - 1
-                            ElseIf CDbl(rexLateStartById(CStr(succId))) - effectiveLag - 1 < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = CDbl(rexLateStartById(CStr(succId))) - effectiveLag - 1
+                                candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                            ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
+                                candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
                             End If
                         End If
 
@@ -1091,7 +1117,7 @@ NextRexForward:
             rexLateFinishById(taskId) = candidateLateFinish
         End If
 
-        rexLateStartById(taskId) = CDbl(rexLateFinishById(taskId)) - CDbl(baselineDuration) + 1
+        rexLateStartById(taskId) = SubtractWorkingDays(rexLateFinishById(taskId), baselineDuration, taskCal)
 
 NextRexBackward:
     Next idKey
@@ -1103,7 +1129,7 @@ NextRexBackward:
 
         If rexLateStartById.Exists(taskId) And rexStartById.Exists(taskId) Then
 
-            tf = CDbl(rexLateStartById(taskId)) - CDbl(rexStartById(taskId))
+            tf = CDbl(DateDiffWorkingDays(rexStartById(taskId), rexLateStartById(taskId), NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))) - 1)
             rexTotalFloatById(taskId) = tf
 
             If tf < 0 Then hasNegativeFloat = True
@@ -1152,15 +1178,20 @@ NextRexBackward:
                             linkType = "FS"
                         End If
 
-                        Select Case linkType
+                succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+
+                Select Case linkType
                             Case "SS"
-                                candidateFF = CDbl(rexStartById(CStr(succId))) - effectiveLag - CDbl(rexStartById(taskId))
+                                candidateDate = ApplyLag(rexStartById(taskId), effectiveLag, succCal, "SS")
+                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
 
                             Case "FF"
-                                candidateFF = CDbl(rexFinishById(CStr(succId))) - effectiveLag - CDbl(rexFinishById(taskId))
+                                candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FF")
+                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexFinishById(CStr(succId)), succCal))
 
                             Case Else
-                                candidateFF = CDbl(rexStartById(CStr(succId))) - effectiveLag - 1 - CDbl(rexFinishById(taskId))
+                                candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FS")
+                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
                         End Select
 
                         If Not HasValue(minFF) Then
@@ -1215,13 +1246,6 @@ NextRexFreeFloatTask:
     tblCalc.ListColumns("Total Float REX").DataBodyRange.value = outTF
     tblCalc.ListColumns("Free Float REX").DataBodyRange.value = outFF
     tblCalc.ListColumns("Critical Path REX").DataBodyRange.value = outCriticalREX
-
-    If hasNegativeFloat Then
-        CalcEngine_AddOrShowConsoleMessage consoleMessages, "WARNING", _
-            BiMsg( _
-                "Float négatif détecté -> planning incohérent, corriger les données.", _
-                "Negative float detected -> inconsistent schedule, fix inputs.")
-    End If
 
 End Sub
 
@@ -1972,10 +1996,12 @@ Private Sub ShowLogicLinksErrorMessages( _
     wbsLine = BuildInlineWBSList_LogicLinks(idsDict, taskInfoById, 20)
 
     msgText = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "IDs : " & idsLine & vbCrLf & _
         "WBS : " & wbsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "IDs: " & idsLine & vbCrLf & _

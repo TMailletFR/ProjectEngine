@@ -15,6 +15,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Dim mapWBS As Object
     Dim wbsIdRows As Object
     Dim wbsToId As Object
+    Dim summaryWbsByWbs As Object
 
     Dim colsToCopy As Variant
     Dim colsToClear As Variant
@@ -33,6 +34,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Dim predWbs As String
     Dim predRaw As String
     Dim taskTypeVal As String
+    Dim calVal As String
 
     Dim consoleMessages As Collection
 
@@ -47,6 +49,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Set tblWBS = wsWBS.ListObjects("tbl_WBS")
 
     EnsureWBSTaskTypeInputSetup tblWBS
+    EnsureWBSCalendarInputSetup tblWBS
 
     Ensure_Calc_Infrastructure
 
@@ -54,6 +57,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Set tblCalc = wsCalc.ListObjects("tbl_CALC")
 
     EnsureTaskTypeColumnExists tblWBS, tblCalc
+    EnsureCalendarColumnExists tblWBS, tblCalc
     EnsureDeadlineOutputColumnsExist tblWBS, tblCalc
     EnsureLongestPathOutputColumnsExist tblWBS, tblCalc
 
@@ -66,6 +70,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
         "WBS", _
         "Task Name", _
         "Task Type", _
+        "Cal", _
         "Predecessors WBS", _
         "Baseline Start", _
         "Baseline Duration", _
@@ -208,6 +213,9 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
         Next r
     End If
 
+    Set summaryWbsByWbs = BuildWBSSummaryWbsLookup(tblWBS, mapWBS)
+    NormalizeWBSCalendarValues tblWBS, mapWBS, summaryWbsByWbs
+
     If tblCalc.DataBodyRange Is Nothing Then
         currentCalcRows = 0
     Else
@@ -259,6 +267,17 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
                         With tblCalc.DataBodyRange.Cells(r, mapCalc("Task Type"))
                             .NumberFormat = "@"
                             .value = taskTypeVal
+                        End With
+
+                    ElseIf colsToCopy(i) = "Cal" Then
+                        If IsCalendarIgnoredWBSRow(tblWBS, mapWBS, wbsRowIndex, summaryWbsByWbs) Then
+                            calVal = vbNullString
+                        Else
+                            calVal = NormalizeCalendarType(tblWBS.DataBodyRange.Cells(wbsRowIndex, mapWBS("Cal")).value)
+                        End If
+                        With tblCalc.DataBodyRange.Cells(r, mapCalc("Cal"))
+                            .NumberFormat = "@"
+                            .value = calVal
                         End With
 
                     Else
@@ -371,6 +390,34 @@ Private Sub EnsureTaskTypeColumnExists( _
 
 End Sub
 
+Private Sub EnsureCalendarColumnExists( _
+    ByVal tblWBS As ListObject, _
+    ByVal tblCalc As ListObject)
+
+    Dim newCol As ListColumn
+
+    If tblWBS Is Nothing Then Exit Sub
+    If tblCalc Is Nothing Then Exit Sub
+
+    If Not TableHasColumn(tblWBS, "Cal") Then
+        Set newCol = tblWBS.ListColumns.Add
+        newCol.Name = "Cal"
+    End If
+
+    If Not TableHasColumn(tblCalc, "Cal") Then
+        Set newCol = tblCalc.ListColumns.Add
+        newCol.Name = "Cal"
+    End If
+
+    If Not tblWBS.DataBodyRange Is Nothing Then
+        tblWBS.ListColumns("Cal").DataBodyRange.NumberFormat = "@"
+    End If
+
+    If Not tblCalc.DataBodyRange Is Nothing Then
+        tblCalc.ListColumns("Cal").DataBodyRange.NumberFormat = "@"
+    End If
+
+End Sub
 Private Sub EnsureDeadlineOutputColumnsExist( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -1256,6 +1303,152 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
 End Sub
 
+Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
+
+    Dim rng As Range
+    Dim cell As Range
+    Dim normalizedValue As String
+    Dim newCol As ListColumn
+
+    If tblWBS Is Nothing Then Exit Sub
+
+    If Not TableHasColumn(tblWBS, "Cal") Then
+        Set newCol = tblWBS.ListColumns.Add
+        newCol.Name = "Cal"
+    End If
+
+    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
+
+    Set rng = tblWBS.ListColumns("Cal").DataBodyRange
+
+    For Each cell In rng.Cells
+        If Trim$(CStr(cell.value)) <> "" Then
+            normalizedValue = NormalizeCalendarType(cell.value)
+            If CStr(cell.value) <> normalizedValue Then cell.value = normalizedValue
+        End If
+    Next cell
+
+    With rng.Validation
+        .Delete
+        .Add Type:=xlValidateList, _
+             AlertStyle:=xlValidAlertStop, _
+             Operator:=xlBetween, _
+             Formula1:=CALENDAR_7D & "," & CALENDAR_6D & "," & CALENDAR_5D
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = "Cal"
+        .InputMessage = "Choose: 7j/7, 6j/7, or 5j/7."
+        .ErrorTitle = "Invalid Cal"
+        .errorMessage = "Allowed values: blank, 7j/7, 6j/7, 5j/7."
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    rng.NumberFormat = "@"
+
+End Sub
+
+Private Function BuildWBSSummaryWbsLookup( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object) As Object
+
+    Dim summaryWbs As Object
+    Dim r As Long
+    Dim wbsVal As String
+    Dim parentWbs As String
+
+    Set summaryWbs = CreateObject("Scripting.Dictionary")
+
+    If tblWBS Is Nothing Then
+        Set BuildWBSSummaryWbsLookup = summaryWbs
+        Exit Function
+    End If
+    If tblWBS.DataBodyRange Is Nothing Then
+        Set BuildWBSSummaryWbsLookup = summaryWbs
+        Exit Function
+    End If
+    If mapWBS Is Nothing Then
+        Set BuildWBSSummaryWbsLookup = summaryWbs
+        Exit Function
+    End If
+    If Not mapWBS.Exists("WBS") Then
+        Set BuildWBSSummaryWbsLookup = summaryWbs
+        Exit Function
+    End If
+
+    For r = 1 To tblWBS.ListRows.Count
+        wbsVal = Replace$(Trim$(CStr(tblWBS.DataBodyRange.Cells(r, mapWBS("WBS")).value)), ",", ".")
+        parentWbs = GetParentWBS(wbsVal)
+
+        Do While parentWbs <> ""
+            summaryWbs(parentWbs) = True
+            parentWbs = GetParentWBS(parentWbs)
+        Loop
+    Next r
+
+    Set BuildWBSSummaryWbsLookup = summaryWbs
+
+End Function
+
+Private Function IsCalendarIgnoredWBSRow( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object, _
+    ByVal rowIndex As Long, _
+    ByVal summaryWbsByWbs As Object) As Boolean
+
+    Dim wbsVal As String
+    Dim taskTypeVal As String
+
+    If tblWBS Is Nothing Then Exit Function
+    If tblWBS.DataBodyRange Is Nothing Then Exit Function
+    If mapWBS Is Nothing Then Exit Function
+    If rowIndex < 1 Or rowIndex > tblWBS.ListRows.Count Then Exit Function
+
+    If mapWBS.Exists("WBS") Then
+        wbsVal = Replace$(Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("WBS")).value)), ",", ".")
+        If Not summaryWbsByWbs Is Nothing Then
+            If summaryWbsByWbs.Exists(wbsVal) Then
+                IsCalendarIgnoredWBSRow = True
+                Exit Function
+            End If
+        End If
+    End If
+
+    If mapWBS.Exists("Task Type") Then
+        taskTypeVal = UCase$(NormalizeTaskTypeValue(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("Task Type")).value))
+        IsCalendarIgnoredWBSRow = (taskTypeVal = "LEVEL OF EFFORT" Or taskTypeVal = "MILESTONE")
+    End If
+
+End Function
+
+Private Sub NormalizeWBSCalendarValues( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object, _
+    ByVal summaryWbsByWbs As Object)
+
+    Dim r As Long
+    Dim cell As Range
+    Dim normalizedValue As String
+
+    If tblWBS Is Nothing Then Exit Sub
+    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
+    If mapWBS Is Nothing Then Exit Sub
+    If Not mapWBS.Exists("Cal") Then Exit Sub
+
+    For r = 1 To tblWBS.ListRows.Count
+        Set cell = tblWBS.DataBodyRange.Cells(r, mapWBS("Cal"))
+        normalizedValue = NormalizeCalendarType(cell.value)
+
+        If Trim$(CStr(cell.value)) = "" Then
+            If Not IsCalendarIgnoredWBSRow(tblWBS, mapWBS, r, summaryWbsByWbs) Then
+                cell.value = CALENDAR_7D
+            End If
+        ElseIf CStr(cell.value) <> normalizedValue Then
+            cell.value = normalizedValue
+        End If
+    Next r
+
+End Sub
 Private Sub DataSync_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _

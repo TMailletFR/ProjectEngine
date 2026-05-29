@@ -1088,10 +1088,12 @@ Private Function CalcBridge_BuildGroupedMessage( _
     wbsLine = CalcBridge_BuildInlineWBSList(idsDict, idToWbs, 20)
 
     CalcBridge_BuildGroupedMessage = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "IDs : " & idsLine & vbCrLf & _
         "WBS : " & wbsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "IDs: " & idsLine & vbCrLf & _
@@ -2183,7 +2185,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
     End If
 
     ComputeCurrentFloatAndCritical _
-        tblCalc, mapCalc, rowById, childrenById, directChildrenById, parentIds, validIds, topoOrder
+        tblCalc, mapCalc, rowById, childrenById, directChildrenById, parentIds, validIds, topoOrder, _
+        consoleMessages
 
     ReDim outCriticalREX(1 To tblCalc.ListRows.Count, 1 To 1)
 
@@ -2192,7 +2195,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
 
     ComputeCriticalPathREX _
         tblCalc, mapCalc, rowById, predsById, childrenById, directChildrenById, _
-        parentIds, validIds, topoOrder, idToWbs, outCriticalREX, errMissingBaselineForREX
+        parentIds, validIds, topoOrder, idToWbs, outCriticalREX, errMissingBaselineForREX, _
+        consoleMessages
 
     If errMissingBaselineForREX.Count > 0 Then
         If consoleMessages Is Nothing Then
@@ -2562,10 +2566,12 @@ Private Function CalcBridge_BuildMissingBaselineRexMessage( _
     wbsLine = CalcBridge_BuildInlineWBSList(missingIds, idToWbs, 20)
 
     CalcBridge_BuildMissingBaselineRexMessage = _
+        "FR:" & vbCrLf & _
         "Analytics REX partiellement non calculées : Baseline Duration manquante sur au moins une tâche feuille." & vbCrLf & _
         "-> compléter Baseline Duration sur les lignes listées ci-dessous." & vbCrLf & vbCrLf & _
         "IDs : " & idsLine & vbCrLf & _
         "WBS : " & wbsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         "REX analytics partially not calculated: Baseline Duration is missing on at least one leaf task." & vbCrLf & _
         "-> fill Baseline Duration on the lines listed below." & vbCrLf & vbCrLf & _
         "IDs: " & idsLine & vbCrLf & _
@@ -2708,10 +2714,12 @@ Private Sub CalcBridge_AppendTaskTypeWarnings( _
     Dim warnLOEBaseline As Object
     Dim warnMilestoneProgress As Object
     Dim warnMilestoneDuration As Object
+    Dim warnIgnoredCal As Object
 
     Dim r As Long
     Dim calcRow As Long
     Dim idVal As String
+    Dim calVal As String
 
     On Error GoTo SafeExit
 
@@ -2740,12 +2748,29 @@ Private Sub CalcBridge_AppendTaskTypeWarnings( _
     Set warnLOEBaseline = CreateObject("Scripting.Dictionary")
     Set warnMilestoneProgress = CreateObject("Scripting.Dictionary")
     Set warnMilestoneDuration = CreateObject("Scripting.Dictionary")
+    Set warnIgnoredCal = CreateObject("Scripting.Dictionary")
 
     For r = 1 To UBound(arrWBS, 1)
 
         idVal = Trim$(CStr(arrWBS(r, mapWBS("ID"))))
         If idVal = "" Then GoTo NextRow
 
+        If mapWBS.Exists("Cal") Then
+            calVal = NormalizeCalendarType(arrWBS(r, mapWBS("Cal")))
+            If calVal = CALENDAR_5D Or calVal = CALENDAR_6D Then
+                If calcRowById.Exists(idVal) Then
+                    calcRow = CLng(calcRowById(idVal))
+                    If Core_IsSummaryRow(arrCalc, calcRow, mapCalc) Or _
+                       CalcBridge_IsLevelOfEffortRow(arrWBS, mapWBS, r) Or _
+                       IsMilestoneTaskType(arrWBS, mapWBS, r) Then
+                        warnIgnoredCal(idVal) = True
+                    End If
+                ElseIf CalcBridge_IsLevelOfEffortRow(arrWBS, mapWBS, r) Or _
+                       IsMilestoneTaskType(arrWBS, mapWBS, r) Then
+                    warnIgnoredCal(idVal) = True
+                End If
+            End If
+        End If
         If CalcBridge_IsLevelOfEffortRow(arrWBS, mapWBS, r) Then
 
             If mapWBS.Exists("% Progress") Then
@@ -2779,6 +2804,13 @@ Private Sub CalcBridge_AppendTaskTypeWarnings( _
 NextRow:
     Next r
 
+    If warnIgnoredCal.Count > 0 Then
+        CalcBridge_AddGroupedWarningToCollection warningMessages, warnIgnoredCal, idToWbs, _
+            "Calendrier ignoré sur tâche Summary / LOE / Milestone", _
+            "le calendrier n'est utilisé que pour les tâches normales", _
+            "Calendar ignored on Summary / LOE / Milestone task", _
+            "calendars apply only to normal tasks"
+    End If
     If warnLOEProgress.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnLOEProgress, idToWbs, _
             "% Progress renseigné sur LOE", _
@@ -3114,9 +3146,11 @@ Private Sub CalcBridge_AddUpstreamStopToCollection( _
     itemsLine = CalcBridge_BuildUpstreamViolationItems(idsDict, idToWbs, 20)
 
     msg = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "Tâches : " & itemsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "Tasks: " & itemsLine

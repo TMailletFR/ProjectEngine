@@ -510,7 +510,7 @@ Public Sub LogPlanningEvent( _
         .Cells(1, 1).value = BuildPlanningEventId(tblAlarm.ListRows.Count, eventTs)
         .Cells(1, 2).value = gPlanningEventRunId
         .Cells(1, 3).value = eventTs
-        .Cells(1, 4).value = DateValue(eventTs)
+        .Cells(1, 4).value = dateValue(eventTs)
         .Cells(1, 5).value = TimeValue(eventTs)
         .Cells(1, 6).value = UCase$(Trim$(severity))
         .Cells(1, 7).value = Trim$(eventType)

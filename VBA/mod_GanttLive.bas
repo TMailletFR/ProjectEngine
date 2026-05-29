@@ -226,6 +226,7 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "ID")) = idVal
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "WBS")) = wbsVal
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Task Type")) = taskTypeVal
+        outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Cal")) = NormalizeCalendarType(dataWBS(r, mapWBS("Cal")))
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Is Summary")) = IIf(isSummary, "YES", "NO")
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Parent ID")) = GetParentIdFromWBS(wbsVal, wbsToId)
 
@@ -382,7 +383,7 @@ Private Function Ensure_CalcGanttTest_Table(ByVal ws As Worksheet) As ListObject
     On Error GoTo 0
 
     headers = Array( _
-        "ID", "WBS", "Task Type", "Is Summary", "Parent ID", "Base Start", "Base Finish", "Base Duration", _
+        "ID", "WBS", "Task Type", "Cal", "Is Summary", "Parent ID", "Base Start", "Base Finish", "Base Duration", _
         "Base Progress", "Driving Logic", "Has Actual", "Test Start", "Test Finish", "Test % Raw", _
         "Test % Normalized", "Input Start", "Input Finish", "Input Duration", "Input Progress", _
         "Predecessors", "Lag", "Any Test Value", "Calc Test Start", "Calc Test Finish", _
@@ -434,7 +435,7 @@ Private Sub ValidateGanttTestSourceColumns(ByVal mapWBS As Object, ByVal mapCalc
     Dim c As Variant
 
     reqWBS = Array( _
-        "ID", "WBS", "Task Type", _
+        "ID", "WBS", "Task Type", "Cal", _
         "Calculated Start", "Calculated Finish", "Calculated Duration", _
         "% Progress", "Driving Logic", _
         "Actual Start", "Actual Finish", _
@@ -459,7 +460,7 @@ Private Sub ValidateCalcGanttTestColumns(ByVal tbl As ListObject)
     Dim i As Long
 
     headers = Array( _
-        "ID", "WBS", "Task Type", "Is Summary", "Parent ID", "Base Start", "Base Finish", "Base Duration", _
+        "ID", "WBS", "Task Type", "Cal", "Is Summary", "Parent ID", "Base Start", "Base Finish", "Base Duration", _
         "Base Progress", "Driving Logic", "Has Actual", "Test Start", "Test Finish", "Test % Raw", _
         "Test % Normalized", "Input Start", "Input Finish", "Input Duration", "Input Progress", _
         "Predecessors", "Lag", "Any Test Value", "Calc Test Start", "Calc Test Finish", _
@@ -542,6 +543,7 @@ Private Sub FormatCalcGanttTestColumns(ByVal tbl As ListObject)
 
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
+    tbl.ListColumns("Cal").DataBodyRange.NumberFormat = "@"
     tbl.ListColumns("Base Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
     tbl.ListColumns("Base Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
     tbl.ListColumns("Test Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
@@ -1012,10 +1014,12 @@ Private Function BuildGanttLiveGroupedMessage( _
     wbsLine = BuildInlineWBSList_GanttLive(idsDict, idToWbs, 20)
 
     BuildGanttLiveGroupedMessage = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "IDs : " & idsLine & vbCrLf & _
         "WBS : " & wbsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "IDs: " & idsLine & vbCrLf & _
@@ -1171,7 +1175,8 @@ Public Function GanttLive_BuildBaseByIdMap() As Object
                 GetCellValue(arr(r, mapWBS("Calculated Start"))), _
                 GetCellValue(arr(r, mapWBS("Calculated Finish"))), _
                 GetCellValue(arr(r, mapWBS("Calculated Duration"))), _
-                GetCellValue(arr(r, mapWBS("% Progress"))) _
+                GetCellValue(arr(r, mapWBS("% Progress"))), _
+                NormalizeCalendarType(arr(r, mapWBS("Cal"))) _
             )
         End If
     Next r
@@ -2029,7 +2034,8 @@ Private Function BackupWBSLockColumns(ByVal tblWBS As ListObject, ByVal mapWBS A
             d(idVal) = Array( _
                 GetCellValue(arr(r, mapWBS("Forecast Start"))), _
                 GetCellValue(arr(r, mapWBS("Forecast Finish"))), _
-                GetCellValue(arr(r, mapWBS("% Progress"))) _
+                GetCellValue(arr(r, mapWBS("% Progress"))), _
+                NormalizeCalendarType(arr(r, mapWBS("Cal"))) _
             )
         End If
     Next r
@@ -2795,6 +2801,7 @@ Private Sub BuildGanttTestCoreDataset( _
     Dim rawForecastFinish As Variant
     Dim rawBaselineStart As Variant
     Dim rawBaselineDuration As Variant
+    Dim rawCal As String
 
     Dim taskName As String
     Dim constraintActive As String
@@ -2820,29 +2827,13 @@ Private Sub BuildGanttTestCoreDataset( _
     Dim rowHasMeaningfulTest As Boolean
 
     headers = Array( _
-        "ID", _
-        "WBS", _
-        "Task Name", _
-        "Task Type", _
-        "ParentID", _
-        "IsSummary", _
-        "Actual Start", _
-        "Actual Finish", _
-        "Forecast Start", _
-        "Forecast Finish", _
-        "Baseline Start", _
-        "Baseline Duration", _
-        "Constraint Active", _
-        "Start Constraint Type", _
-        "Start Constraint Date", _
-        "Finish Constraint Type", _
-        "Finish Constraint Date", _
-        "Calculated Start", _
-        "Calculated Finish", _
-        "Calculated Duration", _
-        "Error flag", _
-        "ErrorMsg", _
-        "Input Progress" _
+        "ID", "WBS", "Task Name", "Task Type", "Cal", "ParentID", "IsSummary", _
+        "Actual Start", "Actual Finish", "Forecast Start", "Forecast Finish", _
+        "Baseline Start", "Baseline Duration", "Constraint Active", _
+        "Start Constraint Type", "Start Constraint Date", _
+        "Finish Constraint Type", "Finish Constraint Date", _
+        "Calculated Start", "Calculated Finish", "Calculated Duration", _
+        "Error flag", "ErrorMsg", "Input Progress" _
     )
 
     Set mapCore = CreateObject("Scripting.Dictionary")
@@ -2875,6 +2866,7 @@ Private Sub BuildGanttTestCoreDataset( _
         rawForecastFinish = Empty
         rawBaselineStart = Empty
         rawBaselineDuration = Empty
+        rawCal = CALENDAR_7D
 
         taskName = vbNullString
         constraintActive = "No"
@@ -2890,6 +2882,7 @@ Private Sub BuildGanttTestCoreDataset( _
             rawForecastFinish = rawById(idVal)(3)
             rawBaselineStart = rawById(idVal)(4)
             rawBaselineDuration = rawById(idVal)(5)
+            rawCal = CStr(rawById(idVal)(7))
         End If
 
         If calcConstraintById.Exists(idVal) Then
@@ -2947,6 +2940,7 @@ Private Sub BuildGanttTestCoreDataset( _
         dataCore(r, mapCore("WBS")) = wbsVal
         dataCore(r, mapCore("Task Name")) = taskName
         dataCore(r, mapCore("Task Type")) = taskTypeVal
+        dataCore(r, mapCore("Cal")) = NormalizeCalendarType(rawCal)
         dataCore(r, mapCore("ParentID")) = parentId
         dataCore(r, mapCore("IsSummary")) = isSummaryBool
         dataCore(r, mapCore("Actual Start")) = actualStart
@@ -3234,7 +3228,8 @@ Private Function BuildRawWbsSourceById_Live() As Object
                 GetCellValue(arr(r, mapWBS("Forecast Finish"))), _
                 GetCellValue(arr(r, mapWBS("Baseline Start"))), _
                 GetCellValue(arr(r, mapWBS("Baseline Duration"))), _
-                GetCellValue(arr(r, mapWBS("% Progress"))) _
+                GetCellValue(arr(r, mapWBS("% Progress"))), _
+                NormalizeCalendarType(arr(r, mapWBS("Cal"))) _
             )
         End If
     Next r
@@ -3438,6 +3433,7 @@ Public Sub Run_Gantt_Scenario_Engine()
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "ID")) = idVal
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "WBS")) = wbsVal
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Task Type")) = taskTypeVal
+        outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Cal")) = NormalizeCalendarType(dataWBS(r, mapWBS("Cal")))
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Is Summary")) = IIf(isSummary, "YES", "NO")
         outArr(testRow, GetColumnIndex_GanttLive(tblTest, "Parent ID")) = GetParentIdFromWBS(wbsVal, wbsToId)
 
@@ -3658,29 +3654,13 @@ Private Sub BuildGanttScenarioCoreDataset( _
     Dim inputProgress As Variant
 
     headers = Array( _
-        "ID", _
-        "WBS", _
-        "Task Name", _
-        "Task Type", _
-        "ParentID", _
-        "IsSummary", _
-        "Actual Start", _
-        "Actual Finish", _
-        "Forecast Start", _
-        "Forecast Finish", _
-        "Baseline Start", _
-        "Baseline Duration", _
-        "Constraint Active", _
-        "Start Constraint Type", _
-        "Start Constraint Date", _
-        "Finish Constraint Type", _
-        "Finish Constraint Date", _
-        "Calculated Start", _
-        "Calculated Finish", _
-        "Calculated Duration", _
-        "Error flag", _
-        "ErrorMsg", _
-        "Input Progress" _
+        "ID", "WBS", "Task Name", "Task Type", "Cal", "ParentID", "IsSummary", _
+        "Actual Start", "Actual Finish", "Forecast Start", "Forecast Finish", _
+        "Baseline Start", "Baseline Duration", "Constraint Active", _
+        "Start Constraint Type", "Start Constraint Date", _
+        "Finish Constraint Type", "Finish Constraint Date", _
+        "Calculated Start", "Calculated Finish", "Calculated Duration", _
+        "Error flag", "ErrorMsg", "Input Progress" _
     )
 
     Set mapCore = CreateObject("Scripting.Dictionary")
@@ -3736,6 +3716,7 @@ Private Sub BuildGanttScenarioCoreDataset( _
         dataCore(r, mapCore("WBS")) = wbsVal
         dataCore(r, mapCore("Task Name")) = taskName
         dataCore(r, mapCore("Task Type")) = taskTypeVal
+        dataCore(r, mapCore("Cal")) = NormalizeCalendarType(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Cal")))
         dataCore(r, mapCore("ParentID")) = parentId
         dataCore(r, mapCore("IsSummary")) = IIf(isSummary = "YES", True, False)
 
@@ -4045,9 +4026,11 @@ Private Sub ShowGanttLiveUpstreamViolationMessage( _
     msgType = GanttLive_MessageTypeFromMsgBoxStyle(boxStyle)
 
     msg = _
+        "FR:" & vbCrLf & _
         frProblem & vbCrLf & _
         "-> " & frAction & vbCrLf & vbCrLf & _
         "Tâches : " & itemsLine & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
         enProblem & vbCrLf & _
         "-> " & enAction & vbCrLf & vbCrLf & _
         "Tasks: " & itemsLine

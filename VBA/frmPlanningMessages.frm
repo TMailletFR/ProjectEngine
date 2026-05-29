@@ -2,9 +2,9 @@ VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmPlanningMessages 
    Caption         =   "Planning warnings"
    ClientHeight    =   12840
-   ClientLeft      =   570
-   ClientTop       =   2265
-   ClientWidth     =   2.27955e5
+   ClientLeft      =   630
+   ClientTop       =   2505
+   ClientWidth     =   3.06870e5
    OleObjectBlob   =   "frmPlanningMessages.frx":0000
 End
 Attribute VB_Name = "frmPlanningMessages"
@@ -12,6 +12,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
 
 
 

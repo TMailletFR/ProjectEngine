@@ -417,7 +417,8 @@ Public Sub Core_RollupSummaryDates( _
                 If hasChildData Then
                     If CStr(Core_GetVal(dataArr, rowIdx, mapCol, "Calculated Start")) <> CStr(minStart) _
                     Or CStr(Core_GetVal(dataArr, rowIdx, mapCol, "Calculated Finish")) <> CStr(maxFinish) Then
-                        Core_SetCalcTriplet dataArr, rowIdx, mapCol, minStart, maxFinish
+                        Core_SetCalcTriplet dataArr, rowIdx, mapCol, minStart, maxFinish, _
+                            NormalizeCalendarType(Core_GetVal(dataArr, rowIdx, mapCol, "Cal"))
                         changed = True
                     End If
                 End If

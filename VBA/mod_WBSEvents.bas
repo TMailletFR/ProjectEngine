@@ -31,6 +31,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Dim rngWBS As Range
     Dim rngPredWBS As Range
     Dim rngTaskType As Range
+    Dim rngCal As Range
     Dim rngBaselineDuration As Range
 
     Dim rngLockedCols As Range
@@ -54,6 +55,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Set rngWBS = tbl.ListColumns("WBS").DataBodyRange
     Set rngPredWBS = tbl.ListColumns("Predecessors WBS").DataBodyRange
     Set rngTaskType = tbl.ListColumns("Task Type").DataBodyRange
+    If WBSHasColumn(tbl, "Cal") Then Set rngCal = tbl.ListColumns("Cal").DataBodyRange
     Set rngBaselineDuration = tbl.ListColumns("Baseline Duration").DataBodyRange
 
     Set rngEditableCols = GetWBSUserEditableRange(tbl)
@@ -126,7 +128,11 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
 ContinueValidation:
 
-    Set rngToCheck = Intersect(Target, Union(rngWBS, rngPredWBS, rngTaskType, rngBaselineDuration))
+    If rngCal Is Nothing Then
+        Set rngToCheck = Intersect(Target, Union(rngWBS, rngPredWBS, rngTaskType, rngBaselineDuration))
+    Else
+        Set rngToCheck = Intersect(Target, Union(rngWBS, rngPredWBS, rngTaskType, rngCal, rngBaselineDuration))
+    End If
     If rngToCheck Is Nothing Then GoTo SafeExit
 
     Set reWBS = CreateObject("VBScript.RegExp")
@@ -219,6 +225,35 @@ ContinueValidation:
             End If
         End If
 
+
+        If Not rngCal Is Nothing Then
+            If Not Intersect(cell, rngCal) Is Nothing Then
+                If cellValue <> "" Then
+                    If Not IsValidCalendarType(cellValue) Then
+
+                        If IsMacroRunActive() Then
+                            RequestMacroAbort _
+                                "Handle_WBS_Change", _
+                                "Calendrier invalide detecte pendant l'execution d'un macro." & vbCrLf & _
+                                "-> valeurs autorisees : vide | 7j/7 | 6j/7 | 5j/7", _
+                                "Invalid Cal detected during macro execution." & vbCrLf & _
+                                "-> allowed values: blank | 7j/7 | 6j/7 | 5j/7"
+                            Exit Sub
+                        End If
+
+                        Application.EnableEvents = False
+                        Application.Undo
+
+                        WBS_ShowConsoleMessage vbExclamation, _
+                            "Calendrier invalide." & vbCrLf & _
+                            "-> valeurs autorisees : vide | 7j/7 | 6j/7 | 5j/7", _
+                            "Invalid Cal." & vbCrLf & _
+                            "-> allowed values: blank | 7j/7 | 6j/7 | 5j/7"
+                        GoTo SafeExit
+                    End If
+                End If
+            End If
+        End If
         If Not Intersect(cell, rngBaselineDuration) Is Nothing Then
             If cellValue <> "" Then
                 If Not IsValidDurationInput(cellValue) Then
@@ -354,15 +389,23 @@ Private Function ExpectedWBSFormulaLocal(ByVal columnName As String) As String
 End Function
 Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
 
-    Set GetWBSUserEditableRange = Union( _
-        tbl.ListColumns("ID").DataBodyRange, _
+    Dim rng As Range
+
+    Set rng = Union( _
         tbl.ListColumns("WBS").DataBodyRange, _
         tbl.ListColumns("Task Name").DataBodyRange, _
         tbl.ListColumns("Task Description").DataBodyRange, _
         tbl.ListColumns("Discipline").DataBodyRange, _
         tbl.ListColumns("Supplier").DataBodyRange, _
         tbl.ListColumns("Package").DataBodyRange, _
-        tbl.ListColumns("Task Type").DataBodyRange, _
+        tbl.ListColumns("Task Type").DataBodyRange)
+
+    If WBSHasColumn(tbl, "Cal") Then
+        Set rng = Union(rng, tbl.ListColumns("Cal").DataBodyRange)
+    End If
+
+    Set GetWBSUserEditableRange = Union( _
+        rng, _
         tbl.ListColumns("Predecessors WBS").DataBodyRange, _
         tbl.ListColumns("Weight (%)").DataBodyRange, _
         tbl.ListColumns("% Progress").DataBodyRange, _
@@ -376,7 +419,17 @@ Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
     )
 
 End Function
+Private Function WBSHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
+    Dim col As ListColumn
+
+    On Error Resume Next
+    Set col = tbl.ListColumns(columnName)
+    On Error GoTo 0
+
+    WBSHasColumn = Not col Is Nothing
+
+End Function
 Private Function GetWBSLockedRange(ByVal tbl As ListObject) As Range
 
     Set GetWBSLockedRange = Union( _

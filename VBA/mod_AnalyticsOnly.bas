@@ -217,6 +217,9 @@ Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Not
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
 
     CalcBridge_RunAnalyticsAndPush tblCalc, mapCalc, linksBySuccId, localConsole
+    If AnalyticsOnly_TableHasNegativeFloat(tblCalc, mapCalc) Then
+        CalcBridge_AddConsoleMessage localConsole, "WARNING", AnalyticsOnly_NegativeFloatWarningMessage()
+    End If
     CalcBridge_ComputeDeadlineAnalytics tblCalc, mapCalc, localConsole
 
     Push_Analytics_Back_To_WBS
@@ -313,6 +316,50 @@ ErrHandler:
     CalcBridge_ShowPlanningConsole localConsole
 
 End Sub
+
+
+Private Function AnalyticsOnly_TableHasNegativeFloat( _
+    ByVal tblCalc As ListObject, _
+    ByVal mapCalc As Object) As Boolean
+
+    Dim columnsToCheck As Variant
+    Dim colName As Variant
+    Dim arr As Variant
+    Dim r As Long
+
+    If tblCalc Is Nothing Then Exit Function
+    If tblCalc.DataBodyRange Is Nothing Then Exit Function
+    If mapCalc Is Nothing Then Exit Function
+
+    columnsToCheck = Array("Total Float", "Free Float", "Total Float REX", "Free Float REX")
+    arr = tblCalc.DataBodyRange.value
+
+    For Each colName In columnsToCheck
+        If mapCalc.Exists(CStr(colName)) Then
+            For r = 1 To UBound(arr, 1)
+                If HasValue(arr(r, mapCalc(CStr(colName)))) Then
+                    If IsNumeric(arr(r, mapCalc(CStr(colName)))) Then
+                        If CDbl(arr(r, mapCalc(CStr(colName)))) < 0 Then
+                            AnalyticsOnly_TableHasNegativeFloat = True
+                            Exit Function
+                        End If
+                    End If
+                End If
+            Next r
+        End If
+    Next colName
+
+End Function
+
+Private Function AnalyticsOnly_NegativeFloatWarningMessage() As String
+
+    AnalyticsOnly_NegativeFloatWarningMessage = BiMsg( _
+        "Float négatif détecté dans le planning actuel" & vbCrLf & _
+        "-> vérifier la logique, les dates, les lags ou les prévisions", _
+        "Negative float detected in the current schedule" & vbCrLf & _
+        "-> check logic, dates, lags or forecasts")
+
+End Function
 
 Private Function AnalyticsColumnNames() As Variant
 
