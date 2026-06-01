@@ -14,6 +14,9 @@ ProjectEngine turns an Excel workbook into a lightweight planning engine with na
 
 ## Screenshots
 
+### Gantt
+
+![Gantt](Screenshots/hero-gantt-sc.png)
 
 ### WBS Inputs
 
