@@ -93,7 +93,6 @@ Public Sub Ensure_WBS_Main_Buttons()
 
 End Sub
 
-
 Private Sub CreateOrUpdateWBSFloatingButton( _
     ByVal ws As Worksheet, _
     ByVal shpName As String, _
@@ -126,7 +125,7 @@ Private Sub CreateOrUpdateWBSFloatingButton( _
     shp.Width = btnWidth
     shp.Height = btnHeight
     shp.OnAction = macroName
-    shp.Placement = xlMoveAndSize
+    shp.Placement = xlFreeFloating
 
     With shp.TextFrame2
         .TextRange.Text = captionText

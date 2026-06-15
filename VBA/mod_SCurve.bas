@@ -10,6 +10,9 @@ Private Const CALC_SCURVE_TABLE As String = "tbl_CALC_SCURVE"
 Private Const WBS_SHEET As String = "WBS"
 Private Const WBS_TABLE As String = "tbl_WBS"
 
+Private Const SCURVE_CHART_SIGNATURE_NAME As String = "_SCURVE_CHART_SOURCE_SIGNATURE"
+
+
 Public Sub Run_SCurve_Engine()
 
     Dim wsWBS As Worksheet
@@ -53,6 +56,7 @@ Public Sub Run_SCurve_Engine()
 
     On Error GoTo SafeExit
 
+
     Set consoleMessages = New Collection
 
     Set wsWBS = ThisWorkbook.Worksheets(WBS_SHEET)
@@ -65,8 +69,15 @@ Public Sub Run_SCurve_Engine()
     Set tblSCurve = wsSCurve.ListObjects(SCURVE_TABLE)
     Set tblCalcSCurve = wsCalcSCurve.ListObjects(CALC_SCURVE_TABLE)
 
-    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
-    If tblCalc.DataBodyRange Is Nothing Then Exit Sub
+    If tblWBS.DataBodyRange Is Nothing Then
+        SCurve_SafeEmptyState
+        Exit Sub
+    End If
+
+    If tblCalc.DataBodyRange Is Nothing Then
+        SCurve_SafeEmptyState
+        Exit Sub
+    End If
 
     Set mapWBS = BuildColumnMapGeneric(tblWBS)
     Set mapCalc = BuildColumnMapGeneric(tblCalc)
@@ -97,6 +108,7 @@ Public Sub Run_SCurve_Engine()
 
     BuildWBSParentMaps dataCalc, mapCalc, hasChildren, idToWbs
     BuildCalcRowByIdMap dataCalc, mapCalc, calcRowById
+
 
     ResizeTableToRowCount tblCalcSCurve, rowCount
     ReDim outCalc(1 To rowCount, 1 To tblCalcSCurve.ListColumns.Count)
@@ -291,6 +303,7 @@ WritePass1Row:
 NextPass1Row:
     Next r
 
+
     tblCalcSCurve.DataBodyRange.value = outCalc
     FormatCalcSCurveColumns tblCalcSCurve, mapCalcSCurve
 
@@ -298,6 +311,7 @@ NextPass1Row:
         SCurve_AddGroupedMessage consoleMessages, "STOP", blockingErrorIds, idToWbs, _
             "Données bloquantes pour S-curve", "corriger les champs nécessaires avant recalcul", _
             "Blocking data for S-curve", "fix required fields before recalculation"
+        SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
@@ -306,6 +320,7 @@ NextPass1Row:
             "Aucune tâche feuille exploitable pour la S-curve.", _
             "No valid leaf task available for S-curve.", _
             "SCURVE_NO_VALID_LEAF_TASK"
+        SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
@@ -313,6 +328,7 @@ NextPass1Row:
         SCurve_AddConsoleMessage consoleMessages, "STOP", _
             "La somme des poids exploités pour la S-curve est nulle ou invalide.", _
             "The total usable S-curve weight is zero or invalid."
+        SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
@@ -427,6 +443,7 @@ NextPass1Row:
 NextPass2Row:
     Next r
 
+
     tblCalcSCurve.DataBodyRange.value = outCalc
     FormatCalcSCurveColumns tblCalcSCurve, mapCalcSCurve
 
@@ -434,10 +451,12 @@ NextPass2Row:
         SCurve_AddConsoleMessage consoleMessages, "STOP", _
             "Aucune date exploitable pour générer la S-curve.", _
             "No usable date found to generate the S-curve."
+        SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
     WriteSCurveDailyTable tblSCurve, mapSCurve, allDates, baselineDailyByDate, actualizedDailyByDate, remainingDailyByDate
+
     Ensure_SCurve_Chart
 
 SafeExit:
@@ -452,6 +471,7 @@ SafeExit:
             "-> check the last edited block in mod_SCurve" & vbCrLf & _
             "-> " & Err.Description
     End If
+
 
     If Not consoleMessages Is Nothing Then
         If consoleMessages.Count > 0 Then
@@ -763,6 +783,28 @@ Private Sub WriteSCurveDailyTable( _
 
 End Sub
 
+Public Sub SCurve_SafeEmptyState()
+
+    Dim wsSCurve As Worksheet
+    Dim wsCalcSCurve As Worksheet
+    Dim tblSCurve As ListObject
+    Dim tblCalcSCurve As ListObject
+
+    On Error Resume Next
+    Set wsSCurve = ThisWorkbook.Worksheets(SCURVE_SHEET)
+    Set wsCalcSCurve = ThisWorkbook.Worksheets(CALC_SCURVE_SHEET)
+    Set tblSCurve = wsSCurve.ListObjects(SCURVE_TABLE)
+    Set tblCalcSCurve = wsCalcSCurve.ListObjects(CALC_SCURVE_TABLE)
+    On Error GoTo 0
+
+    If Not tblSCurve Is Nothing Then ResizeTableToRowCount tblSCurve, 0
+    If Not tblCalcSCurve Is Nothing Then ResizeTableToRowCount tblCalcSCurve, 0
+
+    SCurve_DeleteChartIfExists wsSCurve, "cht_SCurve"
+    SCurve_DeleteShapeIfExists wsSCurve, "SCURVE_TODAY_LINE"
+    SCurve_ClearChartSignature
+
+End Sub
 Private Sub SortLongArray(ByRef arr() As Long)
 
     Dim i As Long
@@ -841,6 +883,7 @@ Private Sub ShowSCurveGroupedMessage( _
     Else
         msgType = "INFO"
     End If
+
 
     Set consoleMessages = New Collection
 
@@ -949,6 +992,7 @@ Private Sub Ensure_SCurve_Chart()
     Dim ws As Worksheet
     Dim chartObj As ChartObject
 
+
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
 
     On Error Resume Next
@@ -970,6 +1014,7 @@ Private Sub Create_SCurve_Chart()
     Dim chartObj As ChartObject
     Dim ch As Chart
     Dim s As Series
+
 
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
     Set tbl = ws.ListObjects(SCURVE_TABLE)
@@ -1064,6 +1109,8 @@ Private Sub Create_SCurve_Chart()
         .MarkerStyle = xlMarkerStyleNone
     End With
 
+    SCurveStoreChartSignature SCurveChartSourceSignature(tbl)
+
     Format_SCurve_Chart ch
     DrawTodayVerticalLine ch
 
@@ -1073,6 +1120,7 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
 
     Dim tbl As ListObject
     Dim rebuildNeeded As Boolean
+    Dim sourceSignature As String
 
     Set tbl = ThisWorkbook.Worksheets(SCURVE_SHEET).ListObjects(SCURVE_TABLE)
 
@@ -1090,7 +1138,13 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
             ch.SeriesCollection(1).AxisGroup <> xlPrimary Or _
             ch.SeriesCollection(2).AxisGroup <> xlPrimary Or _
             ch.SeriesCollection(3).ChartType <> xlLine Or _
-            ch.SeriesCollection(3).AxisGroup <> xlSecondary)
+            ch.SeriesCollection(3).AxisGroup <> xlSecondary Or _
+            ch.SeriesCollection(4).ChartType <> xlLine Or _
+            ch.SeriesCollection(4).AxisGroup <> xlSecondary Or _
+            ch.SeriesCollection(5).ChartType <> xlLine Or _
+            ch.SeriesCollection(5).AxisGroup <> xlSecondary Or _
+            ch.SeriesCollection(6).ChartType <> xlLine Or _
+            ch.SeriesCollection(6).AxisGroup <> xlSecondary)
         On Error GoTo 0
     End If
 
@@ -1099,6 +1153,20 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
         Create_SCurve_Chart
         Exit Sub
     End If
+
+    sourceSignature = SCurveChartSourceSignature(tbl)
+
+    If SCurveStoredChartSignature() <> sourceSignature Then
+        SCurveAssignChartSeriesRanges ch, tbl
+        SCurveStoreChartSignature sourceSignature
+    End If
+
+    Format_SCurve_Chart ch
+    DrawTodayVerticalLine ch
+
+End Sub
+
+Private Sub SCurveAssignChartSeriesRanges(ByVal ch As Chart, ByVal tbl As ListObject)
 
     ch.SeriesCollection(1).XValues = tbl.ListColumns("Date").DataBodyRange
     ch.SeriesCollection(1).Values = tbl.ListColumns("Daily Actualized").DataBodyRange
@@ -1118,31 +1186,112 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
     ch.SeriesCollection(6).XValues = tbl.ListColumns("Date").DataBodyRange
     ch.SeriesCollection(6).Values = tbl.ListColumns("Cumulative Actual").DataBodyRange
 
-    ch.SeriesCollection(1).AxisGroup = xlPrimary
-    ch.SeriesCollection(1).ChartType = xlColumnStacked
+End Sub
 
-    ch.SeriesCollection(2).AxisGroup = xlPrimary
-    ch.SeriesCollection(2).ChartType = xlColumnStacked
+Private Sub SCurve_DeleteChartIfExists(ByVal ws As Worksheet, ByVal chartName As String)
 
-    ch.SeriesCollection(3).AxisGroup = xlSecondary
-    ch.SeriesCollection(3).ChartType = xlLine
+    Dim chartObj As ChartObject
 
-    ch.SeriesCollection(4).AxisGroup = xlSecondary
-    ch.SeriesCollection(4).ChartType = xlLine
+    If ws Is Nothing Then Exit Sub
+    If Len(Trim$(chartName)) = 0 Then Exit Sub
 
-    ch.SeriesCollection(5).AxisGroup = xlSecondary
-    ch.SeriesCollection(5).ChartType = xlLine
-
-    ch.SeriesCollection(6).AxisGroup = xlSecondary
-    ch.SeriesCollection(6).ChartType = xlLine
-
-    Format_SCurve_Chart ch
-    DrawTodayVerticalLine ch
+    On Error Resume Next
+    Set chartObj = ws.ChartObjects(chartName)
+    If Not chartObj Is Nothing Then chartObj.Delete
+    On Error GoTo 0
 
 End Sub
 
+Private Sub SCurve_DeleteShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String)
+
+    If ws Is Nothing Then Exit Sub
+    If Len(Trim$(shapeName)) = 0 Then Exit Sub
+
+    On Error Resume Next
+    ws.Shapes(shapeName).Delete
+    On Error GoTo 0
+
+End Sub
+
+Private Sub SCurve_ClearChartSignature()
+
+    On Error Resume Next
+    ThisWorkbook.Names(SCURVE_CHART_SIGNATURE_NAME).Delete
+    On Error GoTo 0
+
+End Sub
+Private Function SCurveChartSourceSignature(ByVal tbl As ListObject) As String
+
+    SCurveChartSourceSignature = _
+        SCurveRangeSignature(tbl, "Date") & "|" & _
+        SCurveRangeSignature(tbl, "Daily Actualized") & "|" & _
+        SCurveRangeSignature(tbl, "Daily Remaining Forecast") & "|" & _
+        SCurveRangeSignature(tbl, "Cumulative Baseline") & "|" & _
+        SCurveRangeSignature(tbl, "Calculated Curve Solid") & "|" & _
+        SCurveRangeSignature(tbl, "Calculated Curve Dashed") & "|" & _
+        SCurveRangeSignature(tbl, "Cumulative Actual")
+
+End Function
+
+Private Function SCurveRangeSignature(ByVal tbl As ListObject, ByVal columnName As String) As String
+
+    Dim rng As Range
+
+    Set rng = tbl.ListColumns(columnName).DataBodyRange
+    SCurveRangeSignature = columnName & ":" & _
+        rng.rows.Count & ":" & _
+        rng.Address(RowAbsolute:=True, ColumnAbsolute:=True, ReferenceStyle:=xlA1, External:=True)
+
+End Function
+
+Private Function SCurveStoredChartSignature() As String
+
+    Dim nm As Name
+    Dim rawValue As String
+
+    On Error Resume Next
+    Set nm = ThisWorkbook.Names(SCURVE_CHART_SIGNATURE_NAME)
+    On Error GoTo 0
+
+    If nm Is Nothing Then Exit Function
+
+    rawValue = CStr(nm.RefersTo)
+    If Len(rawValue) >= 3 Then
+        If Left$(rawValue, 2) = "=""" And Right$(rawValue, 1) = """" Then
+            rawValue = Mid$(rawValue, 3, Len(rawValue) - 3)
+            rawValue = Replace(rawValue, """""", """")
+        End If
+    End If
+
+    SCurveStoredChartSignature = rawValue
+
+End Function
+
+Private Sub SCurveStoreChartSignature(ByVal signature As String)
+
+    Dim nm As Name
+    Dim refersToValue As String
+
+    refersToValue = "=""" & Replace(signature, """", """""") & """"
+
+    On Error Resume Next
+    Set nm = ThisWorkbook.Names(SCURVE_CHART_SIGNATURE_NAME)
+    On Error GoTo 0
+
+    If nm Is Nothing Then
+        Set nm = ThisWorkbook.Names.Add(Name:=SCURVE_CHART_SIGNATURE_NAME, RefersTo:=refersToValue)
+    Else
+        nm.RefersTo = refersToValue
+    End If
+
+    On Error Resume Next
+    nm.Visible = False
+    On Error GoTo 0
+
+End Sub
 
 Private Sub Format_SCurve_Chart(ByVal ch As Chart)
+
 
     With ch.Axes(xlValue, xlPrimary)
         .MinimumScale = 0
@@ -1178,6 +1327,21 @@ End Sub
 Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
     Dim ws As Worksheet
+    Dim tbl As ListObject
+
+    Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
+    Set tbl = ws.ListObjects(SCURVE_TABLE)
+
+    DrawSCurveTodayVerticalLine ch, ws, tbl, "SCURVE_TODAY_LINE"
+
+End Sub
+
+Public Sub DrawSCurveTodayVerticalLine( _
+    ByVal ch As Chart, _
+    ByVal ws As Worksheet, _
+    ByVal tbl As ListObject, _
+    ByVal todayShapeName As String)
+
     Dim shp As Shape
     Dim todaySerial As Double
     Dim minDate As Double
@@ -1197,23 +1361,30 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
     Dim nextDate As Double
     Dim axisBetweenCategories As Boolean
 
-    Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
+    If ch Is Nothing Then Exit Sub
+    If ws Is Nothing Then Exit Sub
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If Len(Trim$(todayShapeName)) = 0 Then Exit Sub
+
     Set chartObj = ch.Parent
-    Set dateRange = ws.ListObjects(SCURVE_TABLE).ListColumns("Date").DataBodyRange
+    Set dateRange = tbl.ListColumns("Date").DataBodyRange
 
     todaySerial = CDbl(Date)
-    dateCount = dateRange.Rows.Count
+    dateCount = dateRange.rows.Count
+
+    If dateCount < 1 Then GoTo HideLine
 
     minDate = CDbl(dateRange.Cells(1, 1).value)
     maxDate = CDbl(dateRange.Cells(dateCount, 1).value)
 
     On Error Resume Next
-    ws.Shapes("SCURVE_TODAY_LINE").Delete
+    Set shp = ws.Shapes(todayShapeName)
     On Error GoTo 0
 
-    If todaySerial < minDate Or todaySerial > maxDate Then Exit Sub
-    If maxDate <= minDate Then Exit Sub
-    If dateCount < 2 Then Exit Sub
+    If todaySerial < minDate Or todaySerial > maxDate Then GoTo HideLine
+    If maxDate <= minDate Then GoTo HideLine
+    If dateCount < 2 Then GoTo HideLine
 
     categoryIndex = 0#
     For r = 1 To dateCount
@@ -1233,7 +1404,7 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
         End If
     Next r
 
-    If categoryIndex = 0# Then Exit Sub
+    If categoryIndex = 0# Then GoTo HideLine
 
     plotLeft = chartObj.Left + ch.PlotArea.InsideLeft
     plotTop = chartObj.Top + ch.PlotArea.InsideTop
@@ -1253,8 +1424,27 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
     xPos = plotLeft + (plotWidth * ratio)
 
-    Set shp = ws.Shapes.AddLine(xPos, plotTop, xPos, plotTop + plotHeight)
-    shp.Name = "SCURVE_TODAY_LINE"
+    If shp Is Nothing Then
+        Set shp = ws.Shapes.AddLine(xPos, plotTop, xPos, plotTop + plotHeight)
+        shp.Name = todayShapeName
+    Else
+        shp.Visible = msoTrue
+        shp.Left = xPos
+        shp.Top = plotTop
+        shp.Width = 0
+        shp.Height = plotHeight
+    End If
+
+    SCurveFormatTodayLine shp
+    GoTo Done
+
+HideLine:
+    If Not shp Is Nothing Then shp.Visible = msoFalse
+
+Done:
+
+End Sub
+Private Sub SCurveFormatTodayLine(ByVal shp As Shape)
 
     With shp.Line
         .ForeColor.RGB = RGB(0, 176, 80)

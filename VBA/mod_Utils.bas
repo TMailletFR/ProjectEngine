@@ -425,8 +425,14 @@ Public Function ParsePredecessorToken( _
     rawToken = ""
     errText = ""
 
-    t = Replace$(Trim$(token), ",", ".")
-    t = Replace$(t, " ", "")
+    t = Trim$(token)
+
+    If ContainsForbiddenWhitespace(t) Then
+        errText = "Spaces are not allowed in predecessor tokens."
+        Exit Function
+    End If
+
+    t = Replace$(t, ",", ".")
 
     If t = "" Then
         errText = "Token vide."
@@ -534,6 +540,14 @@ Public Function ParsePredecessorToken( _
 
 End Function
 
+Private Function ContainsForbiddenWhitespace(ByVal textValue As String) As Boolean
+
+    ContainsForbiddenWhitespace = _
+        (InStr(1, textValue, " ", vbBinaryCompare) > 0) Or _
+        (InStr(1, textValue, vbTab, vbBinaryCompare) > 0) Or _
+        (InStr(1, textValue, Chr$(160), vbBinaryCompare) > 0)
+
+End Function
 Private Function IsValidPureWBS(ByVal wbsText As String) As Boolean
 
     Dim reWBS As Object
@@ -588,7 +602,7 @@ Public Function ParsePredecessorsText( _
     Set linksOut = New Collection
     errText = ""
 
-    predText = NormalizeWBS(Trim$(predText))
+    predText = Replace$(Trim$(predText), ",", ".")
 
     If predText = "" Then
         ParsePredecessorsText = True
@@ -625,6 +639,7 @@ Public Function ParsePredecessorsText( _
         linkRow("Link Type") = linkType
         linkRow("Lag") = lagVal
         linkRow("Raw Token") = rawToken
+        linkRow("Entered Token") = tokenText
 
         linksOut.Add linkRow
 

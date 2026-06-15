@@ -56,6 +56,13 @@ Public Sub GanttLive_ClearTestRenderRequest()
     gPendingRenderMode = ""
 End Sub
 
+Public Sub GanttLive_SafeEmptyState()
+
+    GanttLive_ClearTestRenderRequest
+    GanttLive_ClearActiveSimulationMode
+    ClearCalcGanttTestResults
+
+End Sub
 Public Function GanttLive_IsTestRenderRequested() As Boolean
     GanttLive_IsTestRenderRequested = (Trim$(gPendingRenderMode) <> "")
 End Function
@@ -259,6 +266,7 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
 
     Next r
 
+    FormatCalcGanttTestColumns tblTest
     tblTest.DataBodyRange.value = outArr
     FormatCalcGanttTestColumns tblTest
 
@@ -543,7 +551,19 @@ Private Sub FormatCalcGanttTestColumns(ByVal tbl As ListObject)
 
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
+    tbl.ListColumns("ID").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("WBS").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Task Type").DataBodyRange.NumberFormat = "@"
     tbl.ListColumns("Cal").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Is Summary").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Parent ID").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Driving Logic").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Has Actual").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Predecessors").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Any Test Value").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Warning Flag").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Warning Text").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Error Flag").DataBodyRange.NumberFormat = "@"
     tbl.ListColumns("Base Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
     tbl.ListColumns("Base Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
     tbl.ListColumns("Test Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
@@ -615,7 +635,7 @@ End Function
 
 Private Function GetLastGanttRow_Live(ByVal ws As Worksheet) As Long
 
-    GetLastGanttRow_Live = ws.Cells(ws.Rows.Count, GANTT_COL_WBS).End(xlUp).Row
+    GetLastGanttRow_Live = ws.Cells(ws.rows.Count, GANTT_COL_WBS).End(xlUp).Row
 
     If GetLastGanttRow_Live < GANTT_FIRST_TASK_ROW Then
         GetLastGanttRow_Live = GANTT_FIRST_TASK_ROW - 1
@@ -935,6 +955,8 @@ Private Function Run_Gantt_Test_Backend( _
 NextRow:
     Next r
 
+    GanttLive_RemoveDerivedLOERootErrors dataCore, mapCore, errorIds, rootErrorIds
+
     GanttLive_ApplyActualImpactWarnings idToRowTest, warningActualIds, outWarnFlag, outWarnText
 
     tblTest.ListColumns("Calc Test Start").DataBodyRange.value = outStart
@@ -949,7 +971,7 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            GanttLive_ShowRootCoreErrorMessages dataCore, mapCore, idToWbs, rootErrorIds, "TEST", consoleMessages
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "TEST"
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
                 "Erreur de calcul dans le moteur live", "corriger les valeurs test ou la logique amont", _
@@ -1072,7 +1094,7 @@ Private Function BuildInlineWBSList_GanttLive(ByVal idsDict As Object, ByVal idT
         countShown = countShown + 1
         If countShown <= maxItems Then
             If idToWbs.Exists(CStr(key)) Then
-                itemText = CStr(idToWbs(CStr(key)))
+                itemText = NormalizeWBS(CStr(idToWbs(CStr(key))))
             Else
                 itemText = "-"
             End If
@@ -2852,7 +2874,7 @@ Private Sub BuildGanttTestCoreDataset( _
     For r = 1 To rowCount
 
         idVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "ID"))))
-        wbsVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "WBS"))))
+        wbsVal = NormalizeWBS(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "WBS"))))
         taskTypeVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Task Type"))))
         isSummary = UCase$(Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Is Summary")))))
         parentId = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Parent ID"))))
@@ -3466,6 +3488,7 @@ Public Sub Run_Gantt_Scenario_Engine()
 
     Next r
 
+    FormatCalcGanttTestColumns tblTest
     tblTest.DataBodyRange.value = outArr
     FormatCalcGanttTestColumns tblTest
 
@@ -3587,6 +3610,8 @@ Private Function Run_Gantt_Scenario_Backend( _
 NextRow:
     Next r
 
+    GanttLive_RemoveDerivedLOERootErrors dataCore, mapCore, errorIds, rootErrorIds
+
     tblTest.ListColumns("Calc Test Start").DataBodyRange.value = outStart
     tblTest.ListColumns("Calc Test Finish").DataBodyRange.value = outFinish
     tblTest.ListColumns("Calc Test Duration").DataBodyRange.value = outDuration
@@ -3599,7 +3624,7 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            GanttLive_ShowRootCoreErrorMessages dataCore, mapCore, idToWbs, rootErrorIds, "SCENARIO", consoleMessages
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "SCENARIO"
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
                 "Erreur de calcul dans le scénario", "corriger les valeurs de test ou la logique amont", _
@@ -3678,7 +3703,7 @@ Private Sub BuildGanttScenarioCoreDataset( _
     For r = 1 To rowCount
 
         idVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "ID"))))
-        wbsVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "WBS"))))
+        wbsVal = NormalizeWBS(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "WBS"))))
         taskTypeVal = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Task Type"))))
         isSummary = UCase$(Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Is Summary")))))
         parentId = Trim$(CStr(arrTest(r, GetColumnIndex_GanttLive(tblTest, "Parent ID"))))
@@ -3827,182 +3852,82 @@ Private Function GanttLive_IsInheritedCoreError(ByVal errMsg As String) As Boole
 
 End Function
 
-Private Sub GanttLive_ShowRootCoreErrorMessages( _
+Private Sub GanttLive_RemoveDerivedLOERootErrors( _
     ByRef dataCore As Variant, _
     ByVal mapCore As Object, _
-    ByVal idToWbs As Object, _
-    ByVal rootErrorIds As Object, _
-    ByVal modeName As String, _
-    Optional ByVal consoleMessages As Variant)
-
-    Dim errMissingPred As Object
-    Dim errCycle As Object
-    Dim errUnsupportedLinkType As Object
-    Dim errActualStartConflict As Object
-    Dim errActualFinishConflict As Object
-    Dim errForecastConflict As Object
-    Dim errForecastFinishConflict As Object
-    Dim errMissingDuration As Object
-    Dim errStartNotComputable As Object
-    Dim errFinishBeforeStart As Object
-    Dim errOtherRoot As Object
+    ByVal errorIds As Object, _
+    ByVal rootErrorIds As Object)
 
     Dim r As Long
     Dim idVal As String
     Dim errMsg As String
+    Dim removeIds As Object
+    Dim oneId As Variant
 
-    Set errMissingPred = CreateObject("Scripting.Dictionary")
-    Set errCycle = CreateObject("Scripting.Dictionary")
-    Set errUnsupportedLinkType = CreateObject("Scripting.Dictionary")
-    Set errActualStartConflict = CreateObject("Scripting.Dictionary")
-    Set errActualFinishConflict = CreateObject("Scripting.Dictionary")
-    Set errForecastConflict = CreateObject("Scripting.Dictionary")
-    Set errForecastFinishConflict = CreateObject("Scripting.Dictionary")
-    Set errMissingDuration = CreateObject("Scripting.Dictionary")
-    Set errStartNotComputable = CreateObject("Scripting.Dictionary")
-    Set errFinishBeforeStart = CreateObject("Scripting.Dictionary")
-    Set errOtherRoot = CreateObject("Scripting.Dictionary")
-
+    If errorIds Is Nothing Then Exit Sub
     If rootErrorIds Is Nothing Then Exit Sub
     If rootErrorIds.Count = 0 Then Exit Sub
 
+    Set removeIds = CreateObject("Scripting.Dictionary")
+
     For r = 1 To UBound(dataCore, 1)
-
         idVal = Trim$(CStr(dataCore(r, mapCore("ID"))))
-        If idVal = "" Then GoTo NextRow
-        If Not rootErrorIds.Exists(idVal) Then GoTo NextRow
-
-        errMsg = Trim$(CStr(dataCore(r, mapCore("ErrorMsg"))))
-
-        Select Case True
-
-            Case InStr(1, errMsg, "Missing predecessor", vbTextCompare) > 0
-                errMissingPred(idVal) = True
-
-            Case InStr(1, errMsg, "Cycle detected", vbTextCompare) > 0
-                errCycle(idVal) = True
-
-            Case InStr(1, errMsg, "Unsupported link type", vbTextCompare) > 0
-                errUnsupportedLinkType(idVal) = True
-
-            Case InStr(1, errMsg, "Actual Start violates dependencies", vbTextCompare) > 0
-                errActualStartConflict(idVal) = True
-
-            Case InStr(1, errMsg, "Actual Finish violates finish constraints", vbTextCompare) > 0
-                errActualFinishConflict(idVal) = True
-
-            Case InStr(1, errMsg, "Forecast Start violates dependencies", vbTextCompare) > 0
-                errForecastConflict(idVal) = True
-
-            Case InStr(1, errMsg, "Forecast Finish violates finish constraints", vbTextCompare) > 0
-                errForecastFinishConflict(idVal) = True
-
-            Case InStr(1, errMsg, "Baseline Duration missing", vbTextCompare) > 0
-                errMissingDuration(idVal) = True
-
-            Case InStr(1, errMsg, "Start date not computable", vbTextCompare) > 0
-                errStartNotComputable(idVal) = True
-
-            Case InStr(1, errMsg, "Finish before start", vbTextCompare) > 0
-                errFinishBeforeStart(idVal) = True
-
-            Case Else
-                errOtherRoot(idVal) = True
-
-        End Select
-
-NextRow:
+        If idVal <> "" Then
+            If rootErrorIds.Exists(idVal) Then
+                errMsg = Trim$(CStr(dataCore(r, mapCore("ErrorMsg"))))
+                If GanttLive_IsDerivedLOEPredecessorError(errMsg, errorIds) Then removeIds(idVal) = True
+            End If
+        End If
     Next r
 
-    If errMissingPred.Count > 0 Then
-        ShowGanttLiveGroupedMessage errMissingPred, idToWbs, _
-            "Prédécesseur introuvable", _
-            "vérifier la colonne Predecessors WBS ou la table des liens logiques", _
-            "Missing predecessor", _
-            "check the Predecessors WBS column or logical links table", vbCritical, consoleMessages
-    End If
-
-    If errUnsupportedLinkType.Count > 0 Then
-        ShowGanttLiveGroupedMessage errUnsupportedLinkType, idToWbs, _
-            "Type de lien non supporté par le moteur live", _
-            "corriger le type de lien dans Predecessors WBS ou tbl_LOGIC_LINKS", _
-            "Link type not supported by the live engine", _
-            "fix the link type in Predecessors WBS or tbl_LOGIC_LINKS", vbCritical, consoleMessages
-    End If
-
-    If errCycle.Count > 0 Then
-        ShowGanttLiveGroupedMessage errCycle, idToWbs, _
-            "Boucle de dépendance détectée", _
-            "corriger la colonne Predecessors WBS", _
-            "Dependency cycle detected", _
-            "fix the Predecessors WBS column", vbCritical, consoleMessages
-    End If
-
-    If errActualStartConflict.Count > 0 Then
-        ShowGanttLiveUpstreamViolationMessage errActualStartConflict, idToWbs, _
-            "Actual Start incohérent avec les dépendances amont", _
-            "corriger la logique, le lag, ou la date actual", _
-            "Actual Start violates upstream dependencies", _
-            "fix logic, lag, or actual date", vbCritical, consoleMessages
-    End If
-
-    If errActualFinishConflict.Count > 0 Then
-        ShowGanttLiveUpstreamViolationMessage errActualFinishConflict, idToWbs, _
-            "Actual Finish incohérent avec les contraintes de fin amont", _
-            "corriger la logique, le lag, ou la date actual", _
-            "Actual Finish violates upstream finish constraints", _
-            "fix logic, lag, or actual date", vbCritical, consoleMessages
-    End If
-
-    If errForecastConflict.Count > 0 Then
-        ShowGanttLiveGroupedMessage errForecastConflict, idToWbs, _
-            "Test Start incohérent avec les dépendances amont", _
-            "corriger la valeur test ou la logique amont", _
-            "Test Start violates upstream dependencies", _
-            "fix test value or upstream logic", vbCritical, consoleMessages
-    End If
-
-    If errForecastFinishConflict.Count > 0 Then
-        ShowGanttLiveGroupedMessage errForecastFinishConflict, idToWbs, _
-            "Test Finish incohérent avec les contraintes de fin amont", _
-            "corriger la valeur test ou la logique amont", _
-            "Test Finish violates upstream finish constraints", _
-            "fix test value or upstream logic", vbCritical, consoleMessages
-    End If
-
-    If errMissingDuration.Count > 0 Then
-        ShowGanttLiveGroupedMessage errMissingDuration, idToWbs, _
-            "Durée non déterminable dans la simulation live", _
-            "compléter la durée baseline ou saisir Test Start + Test Finish", _
-            "Duration not computable in live simulation", _
-            "fill Baseline Duration or enter Test Start + Test Finish", vbCritical, consoleMessages
-    End If
-
-    If errStartNotComputable.Count > 0 Then
-        ShowGanttLiveGroupedMessage errStartNotComputable, idToWbs, _
-            "Date de début non déterminable dans la simulation live", _
-            "vérifier les dépendances, la baseline ou la saisie test", _
-            "Start date not computable in live simulation", _
-            "check dependencies, baseline, or test input", vbCritical, consoleMessages
-    End If
-
-    If errFinishBeforeStart.Count > 0 Then
-        ShowGanttLiveGroupedMessage errFinishBeforeStart, idToWbs, _
-            "Fin avant début détectée dans la simulation live", _
-            "corriger Test Start, Test Finish ou la durée", _
-            "Finish before start detected in live simulation", _
-            "fix Test Start, Test Finish, or duration", vbCritical, consoleMessages
-    End If
-
-    If errOtherRoot.Count > 0 Then
-        ShowGanttLiveGroupedMessage errOtherRoot, idToWbs, _
-            "Erreur bloquante détectée dans le moteur live", _
-            "vérifier Warning Text dans CALC_GANTT_TEST pour le détail technique", _
-            "Blocking error detected in live engine", _
-            "check Warning Text in CALC_GANTT_TEST for technical details", vbCritical, consoleMessages
-    End If
+    For Each oneId In removeIds.Keys
+        If rootErrorIds.Exists(CStr(oneId)) Then rootErrorIds.Remove CStr(oneId)
+    Next oneId
 
 End Sub
+
+Private Function GanttLive_IsDerivedLOEPredecessorError(ByVal errMsg As String, ByVal errorIds As Object) As Boolean
+
+    Dim predId As String
+
+    predId = GanttLive_ExtractLOEBlockedPredecessorId(errMsg)
+    If predId = "" Then Exit Function
+
+    GanttLive_IsDerivedLOEPredecessorError = errorIds.Exists(predId)
+
+End Function
+
+Private Function GanttLive_ExtractLOEBlockedPredecessorId(ByVal errMsg As String) As String
+
+    Dim txt As String
+    Dim marker As String
+    Dim pos As Long
+    Dim tail As String
+    Dim i As Long
+    Dim ch As String
+    Dim result As String
+
+    txt = Trim$(CStr(errMsg))
+    If InStr(1, txt, "LOE blocked by SS predecessor error: ID", vbTextCompare) = 0 And _
+       InStr(1, txt, "LOE blocked by FF predecessor error: ID", vbTextCompare) = 0 Then Exit Function
+
+    marker = "error: ID"
+    pos = InStr(1, txt, marker, vbTextCompare)
+    If pos = 0 Then Exit Function
+
+    tail = Trim$(Mid$(txt, pos + Len(marker)))
+    For i = 1 To Len(tail)
+        ch = Mid$(tail, i, 1)
+        If ch >= "0" And ch <= "9" Then
+            result = result & ch
+        ElseIf result <> "" Then
+            Exit For
+        End If
+    Next i
+
+    GanttLive_ExtractLOEBlockedPredecessorId = result
+
+End Function
 
 Private Sub ShowGanttLiveUpstreamViolationMessage( _
     ByVal idsDict As Object, _
@@ -4068,7 +3993,7 @@ Private Function BuildGanttLiveUpstreamViolationItems( _
 
             If Not idToWbs Is Nothing Then
                 If idToWbs.Exists(CStr(key)) Then
-                    wbsVal = CStr(idToWbs(CStr(key)))
+                    wbsVal = NormalizeWBS(CStr(idToWbs(CStr(key))))
                 Else
                     wbsVal = "-"
                 End If
@@ -4202,6 +4127,7 @@ Private Sub GanttLive_AddBiConsoleMessage( _
     CalcBridge_AddConsoleMessage consoleMessages, msgType, msg
 
 End Sub
+
 
 
 

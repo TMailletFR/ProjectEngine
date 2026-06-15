@@ -49,6 +49,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Set tblWBS = wsWBS.ListObjects("tbl_WBS")
 
     EnsureWBSTaskTypeInputSetup tblWBS
+    EnsureSummaryDisplayColumnExists tblWBS, Nothing
     EnsureWBSCalendarInputSetup tblWBS
 
     Ensure_Calc_Infrastructure
@@ -57,6 +58,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Set tblCalc = wsCalc.ListObjects("tbl_CALC")
 
     EnsureTaskTypeColumnExists tblWBS, tblCalc
+    EnsureSummaryDisplayColumnExists tblWBS, tblCalc
     EnsureCalendarColumnExists tblWBS, tblCalc
     EnsureDeadlineOutputColumnsExist tblWBS, tblCalc
     EnsureLongestPathOutputColumnsExist tblWBS, tblCalc
@@ -70,6 +72,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
         "WBS", _
         "Task Name", _
         "Task Type", _
+        "S", _
         "Cal", _
         "Predecessors WBS", _
         "Baseline Start", _
@@ -130,6 +133,12 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
         GoTo SafeExit
     End If
 
+    If Not mapWBS.Exists("S") Then
+        DataSync_AddConsoleMessage consoleMessages, "STOP", _
+            "La colonne S est introuvable dans tbl_WBS.", _
+            "Column S was not found in tbl_WBS."
+        GoTo SafeExit
+    End If
     If Not mapWBS.Exists("Predecessors WBS") Then
         DataSync_AddConsoleMessage consoleMessages, "STOP", _
             "La colonne Predecessors WBS est introuvable dans tbl_WBS.", _
@@ -158,6 +167,12 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
         GoTo SafeExit
     End If
 
+    If Not mapCalc.Exists("S") Then
+        DataSync_AddConsoleMessage consoleMessages, "STOP", _
+            "La colonne S est introuvable dans tbl_CALC.", _
+            "Column S was not found in tbl_CALC."
+        GoTo SafeExit
+    End If
     If Not mapCalc.Exists("Predecessors WBS") Then
         DataSync_AddConsoleMessage consoleMessages, "STOP", _
             "La colonne Predecessors WBS est introuvable dans tbl_CALC.", _
@@ -214,6 +229,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     End If
 
     Set summaryWbsByWbs = BuildWBSSummaryWbsLookup(tblWBS, mapWBS)
+    NormalizeWBSSummaryDisplayValues tblWBS, mapWBS, summaryWbsByWbs
     NormalizeWBSCalendarValues tblWBS, mapWBS, summaryWbsByWbs
 
     If tblCalc.DataBodyRange Is Nothing Then
@@ -269,6 +285,11 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
                             .value = taskTypeVal
                         End With
 
+                    ElseIf colsToCopy(i) = "S" Then
+                        With tblCalc.DataBodyRange.Cells(r, mapCalc("S"))
+                            .NumberFormat = "@"
+                            .value = NormalizeSummaryDisplayValue(tblWBS.DataBodyRange.Cells(wbsRowIndex, mapWBS("S")).value)
+                        End With
                     ElseIf colsToCopy(i) = "Cal" Then
                         If IsCalendarIgnoredWBSRow(tblWBS, mapWBS, wbsRowIndex, summaryWbsByWbs) Then
                             calVal = vbNullString
@@ -942,10 +963,14 @@ Public Sub RebuildLogicLinksTable()
     Dim writeRow As Long
 
     Dim consoleMessages As Collection
+    Dim missingPredRefs As Collection
+    Dim missingPredMessageFR As String
+    Dim missingPredMessageEN As String
 
     On Error GoTo SafeExit
 
     Set consoleMessages = New Collection
+    Set missingPredRefs = New Collection
 
     Application.ScreenUpdating = False
     Application.EnableEvents = False
@@ -990,11 +1015,25 @@ Public Sub RebuildLogicLinksTable()
                 GoTo SafeExit
             End If
 
+            DataSync_CollectMissingPredecessorRefs linksOut, missingPredRefs
+
             outCount = outCount + linksOut.Count
 
         End If
 
     Next r
+
+    If missingPredRefs.Count > 0 Then
+        DataSync_BuildMissingPredecessorMessages missingPredRefs, missingPredMessageFR, missingPredMessageEN
+
+        If IsMacroRunActive() Then
+            RequestMacroAbort "RebuildLogicLinksTable", missingPredMessageFR, missingPredMessageEN
+        Else
+            DataSync_AddConsoleMessage consoleMessages, "STOP", missingPredMessageFR, missingPredMessageEN
+        End If
+
+        GoTo SafeExit
+    End If
 
     If outCount <= 0 Then
         ClearLogicLinksTableRows tblLinks
@@ -1109,7 +1148,7 @@ Private Sub ClearLogicLinksTableRows(ByVal tbl As ListObject)
     Loop
 
     If tbl.ListRows.Count = 1 Then
-        tbl.DataBodyRange.Rows(1).ClearContents
+        tbl.DataBodyRange.rows(1).ClearContents
     End If
 
 End Sub
@@ -1303,6 +1342,140 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
 End Sub
 
+Private Sub EnsureSummaryDisplayColumnExists( _
+    ByVal tblWBS As ListObject, _
+    ByVal tblCalc As ListObject)
+
+    Dim newCol As ListColumn
+    Dim targetIndex As Long
+
+    If Not tblWBS Is Nothing Then
+        If Not TableHasColumn(tblWBS, "S") Then
+            If TableHasColumn(tblWBS, "Comments") Then
+                targetIndex = tblWBS.ListColumns("Comments").Index
+            ElseIf TableHasColumn(tblWBS, "Task Type") Then
+                targetIndex = tblWBS.ListColumns("Task Type").Index + 1
+            Else
+                targetIndex = tblWBS.ListColumns.Count + 1
+            End If
+
+            Set newCol = tblWBS.ListColumns.Add(Position:=targetIndex)
+            newCol.Name = "S"
+        End If
+
+        If Not tblWBS.DataBodyRange Is Nothing Then
+            With tblWBS.ListColumns("S").DataBodyRange
+                .NumberFormat = "@"
+                With .Validation
+                    .Delete
+                    .Add Type:=xlValidateList, _
+                         AlertStyle:=xlValidAlertStop, _
+                         Operator:=xlBetween, _
+                         Formula1:="Y,N"
+                    .IgnoreBlank = True
+                    .InCellDropdown = True
+                    .InputTitle = "S"
+                    .InputMessage = "Choose Y to show in Summary, N to hide."
+                    .ErrorTitle = "Invalid S"
+                    .errorMessage = "Allowed values: blank, Y, N."
+                    .ShowInput = True
+                    .ShowError = True
+                End With
+            End With
+        End If
+    End If
+
+    If Not tblCalc Is Nothing Then
+        If Not TableHasColumn(tblCalc, "S") Then
+            Set newCol = tblCalc.ListColumns.Add
+            newCol.Name = "S"
+        End If
+
+        If Not tblCalc.DataBodyRange Is Nothing Then
+            tblCalc.ListColumns("S").DataBodyRange.NumberFormat = "@"
+        End If
+    End If
+
+End Sub
+
+Private Function NormalizeSummaryDisplayValue(ByVal rawValue As Variant) As String
+
+    Dim txt As String
+
+    txt = UCase$(Trim$(CStr(rawValue)))
+
+    Select Case txt
+        Case ""
+            NormalizeSummaryDisplayValue = ""
+        Case "Y"
+            NormalizeSummaryDisplayValue = "Y"
+        Case "N"
+            NormalizeSummaryDisplayValue = "N"
+        Case Else
+            Err.Raise vbObjectError + 2311, "NormalizeSummaryDisplayValue", _
+                "Invalid S value: " & CStr(rawValue) & " (allowed: blank, Y, N)"
+    End Select
+
+End Function
+
+Private Function DefaultSummaryDisplayValue( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object, _
+    ByVal rowIndex As Long, _
+    ByVal summaryWbsByWbs As Object) As String
+
+    Dim wbsVal As String
+    Dim taskTypeVal As String
+
+    DefaultSummaryDisplayValue = "N"
+
+    If tblWBS Is Nothing Then Exit Function
+    If tblWBS.DataBodyRange Is Nothing Then Exit Function
+    If mapWBS Is Nothing Then Exit Function
+
+    If mapWBS.Exists("WBS") Then
+        wbsVal = Replace$(Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("WBS")).value)), ",", ".")
+        If Not summaryWbsByWbs Is Nothing Then
+            If summaryWbsByWbs.Exists(wbsVal) Then
+                DefaultSummaryDisplayValue = "Y"
+                Exit Function
+            End If
+        End If
+    End If
+
+    If mapWBS.Exists("Task Type") Then
+        taskTypeVal = UCase$(NormalizeTaskTypeValue(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("Task Type")).value))
+        If taskTypeVal = "MILESTONE" Then DefaultSummaryDisplayValue = "Y"
+    End If
+
+End Function
+
+Private Sub NormalizeWBSSummaryDisplayValues( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object, _
+    ByVal summaryWbsByWbs As Object)
+
+    Dim r As Long
+    Dim cell As Range
+    Dim normalizedValue As String
+
+    If tblWBS Is Nothing Then Exit Sub
+    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
+    If mapWBS Is Nothing Then Exit Sub
+    If Not mapWBS.Exists("S") Then Exit Sub
+
+    For r = 1 To tblWBS.ListRows.Count
+        Set cell = tblWBS.DataBodyRange.Cells(r, mapWBS("S"))
+
+        If Trim$(CStr(cell.value)) = "" Then
+            cell.value = DefaultSummaryDisplayValue(tblWBS, mapWBS, r, summaryWbsByWbs)
+        Else
+            normalizedValue = NormalizeSummaryDisplayValue(cell.value)
+            If CStr(cell.value) <> normalizedValue Then cell.value = normalizedValue
+        End If
+    Next r
+
+End Sub
 Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
 
     Dim rng As Range
@@ -1449,6 +1622,128 @@ Private Sub NormalizeWBSCalendarValues( _
     Next r
 
 End Sub
+Private Sub DataSync_CollectMissingPredecessorRefs( _
+    ByVal linksOut As Collection, _
+    ByVal missingRefs As Collection)
+
+    Dim linkRow As Variant
+    Dim missingRow As Object
+    Dim predId As String
+    Dim predWbs As String
+    Dim enteredToken As String
+
+    If linksOut Is Nothing Then Exit Sub
+    If missingRefs Is Nothing Then Exit Sub
+
+    For Each linkRow In linksOut
+        predId = ""
+        predWbs = ""
+        enteredToken = ""
+
+        If linkRow.Exists("Pred ID") Then predId = Trim$(CStr(linkRow("Pred ID")))
+        If linkRow.Exists("Pred WBS") Then predWbs = NormalizeWBS(CStr(linkRow("Pred WBS")))
+
+        If predId = "" And predWbs <> "" Then
+            If linkRow.Exists("Entered Token") Then
+                enteredToken = Trim$(CStr(linkRow("Entered Token")))
+            ElseIf linkRow.Exists("Raw Token") Then
+                enteredToken = Trim$(CStr(linkRow("Raw Token")))
+            End If
+
+            Set missingRow = CreateObject("Scripting.Dictionary")
+            missingRow("Succ ID") = CStr(linkRow("Succ ID"))
+            missingRow("Succ WBS") = CStr(linkRow("Succ WBS"))
+            missingRow("Entered Token") = enteredToken
+            missingRow("Pred WBS") = predWbs
+            missingRefs.Add missingRow
+        End If
+    Next linkRow
+
+End Sub
+
+Private Sub DataSync_BuildMissingPredecessorMessages( _
+    ByVal missingRefs As Collection, _
+    ByRef frText As String, _
+    ByRef enText As String)
+
+    Dim idsLine As String
+    Dim succWbsLine As String
+    Dim tokensLine As String
+    Dim predWbsLine As String
+
+    idsLine = DataSync_BuildMissingPredInline(missingRefs, "Succ ID", 20)
+    succWbsLine = DataSync_BuildMissingPredInline(missingRefs, "Succ WBS", 20)
+    tokensLine = DataSync_BuildMissingPredInline(missingRefs, "Entered Token", 20)
+    predWbsLine = DataSync_BuildMissingPredInline(missingRefs, "Pred WBS", 20)
+
+    frText = _
+        "Prédécesseur introuvable" & vbCrLf & vbCrLf & _
+        "Les prédécesseurs suivants n'existent pas dans le planning." & vbCrLf & vbCrLf & _
+        "IDs :" & vbCrLf & _
+        idsLine & vbCrLf & vbCrLf & _
+        "WBS :" & vbCrLf & _
+        succWbsLine & vbCrLf & vbCrLf & _
+        "Prédécesseurs saisis :" & vbCrLf & _
+        tokensLine & vbCrLf & vbCrLf & _
+        "WBS recherchées :" & vbCrLf & _
+        predWbsLine & vbCrLf & vbCrLf & _
+        "-> créer les tâches manquantes ou corriger les liens."
+
+    enText = _
+        "Missing predecessor" & vbCrLf & vbCrLf & _
+        "The following predecessors do not exist in the planning." & vbCrLf & vbCrLf & _
+        "IDs:" & vbCrLf & _
+        idsLine & vbCrLf & vbCrLf & _
+        "WBS:" & vbCrLf & _
+        succWbsLine & vbCrLf & vbCrLf & _
+        "Entered predecessors:" & vbCrLf & _
+        tokensLine & vbCrLf & vbCrLf & _
+        "Referenced WBS:" & vbCrLf & _
+        predWbsLine & vbCrLf & vbCrLf & _
+        "-> create the missing tasks or correct the links."
+
+End Sub
+
+Private Function DataSync_BuildMissingPredInline( _
+    ByVal missingRefs As Collection, _
+    ByVal fieldName As String, _
+    ByVal maxItems As Long) As String
+
+    Dim result As String
+    Dim item As Variant
+    Dim itemText As String
+    Dim countShown As Long
+    Dim totalCount As Long
+
+    result = ""
+    If missingRefs Is Nothing Then
+        DataSync_BuildMissingPredInline = result
+        Exit Function
+    End If
+
+    totalCount = missingRefs.Count
+
+    For Each item In missingRefs
+        countShown = countShown + 1
+
+        If countShown <= maxItems Then
+            itemText = "-"
+            If item.Exists(fieldName) Then itemText = CStr(item(fieldName))
+
+            If result <> "" Then result = result & " / "
+            result = result & itemText
+        Else
+            Exit For
+        End If
+    Next item
+
+    If totalCount > maxItems Then
+        result = result & " / +" & CStr(totalCount - maxItems)
+    End If
+
+    DataSync_BuildMissingPredInline = result
+
+End Function
 Private Sub DataSync_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _

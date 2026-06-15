@@ -104,6 +104,17 @@ Public Sub Handle_EventHistory_Change(ByVal ws As Worksheet, ByVal Target As Ran
 
     If IsPlanningEventInternalWriteActive() Then Exit Sub
 
+    If Not ws Is Nothing Then
+        If CStr(ws.Name) = EVENT_ACK_SHEET Then
+            If IsAllowedManualEventAckChange(ws, Target) Then
+                Application.EnableEvents = False
+                NormalizeManualEventAckRows ws, Target
+                Refresh_EventHistory_View
+                GoTo SafeExit
+            End If
+        End If
+    End If
+
     Application.EnableEvents = False
     Application.Undo
 
@@ -111,6 +122,66 @@ SafeExit:
     If Not IsMacroAbortRequested() Then
         Application.EnableEvents = True
     End If
+
+End Sub
+
+Private Function IsAllowedManualEventAckChange(ByVal ws As Worksheet, ByVal Target As Range) As Boolean
+
+    Dim tblAck As ListObject
+    Dim editableRange As Range
+
+    If ws Is Nothing Then Exit Function
+    If Target Is Nothing Then Exit Function
+
+    On Error Resume Next
+    Set tblAck = ws.ListObjects(EVENT_ACK_TABLE)
+    On Error GoTo 0
+
+    If tblAck Is Nothing Then Exit Function
+    If Intersect(Target, tblAck.HeaderRowRange) Is Nothing Then
+        If Not tblAck.DataBodyRange Is Nothing Then
+            Set editableRange = tblAck.DataBodyRange
+        Else
+            Set editableRange = tblAck.Range.Offset(1, 0).Resize(1, tblAck.Range.Columns.Count)
+        End If
+
+        IsAllowedManualEventAckChange = Not Intersect(Target, editableRange) Is Nothing
+    End If
+
+End Function
+
+Private Sub NormalizeManualEventAckRows(ByVal ws As Worksheet, ByVal Target As Range)
+
+    Dim tblAck As ListObject
+    Dim touched As Range
+    Dim rowRange As Range
+    Dim acknowledgedCell As Range
+    Dim severityCell As Range
+
+    If ws Is Nothing Then Exit Sub
+    If Target Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    Set tblAck = ws.ListObjects(EVENT_ACK_TABLE)
+    On Error GoTo 0
+
+    If tblAck Is Nothing Then Exit Sub
+    If tblAck.DataBodyRange Is Nothing Then Exit Sub
+
+    Set touched = Intersect(Target, tblAck.DataBodyRange)
+    If touched Is Nothing Then Exit Sub
+
+    For Each rowRange In touched.rows
+        Set acknowledgedCell = Intersect(rowRange.EntireRow, tblAck.ListColumns("Acknowledged").DataBodyRange)
+        If Not acknowledgedCell Is Nothing Then
+            If Trim$(CStr(acknowledgedCell.Cells(1, 1).value)) = "" Then acknowledgedCell.Cells(1, 1).value = True
+        End If
+
+        Set severityCell = Intersect(rowRange.EntireRow, tblAck.ListColumns("Severity").DataBodyRange)
+        If Not severityCell Is Nothing Then
+            If Trim$(CStr(severityCell.Cells(1, 1).value)) <> "" Then severityCell.Cells(1, 1).value = UCase$(Trim$(CStr(severityCell.Cells(1, 1).value)))
+        End If
+    Next rowRange
 
 End Sub
 
@@ -1030,11 +1101,11 @@ Private Sub EnsureEventHistoryTopRows(ByVal ws As Worksheet)
 
     If Not tbl Is Nothing Then
         If tbl.HeaderRowRange.Row < EVENT_HISTORY_HEADER_ROW Then
-            ws.Rows("1:2").Insert Shift:=xlDown
+            ws.rows("1:2").Insert Shift:=xlDown
         End If
     End If
 
-    ws.Rows("1:2").rowHeight = 22
+    ws.rows("1:2").rowHeight = 22
 
 End Sub
 
@@ -1047,10 +1118,10 @@ Private Sub EnsureEventAckTopRow(ByVal ws As Worksheet)
     On Error GoTo 0
 
     If Not tbl Is Nothing Then
-        If tbl.HeaderRowRange.Row < 2 Then ws.Rows("1:1").Insert Shift:=xlDown
+        If tbl.HeaderRowRange.Row < 2 Then ws.rows("1:1").Insert Shift:=xlDown
     End If
 
-    ws.Rows("1:1").rowHeight = 22
+    ws.rows("1:1").rowHeight = 22
 
 End Sub
 
@@ -1424,13 +1495,13 @@ Private Sub ApplyPlanningEventFormats( _
             sev = UCase$(Trim$(CStr(tblHistory.DataBodyRange.Cells(r, tblHistory.ListColumns("Severity").Index).value)))
             Select Case sev
                 Case "ERROR", "STOP"
-                    tblHistory.DataBodyRange.Rows(r).Interior.Color = RGB(255, 235, 238)
+                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(255, 235, 238)
                 Case "WARNING"
-                    tblHistory.DataBodyRange.Rows(r).Interior.Color = RGB(255, 248, 225)
+                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(255, 248, 225)
                 Case "INFO"
-                    tblHistory.DataBodyRange.Rows(r).Interior.Color = RGB(235, 242, 250)
+                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(235, 242, 250)
                 Case Else
-                    tblHistory.DataBodyRange.Rows(r).Interior.Pattern = xlNone
+                    tblHistory.DataBodyRange.rows(r).Interior.Pattern = xlNone
             End Select
         Next r
     End If

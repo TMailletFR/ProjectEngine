@@ -101,6 +101,7 @@ Public Sub Run_Gantt_Update()
     'Run_Calc_Engine_CoreBridge already displayed the real business error message.
     'Do not launch Refresh_Gantt after a blocking calculation error.
     If CalcEngine_HasBlockingErrorsForState() Then
+        Gantt_SafeEmptyState
         If Not wsCaller Is Nothing Then wsCaller.Activate
         GoTo CleanExit
     End If
@@ -136,7 +137,6 @@ Public Sub Run_SCurve_Update()
 
     ThisWorkbook.Init_AppEvents
     BeginMacroRun "Run_SCurve_Update"
-
     Run_SCurve_Engine
 
     If IsMacroAbortRequested() Then GoTo SafeExit
@@ -166,27 +166,33 @@ ErrHandler:
 
 End Sub
 
-
 Public Sub Run_Full_Update()
 
     Dim workflowStarted As Boolean
+    Dim wsCaller As Worksheet
 
     On Error GoTo SafeExit
 
+    Set wsCaller = ActiveSheet
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Full_Update")
     BeginPlanningEventRun "Run_Full_Update"
     Run_Calc_Engine True
 
-    If CalcEngine_HasBlockingErrorsForState() Then GoTo CleanExit
+    If CalcEngine_HasBlockingErrorsForState() Then
+        Gantt_SafeEmptyState
+        GoTo CleanExit
+    End If
     If IsMacroAbortRequested() Then GoTo CleanExit
 
-    Refresh_Gantt
+    Refresh_Gantt False, False
 
     If IsMacroAbortRequested() Then GoTo CleanExit
-
     Run_SCurve_Engine
 
 CleanExit:
+    On Error Resume Next
+    If Not wsCaller Is Nothing Then wsCaller.Activate
+    On Error GoTo 0
     If workflowStarted Then EndPlanningWorkflow
     Exit Sub
 
@@ -195,3 +201,4 @@ SafeExit:
     Resume CleanExit
 
 End Sub
+

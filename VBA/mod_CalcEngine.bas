@@ -181,7 +181,9 @@ Public Sub ComputeCurrentFloatAndCritical( _
     ByVal parentIds As Object, _
     ByVal validIds As Object, _
     ByVal topoOrder As Collection, _
-    Optional ByVal consoleMessages As Collection = Nothing)
+    Optional ByVal consoleMessages As Collection = Nothing, _
+    Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
+    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
 
     Dim dataArr As Variant
     Dim currentLateStartById As Object
@@ -236,8 +238,18 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Set currentLateFinishById = CreateObject("Scripting.Dictionary")
     Set currentTotalFloatById = CreateObject("Scripting.Dictionary")
     Set currentFreeFloatById = CreateObject("Scripting.Dictionary")
-    Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
-    Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing Then
+        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    Else
+        Set predLagBySuccPred = analyticsPredLagBySuccPred
+    End If
+    If analyticsPredTypeBySuccPred Is Nothing Then
+        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    Else
+        Set predTypeBySuccPred = analyticsPredTypeBySuccPred
+    End If
+
+
     Set reverseTopo = New Collection
     Set networkFinishById = CreateObject("Scripting.Dictionary")
 
@@ -299,18 +311,8 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
                 linkKey = CStr(succId) & "|" & taskId
 
-                If predLagBySuccPred.Exists(linkKey) Then
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                Else
-                    effectiveLag = 0#
-                End If
-
-                If predTypeBySuccPred.Exists(linkKey) Then
-                    linkType = CStr(predTypeBySuccPred(linkKey))
-                Else
-                    linkType = "FS"
-                End If
-
+                effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                linkType = CStr(predTypeBySuccPred(linkKey))
                     succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
 
                 Select Case linkType
@@ -458,18 +460,8 @@ NextCurrentBackwardTask:
 
                     linkKey = CStr(succId) & "|" & taskId
 
-                    If predLagBySuccPred.Exists(linkKey) Then
-                        effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                    Else
-                        effectiveLag = 0#
-                    End If
-
-                    If predTypeBySuccPred.Exists(linkKey) Then
-                        linkType = CStr(predTypeBySuccPred(linkKey))
-                    Else
-                        linkType = "FS"
-                    End If
-
+                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                    linkType = CStr(predTypeBySuccPred(linkKey))
                     succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
 
                     Select Case linkType
@@ -604,7 +596,9 @@ Public Sub ComputeLongestPath( _
     ByVal idToRow As Object, _
     ByVal predsById As Object, _
     ByVal childrenById As Object, _
-    ByVal validIds As Object)
+    ByVal validIds As Object, _
+    Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
+    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
 
     Dim dataArr As Variant
     Dim outLP() As Variant
@@ -642,8 +636,16 @@ Public Sub ComputeLongestPath( _
 
     Set lpById = CreateObject("Scripting.Dictionary")
     Set queuedById = CreateObject("Scripting.Dictionary")
-    Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
-    Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing Then
+        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    Else
+        Set predLagBySuccPred = analyticsPredLagBySuccPred
+    End If
+    If analyticsPredTypeBySuccPred Is Nothing Then
+        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    Else
+        Set predTypeBySuccPred = analyticsPredTypeBySuccPred
+    End If
     Set queue = New Collection
 
     projectFinish = Empty
@@ -709,18 +711,8 @@ Public Sub ComputeLongestPath( _
                 If validIds.Exists(CStr(predId)) Then
                     linkKey = taskId & "|" & CStr(predId)
 
-                    If predLagBySuccPred.Exists(linkKey) Then
-                        effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                    Else
-                        effectiveLag = 0#
-                    End If
-
-                    If predTypeBySuccPred.Exists(linkKey) Then
-                        linkType = CStr(predTypeBySuccPred(linkKey))
-                    Else
-                        linkType = "FS"
-                    End If
-
+                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                    linkType = CStr(predTypeBySuccPred(linkKey))
                     If CalcEngine_IsDrivingLongestPathLink(dataArr, mapCalc, idToRow, taskId, CStr(predId), linkType, effectiveLag) Then
                         CalcEngine_AddLongestPathTask CStr(predId), lpById, queuedById, queue
                     End If
@@ -832,7 +824,9 @@ Public Sub ComputeCriticalPathREX( _
     ByVal idToWbs As Object, _
     ByRef outCriticalREX() As Variant, _
     ByVal errMissingBaselineForREX As Object, _
-    Optional ByVal consoleMessages As Collection = Nothing)
+    Optional ByVal consoleMessages As Collection = Nothing, _
+    Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
+    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
 
     Dim dataArr As Variant
     Dim rexStartById As Object
@@ -891,8 +885,18 @@ Public Sub ComputeCriticalPathREX( _
     Set rexLateFinishById = CreateObject("Scripting.Dictionary")
     Set rexTotalFloatById = CreateObject("Scripting.Dictionary")
     Set rexFreeFloatById = CreateObject("Scripting.Dictionary")
-    Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
-    Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing Then
+        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    Else
+        Set predLagBySuccPred = analyticsPredLagBySuccPred
+    End If
+    If analyticsPredTypeBySuccPred Is Nothing Then
+        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
+    Else
+        Set predTypeBySuccPred = analyticsPredTypeBySuccPred
+    End If
+
+
     Set reverseTopo = New Collection
     Set networkFinishById = CreateObject("Scripting.Dictionary")
 
@@ -935,18 +939,8 @@ Public Sub ComputeCriticalPathREX( _
                 hasValidPred = True
                 linkKey = taskId & "|" & CStr(predId)
 
-                If predLagBySuccPred.Exists(linkKey) Then
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                Else
-                    effectiveLag = 0#
-                End If
-
-                If predTypeBySuccPred.Exists(linkKey) Then
-                    linkType = CStr(predTypeBySuccPred(linkKey))
-                Else
-                    linkType = "FS"
-                End If
-
+                effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                linkType = CStr(predTypeBySuccPred(linkKey))
                 succCal = taskCal
 
                 Select Case linkType
@@ -1056,18 +1050,8 @@ NextRexForward:
 
                 linkKey = CStr(succId) & "|" & taskId
 
-                If predLagBySuccPred.Exists(linkKey) Then
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                Else
-                    effectiveLag = 0#
-                End If
-
-                If predTypeBySuccPred.Exists(linkKey) Then
-                    linkType = CStr(predTypeBySuccPred(linkKey))
-                Else
-                    linkType = "FS"
-                End If
-
+                effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                linkType = CStr(predTypeBySuccPred(linkKey))
                 succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
 
                 Select Case linkType
@@ -1166,17 +1150,8 @@ NextRexBackward:
 
                         linkKey = CStr(succId) & "|" & taskId
 
-                        If predLagBySuccPred.Exists(linkKey) Then
-                            effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                        Else
-                            effectiveLag = 0#
-                        End If
-
-                        If predTypeBySuccPred.Exists(linkKey) Then
-                            linkType = CStr(predTypeBySuccPred(linkKey))
-                        Else
-                            linkType = "FS"
-                        End If
+                        effectiveLag = CDbl(predLagBySuccPred(linkKey))
+                        linkType = CStr(predTypeBySuccPred(linkKey))
 
                 succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
 

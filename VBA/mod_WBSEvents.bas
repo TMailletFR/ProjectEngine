@@ -31,6 +31,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Dim rngWBS As Range
     Dim rngPredWBS As Range
     Dim rngTaskType As Range
+    Dim rngSummaryDisplay As Range
     Dim rngCal As Range
     Dim rngBaselineDuration As Range
 
@@ -41,6 +42,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     Dim cell As Range
     Dim cellValue As String
+    Dim normalizedPredWBS As String
 
     Dim reWBS As Object
 
@@ -55,6 +57,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Set rngWBS = tbl.ListColumns("WBS").DataBodyRange
     Set rngPredWBS = tbl.ListColumns("Predecessors WBS").DataBodyRange
     Set rngTaskType = tbl.ListColumns("Task Type").DataBodyRange
+    If WBSHasColumn(tbl, "S") Then Set rngSummaryDisplay = tbl.ListColumns("S").DataBodyRange
     If WBSHasColumn(tbl, "Cal") Then Set rngCal = tbl.ListColumns("Cal").DataBodyRange
     Set rngBaselineDuration = tbl.ListColumns("Baseline Duration").DataBodyRange
 
@@ -133,6 +136,15 @@ ContinueValidation:
     Else
         Set rngToCheck = Intersect(Target, Union(rngWBS, rngPredWBS, rngTaskType, rngCal, rngBaselineDuration))
     End If
+
+    If Not rngSummaryDisplay Is Nothing Then
+        If rngToCheck Is Nothing Then
+            Set rngToCheck = Intersect(Target, rngSummaryDisplay)
+        Else
+            Set rngToCheck = Intersect(Target, Union(rngToCheck, rngSummaryDisplay))
+        End If
+    End If
+
     If rngToCheck Is Nothing Then GoTo SafeExit
 
     Set reWBS = CreateObject("VBScript.RegExp")
@@ -171,28 +183,35 @@ ContinueValidation:
 
         If Not Intersect(cell, rngPredWBS) Is Nothing Then
             If cellValue <> "" Then
-                If Not IsValidPredecessorsWBSInput(cellValue) Then
+
+                If Not IsMacroRunActive() Then
+                    normalizedPredWBS = NormalizePredecessorsWBSLiveInput(cellValue)
+
+                    If normalizedPredWBS <> cellValue Then
+                        Application.EnableEvents = False
+                        cell.NumberFormat = "@"
+                        cell.value = normalizedPredWBS
+                        Application.EnableEvents = True
+                        cellValue = normalizedPredWBS
+                    End If
+                End If
+
+                If cellValue = "" Or Not IsValidPredecessorsWBSInput(cellValue) Then
 
                     If IsMacroRunActive() Then
                         RequestMacroAbort _
                             "Handle_WBS_Change", _
-                            "Format invalide détecté dans Predecessors WBS pendant l'exécution d'un macro." & vbCrLf & _
-                            "-> formats autorisés : 1 | 1+3 | 1-2 | 1FS+3 | 1SS-2 | 1FF+4 | 1;2SS+3;4FF-2", _
-                            "Invalid Predecessors WBS format detected during macro execution." & vbCrLf & _
-                            "-> allowed formats: 1 | 1+3 | 1-2 | 1FS+3 | 1SS-2 | 1FF+4 | 1;2SS+3;4FF-2"
+                            WBS_BuildPredecessorsFormatMessageFR(), _
+                            WBS_BuildPredecessorsFormatMessageEN()
                         Exit Sub
                     End If
 
                     Application.EnableEvents = False
-            Application.Undo
+                    Application.Undo
 
                     WBS_ShowConsoleMessage vbExclamation, _
-                        "Format invalide dans Predecessors WBS." & vbCrLf & _
-                        "-> formats autorisés : 1 | 1+3 | 1-2 | 1FS+3 | 1SS-2 | 1FF+4 | 1;2SS+3;4FF-2" & vbCrLf & _
-                        "-> espaces interdits / token vide interdit", _
-                        "Invalid format in Predecessors WBS." & vbCrLf & _
-                        "-> allowed formats: 1 | 1+3 | 1-2 | 1FS+3 | 1SS-2 | 1FF+4 | 1;2SS+3;4FF-2" & vbCrLf & _
-                        "-> spaces forbidden / empty token forbidden"
+                        WBS_BuildPredecessorsFormatMessageFR(), _
+                        WBS_BuildPredecessorsFormatMessageEN()
                     GoTo SafeExit
                 End If
             End If
@@ -221,6 +240,43 @@ ContinueValidation:
                         "Invalid Task Type." & vbCrLf & _
                         "-> allowed values: Task | Milestone | Level of Effort"
                     GoTo SafeExit
+                End If
+            End If
+        End If
+
+        If Not rngSummaryDisplay Is Nothing Then
+            If Not Intersect(cell, rngSummaryDisplay) Is Nothing Then
+                If cellValue <> "" Then
+                    If Not IsValidSummaryDisplayInput(cellValue) Then
+
+                        If IsMacroRunActive() Then
+                            RequestMacroAbort _
+                                "Handle_WBS_Change", _
+                                "Valeur S invalide detectee pendant l'execution d'un macro." & vbCrLf & _
+                                "-> valeurs autorisees : vide | Y | N", _
+                                "Invalid S detected during macro execution." & vbCrLf & _
+                                "-> allowed values: blank | Y | N"
+                            Exit Sub
+                        End If
+
+                        Application.EnableEvents = False
+                        Application.Undo
+
+                        WBS_ShowConsoleMessage vbExclamation, _
+                            "Valeur invalide dans S." & vbCrLf & _
+                            "-> valeurs autorisees : vide | Y | N", _
+                            "Invalid S." & vbCrLf & _
+                            "-> allowed values: blank | Y | N"
+                        GoTo SafeExit
+                    End If
+
+                    If CStr(cell.value) <> UCase$(Trim$(CStr(cell.value))) Then
+                        Application.EnableEvents = False
+                        cell.NumberFormat = "@"
+                        cell.value = UCase$(Trim$(CStr(cell.value)))
+                        Application.EnableEvents = True
+                        cellValue = CStr(cell.value)
+                    End If
                 End If
             End If
         End If
@@ -404,6 +460,9 @@ Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
         Set rng = Union(rng, tbl.ListColumns("Cal").DataBodyRange)
     End If
 
+    If WBSHasColumn(tbl, "S") Then
+        Set rng = Union(rng, tbl.ListColumns("S").DataBodyRange)
+    End If
     Set GetWBSUserEditableRange = Union( _
         rng, _
         tbl.ListColumns("Predecessors WBS").DataBodyRange, _
@@ -453,6 +512,81 @@ Private Function GetWBSLockedRange(ByVal tbl As ListObject) As Range
 
 End Function
 
+Private Function NormalizePredecessorsWBSLiveInput(ByVal inputText As String) As String
+
+    Dim cleaned As String
+    Dim tokens As Variant
+    Dim i As Long
+    Dim tokenText As String
+    Dim result As String
+
+    cleaned = Trim$(CStr(inputText))
+    cleaned = Replace$(cleaned, " ", "")
+    cleaned = Replace$(cleaned, vbTab, "")
+    cleaned = Replace$(cleaned, Chr$(160), "")
+
+    If cleaned = "" Then
+        NormalizePredecessorsWBSLiveInput = ""
+        Exit Function
+    End If
+
+    tokens = Split(cleaned, ";")
+
+    For i = LBound(tokens) To UBound(tokens)
+        tokenText = Trim$(CStr(tokens(i)))
+
+        If tokenText <> "" Then
+            If result <> "" Then result = result & ";"
+            result = result & tokenText
+        End If
+    Next i
+
+    NormalizePredecessorsWBSLiveInput = result
+
+End Function
+Private Function WBS_BuildPredecessorsFormatMessageFR() As String
+
+    WBS_BuildPredecessorsFormatMessageFR = _
+        "Format invalide dans Predecessors WBS" & vbCrLf & vbCrLf & _
+        "Formats acceptes :" & vbCrLf & vbCrLf & _
+        "* 1" & vbCrLf & _
+        "* 1+3" & vbCrLf & _
+        "* 1-2" & vbCrLf & _
+        "* 1SS" & vbCrLf & _
+        "* 1FF" & vbCrLf & _
+        "* 1SS-2" & vbCrLf & _
+        "* 1FF+4" & vbCrLf & _
+        "* 1;2SS+3;4FF-2" & vbCrLf & vbCrLf & _
+        "Regles :" & vbCrLf & vbCrLf & _
+        "* FS est implicite si aucun type n'est indique" & vbCrLf & _
+        "* le lag 0 est implicite" & vbCrLf & _
+        "* plusieurs liens sont separes par ;" & vbCrLf & _
+        "* les espaces ne sont pas autorises" & vbCrLf & _
+        "* les elements vides ne sont pas autorises"
+
+End Function
+
+Private Function WBS_BuildPredecessorsFormatMessageEN() As String
+
+    WBS_BuildPredecessorsFormatMessageEN = _
+        "Invalid format in Predecessors WBS" & vbCrLf & vbCrLf & _
+        "Accepted formats:" & vbCrLf & vbCrLf & _
+        "* 1" & vbCrLf & _
+        "* 1+3" & vbCrLf & _
+        "* 1-2" & vbCrLf & _
+        "* 1SS" & vbCrLf & _
+        "* 1FF" & vbCrLf & _
+        "* 1SS-2" & vbCrLf & _
+        "* 1FF+4" & vbCrLf & _
+        "* 1;2SS+3;4FF-2" & vbCrLf & vbCrLf & _
+        "Rules:" & vbCrLf & vbCrLf & _
+        "* FS is implicit when no type is provided" & vbCrLf & _
+        "* zero lag is implicit" & vbCrLf & _
+        "* multiple links are separated by ;" & vbCrLf & _
+        "* spaces are not allowed" & vbCrLf & _
+        "* empty tokens are not allowed"
+
+End Function
 Private Function IsValidPredecessorsWBSInput(ByVal inputText As String) As Boolean
 
     Dim tokens As Variant
@@ -530,6 +664,19 @@ Private Function IsValidTaskTypeInput(ByVal inputText As String) As Boolean
 
 End Function
 
+Private Function IsValidSummaryDisplayInput(ByVal inputText As String) As Boolean
+
+    Select Case UCase$(Trim$(CStr(inputText)))
+
+        Case "", "Y", "N"
+            IsValidSummaryDisplayInput = True
+
+        Case Else
+            IsValidSummaryDisplayInput = False
+
+    End Select
+
+End Function
 Private Function IsValidDurationInput(ByVal inputText As String) As Boolean
 
     Dim durationValue As Double

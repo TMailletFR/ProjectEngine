@@ -16,6 +16,7 @@ Private gPlanningWorkflowStack As Collection
 Private gPlanningWorkflowSequence As Long
 Private gPlanningWorkflowDisplayOwnerId As String
 Private gPlanningWorkflowDeferredDisplayMessages As Collection
+Private gPlanningWorkflowStopOnlyDisplayDepth As Long
 
 Public Function BeginPlanningWorkflow(Optional ByVal sourceProcedure As String = "") As String
 
@@ -89,8 +90,29 @@ Public Sub ClearPlanningWorkflowContext()
     Set gPlanningWorkflowStack = New Collection
     gPlanningWorkflowDisplayOwnerId = vbNullString
     Set gPlanningWorkflowDeferredDisplayMessages = New Collection
+    gPlanningWorkflowStopOnlyDisplayDepth = 0
 
 End Sub
+
+Public Sub BeginPlanningWorkflowStopOnlyDisplay()
+
+    gPlanningWorkflowStopOnlyDisplayDepth = gPlanningWorkflowStopOnlyDisplayDepth + 1
+
+End Sub
+
+Public Sub EndPlanningWorkflowStopOnlyDisplay()
+
+    If gPlanningWorkflowStopOnlyDisplayDepth > 0 Then
+        gPlanningWorkflowStopOnlyDisplayDepth = gPlanningWorkflowStopOnlyDisplayDepth - 1
+    End If
+
+End Sub
+
+Public Function IsPlanningWorkflowStopOnlyDisplay() As Boolean
+
+    IsPlanningWorkflowStopOnlyDisplay = (gPlanningWorkflowStopOnlyDisplayDepth > 0)
+
+End Function
 
 Public Sub ResetPlanningWorkflowContextSafe(Optional ByVal reason As String = "")
 

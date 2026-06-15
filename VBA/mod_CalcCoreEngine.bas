@@ -158,7 +158,6 @@ Public Sub Run_Calc_Core( _
 SafeExit:
 End Sub
 
-
 Private Sub Core_LoadExistingCalcOutputs( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -764,7 +763,6 @@ Private Function Core_BuildConstraintCoreMessage( _
         "Task: " & taskName
 
 End Function
-
 
 Private Sub Core_AddBlockingError( _
     ByRef dataArr As Variant, _
@@ -1465,6 +1463,4 @@ NextLOE:
     Next loeId
 
 End Sub
-
-
 

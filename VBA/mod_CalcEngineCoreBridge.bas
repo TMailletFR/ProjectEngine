@@ -87,7 +87,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     ApplyCalcDateFormats tblCalc
 
     RebuildLogicLinksTable
-    AbortIfRequested "Run_Calc_Engine_CoreBridge.AfterRebuildLogicLinks"
+    If IsMacroAbortRequested() Then GoTo SafeExit
 
     Set wsCalc = ThisWorkbook.Worksheets("CALC")
     Set tblCalc = wsCalc.ListObjects("tbl_CALC")
@@ -216,7 +216,6 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     'Warnings are collected into the planning console and shown once at the end.
     runAnalytics = IsAnalyticsEnabled()
 
-
     CalcBridge_AppendTaskTypeWarnings consoleMessages, tblWBS, mapWBS, tblCalc, mapCalc
 
     'Analytics are controlled by the WBS user toggle and stored in VBA memory.
@@ -281,7 +280,6 @@ ErrHandler:
 
 End Sub
 
-
 Private Function ValidateCalcAfterSync(ByVal tblCalc As ListObject) As Boolean
 
     Dim mapCalc As Object
@@ -337,8 +335,6 @@ Private Sub ApplyCalcDateFormats(ByVal tblCalc As ListObject)
     On Error GoTo 0
 
 End Sub
-
-
 
 Public Function BuildPredsBySucc_FromExpandedLinks( _
     ByVal rowById As Object, _
@@ -712,14 +708,283 @@ Private Sub CalcBridge_AddConstraintRootMessages( _
 
     For Each idVal In constraintMessagesById.Keys
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-            CStr(constraintMessagesById(CStr(idVal)))
+            CalcBridge_ToPMConstraintMessage(CStr(constraintMessagesById(CStr(idVal))))
     Next idVal
+
+End Sub
+
+Private Function CalcBridge_ToPMConstraintMessage(ByVal rawMessage As String) As String
+
+    Dim msg As String
+
+    msg = CStr(rawMessage)
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Type de contrainte debut non reconnu", _
+        "Type de contrainte d" & ChrW$(233) & "but invalide", _
+        "choisir une contrainte d" & ChrW$(233) & "but support" & ChrW$(233) & "e"
+    CalcBridge_ReplacePMMessage msg, _
+        "Unknown start constraint type", _
+        "Invalid start constraint type", _
+        "choose a supported start constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Type de contrainte fin non reconnu", _
+        "Type de contrainte fin invalide", _
+        "choisir une contrainte fin support" & ChrW$(233) & "e"
+    CalcBridge_ReplacePMMessage msg, _
+        "Unknown finish constraint type", _
+        "Invalid finish constraint type", _
+        "choose a supported finish constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start avant contrainte debut", _
+        "Actual Start incompatible avec Start No Earlier Than", _
+        "repousser Actual Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start is before start constraint", _
+        "Actual Start is incompatible with Start No Earlier Than", _
+        "move Actual Start later or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start avant contrainte debut", _
+        "Forecast Start incompatible avec Start No Earlier Than", _
+        "repousser Forecast Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start is before start constraint", _
+        "Forecast Start is incompatible with Start No Earlier Than", _
+        "move Forecast Start later or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start apres contrainte debut max", _
+        "Actual Start incompatible avec Start No Later Than", _
+        "aligner Actual Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start is after latest start constraint", _
+        "Actual Start is incompatible with Start No Later Than", _
+        "align Actual Start or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start apres contrainte debut max", _
+        "Forecast Start incompatible avec Start No Later Than", _
+        "aligner Forecast Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start is after latest start constraint", _
+        "Forecast Start is incompatible with Start No Later Than", _
+        "align Forecast Start or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start apres contrainte debut max", _
+        "Start No Later Than impossible " & ChrW$(224) & " respecter", _
+        "corriger la logique, la dur" & ChrW$(233) & "e ou la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start is after latest start constraint", _
+        "Start No Later Than cannot be met", _
+        "fix logic, duration, or the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start different de contrainte Must Start On", _
+        "Actual Start incompatible avec Must Start On", _
+        "aligner Actual Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start differs from Must Start On constraint", _
+        "Actual Start is incompatible with Must Start On", _
+        "align Actual Start or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start different de contrainte Must Start On", _
+        "Forecast Start incompatible avec Must Start On", _
+        "aligner Forecast Start ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start differs from Must Start On constraint", _
+        "Forecast Start is incompatible with Must Start On", _
+        "align Forecast Start or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start different de contrainte Must Start On", _
+        "Must Start On impossible " & ChrW$(224) & " respecter", _
+        "corriger la logique amont, la dur" & ChrW$(233) & "e ou la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start differs from Must Start On constraint", _
+        "Must Start On cannot be met", _
+        "fix upstream logic, duration, or the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish avant contrainte fin", _
+        "Actual Finish incompatible avec Finish No Earlier Than", _
+        "repousser Actual Finish ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish is before finish constraint", _
+        "Actual Finish is incompatible with Finish No Earlier Than", _
+        "move Actual Finish later or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish avant contrainte fin amont", _
+        "Forecast Finish incompatible avec les contraintes de fin amont", _
+        "repousser Forecast Finish ou corriger la logique amont"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish is before upstream finish constraint", _
+        "Forecast Finish is incompatible with upstream finish constraints", _
+        "move Forecast Finish later or fix upstream logic"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish avant contrainte fin", _
+        "Forecast Finish incompatible avec Finish No Earlier Than", _
+        "repousser Forecast Finish ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish is before finish constraint", _
+        "Forecast Finish is incompatible with Finish No Earlier Than", _
+        "move Forecast Finish later or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish apres contrainte fin max", _
+        "Actual Finish incompatible avec Finish No Later Than", _
+        "aligner Actual Finish ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish is after latest finish constraint", _
+        "Actual Finish is incompatible with Finish No Later Than", _
+        "align Actual Finish or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish apres contrainte fin max", _
+        "Forecast Finish incompatible avec Finish No Later Than", _
+        "avancer Forecast Finish, r" & ChrW$(233) & "duire la dur" & ChrW$(233) & "e ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish is after latest finish constraint", _
+        "Forecast Finish is incompatible with Finish No Later Than", _
+        "move Forecast Finish earlier, reduce duration, or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Finish apres contrainte fin max", _
+        "Finish No Later Than impossible " & ChrW$(224) & " respecter", _
+        "corriger la logique, la dur" & ChrW$(233) & "e ou la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Finish is after latest finish constraint", _
+        "Finish No Later Than cannot be met", _
+        "fix logic, duration, or the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish different de contrainte Must Finish On", _
+        "Actual Finish incompatible avec Must Finish On", _
+        "aligner Actual Finish ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Finish differs from Must Finish On constraint", _
+        "Actual Finish is incompatible with Must Finish On", _
+        "align Actual Finish or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish different de contrainte Must Finish On", _
+        "Forecast Finish incompatible avec Must Finish On", _
+        "aligner Forecast Finish ou modifier la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Finish differs from Must Finish On constraint", _
+        "Forecast Finish is incompatible with Must Finish On", _
+        "align Forecast Finish or update the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Finish different de contrainte Must Finish On", _
+        "Must Finish On impossible " & ChrW$(224) & " respecter", _
+        "corriger la logique amont, la dur" & ChrW$(233) & "e ou la contrainte"
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Finish differs from Must Finish On constraint", _
+        "Must Finish On cannot be met", _
+        "fix upstream logic, duration, or the constraint"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start avant reseau impose par contrainte Must Finish On", _
+        "Must Finish On incompatible avec la logique amont", _
+        "le r" & ChrW$(233) & "seau impose un d" & ChrW$(233) & "marrage trop tardif pour respecter la fin impos" & ChrW$(233) & "e"
+    CalcBridge_ReplacePMMessage msg, _
+        "Calculated Start is before network allowed start due to Must Finish On constraint", _
+        "Must Finish On is incompatible with upstream logic", _
+        "the network forces a start too late to meet the imposed finish"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start different du debut impose par Must Finish On", _
+        "Actual Start incompatible avec Must Finish On", _
+        "la date saisie ne permet pas de respecter la fin impos" & ChrW$(233) & "e avec la dur" & ChrW$(233) & "e actuelle"
+    CalcBridge_ReplacePMMessage msg, _
+        "Actual Start differs from start implied by Must Finish On constraint", _
+        "Actual Start is incompatible with Must Finish On", _
+        "the entered date cannot meet the imposed finish with the current duration"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start different du debut impose par Must Finish On", _
+        "Forecast Start incompatible avec Must Finish On", _
+        "la date saisie ne permet pas de respecter la fin impos" & ChrW$(233) & "e avec la dur" & ChrW$(233) & "e actuelle"
+    CalcBridge_ReplacePMMessage msg, _
+        "Forecast Start differs from start implied by Must Finish On constraint", _
+        "Forecast Start is incompatible with Must Finish On", _
+        "the entered date cannot meet the imposed finish with the current duration"
+
+    CalcBridge_ReplacePMMessage msg, _
+        "Duree incompatible avec contraintes Must Start On / Must Finish On", _
+        "Dur" & ChrW$(233) & "e incompatible avec Must Start On et Must Finish On", _
+        "corriger la dur" & ChrW$(233) & "e ou l'une des deux contraintes"
+    CalcBridge_ReplacePMMessage msg, _
+        "Duration is incompatible with Must Start On / Must Finish On constraints", _
+        "Duration is incompatible with Must Start On and Must Finish On", _
+        "fix duration or one of the two constraints"
+
+    CalcBridge_ToPMConstraintMessage = msg
+
+End Function
+
+Private Sub CalcBridge_ReplacePMMessage( _
+    ByRef msg As String, _
+    ByVal oldProblem As String, _
+    ByVal newProblem As String, _
+    ByVal actionText As String)
+
+    msg = Replace( _
+        msg, _
+        oldProblem, _
+        newProblem & vbCrLf & "-> " & actionText, _
+        1, _
+        -1, _
+        vbTextCompare)
 
 End Sub
 
 Private Sub CalcBridge_AppendCoreErrorMessages( _
     ByVal consoleMessages As Collection, _
     ByVal tblCalc As ListObject)
+
+    Dim mapCalc As Object
+    Dim arr As Variant
+
+    On Error GoTo FailSafe
+
+    If consoleMessages Is Nothing Then Exit Sub
+    If tblCalc Is Nothing Then GoTo FailSafe
+    If tblCalc.DataBodyRange Is Nothing Then GoTo FailSafe
+
+    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
+    arr = tblCalc.DataBodyRange.value
+
+    CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, arr, mapCalc, Nothing, "PROD"
+    Exit Sub
+
+FailSafe:
+    CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
+        BiMsg( _
+            "Calcul arrete : le moteur a detecte des erreurs bloquantes." & vbCrLf & _
+            "Impossible de reconstruire le message detaille." & vbCrLf & _
+            "-> verifier les colonnes Error flag et ErrorMsg dans tbl_CALC." & vbCrLf & _
+            "-> aucune donnee calculee n'a ete repoussee vers WBS.", _
+            "Calculation stopped: the engine detected blocking errors." & vbCrLf & _
+            "Unable to rebuild the detailed message." & vbCrLf & _
+            "-> check Error flag and ErrorMsg columns in tbl_CALC." & vbCrLf & _
+            "-> no calculated data was pushed back to WBS.")
+
+End Sub
+
+Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
+    ByVal consoleMessages As Collection, _
+    ByRef dataArr As Variant, _
+    ByVal mapCore As Object, _
+    Optional ByVal rootErrorIds As Object = Nothing, _
+    Optional ByVal contextMode As String = "PROD")
 
     Dim mapCalc As Object
     Dim arr As Variant
@@ -750,11 +1015,17 @@ Private Sub CalcBridge_AppendCoreErrorMessages( _
     Dim taskNameVal As String
     Dim errMsg As String
     Dim hasSpecificRootError As Boolean
+    Dim contextKey As String
 
     On Error GoTo FailSafe
 
     If consoleMessages Is Nothing Then Exit Sub
+    If Not IsArray(dataArr) Then GoTo FailSafe
+    If mapCore Is Nothing Then GoTo FailSafe
 
+    Set mapCalc = mapCore
+    arr = dataArr
+    contextKey = UCase$(Trim$(contextMode))
     Set errMissingPred = CreateObject("Scripting.Dictionary")
     Set errCycle = CreateObject("Scripting.Dictionary")
     Set errUnsupportedLinkType = CreateObject("Scripting.Dictionary")
@@ -773,16 +1044,9 @@ Private Sub CalcBridge_AppendCoreErrorMessages( _
     Set errConstraintRootMessages = CreateObject("Scripting.Dictionary")
     Set idToWbs = CreateObject("Scripting.Dictionary")
 
-    If tblCalc Is Nothing Then GoTo FailSafe
-    If tblCalc.DataBodyRange Is Nothing Then GoTo FailSafe
-
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-
     If Not mapCalc.Exists("ID") Then GoTo FailSafe
     If Not mapCalc.Exists("Error flag") Then GoTo FailSafe
     If Not mapCalc.Exists("ErrorMsg") Then GoTo FailSafe
-
-    arr = tblCalc.DataBodyRange.value
 
     For r = 1 To UBound(arr, 1)
 
@@ -802,10 +1066,14 @@ Private Sub CalcBridge_AppendCoreErrorMessages( _
 
                 errMsg = Trim$(CStr(arr(r, mapCalc("ErrorMsg"))))
 
-                'Inherited errors remain visible in tbl_CALC,
+                'Inherited errors remain visible in the source table,
                 'but are not highlighted in the main popup.
                 If CalcBridge_IsInheritedCoreError(errMsg) Then
                     GoTo NextRow
+                End If
+
+                If Not rootErrorIds Is Nothing Then
+                    If Not rootErrorIds.Exists(idVal) Then GoTo NextRow
                 End If
 
                 Select Case True
@@ -954,36 +1222,50 @@ NextRow:
 
     If errActualStartConflict.Count > 0 Then
         CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualStartConflict, idToWbs, _
-            "Actual Start incohérent avec les dépendances amont", _
-            "corriger la logique, le lag, ou la date actual", _
-            "Actual Start violates upstream dependencies", _
-            "fix logic, lag, or actual date"
+            "Actual Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
+            "corriger Actual Start, la logique amont ou le lag", _
+            "Actual Start is incompatible with upstream dependencies", _
+            "fix Actual Start, upstream logic, or lag"
     End If
 
     If errActualFinishConflict.Count > 0 Then
         CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualFinishConflict, idToWbs, _
-            "Actual Finish incohérent avec les contraintes de fin amont", _
-            "corriger la logique, le lag, ou la date actual", _
-            "Actual Finish violates upstream finish constraints", _
-            "fix logic, lag, or actual date"
+            "Actual Finish incompatible avec les contraintes de fin amont", _
+            "corriger Actual Finish, la logique amont ou le lag", _
+            "Actual Finish is incompatible with upstream finish constraints", _
+            "fix Actual Finish, upstream logic, or lag"
     End If
 
     If errForecastConflict.Count > 0 Then
-        CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
-            "Forecast incohérent avec les dépendances", _
-            "ajuster Forecast Start", _
-            "Forecast violates dependencies", _
-            "adjust Forecast Start"
+        If contextKey = "TEST" Or contextKey = "SCENARIO" Then
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
+                "Test Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
+                "corriger Test Start ou la logique amont", _
+                "Test Start is incompatible with upstream dependencies", _
+                "fix Test Start or upstream logic"
+        Else
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
+                "Forecast Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
+                "corriger Forecast Start ou la logique amont", _
+                "Forecast Start is incompatible with upstream dependencies", _
+                "fix Forecast Start or upstream logic"
+        End If
     End If
-
     If errForecastFinishConflict.Count > 0 Then
-        CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
-            "Forecast Finish incohérent avec les contraintes de fin amont", _
-            "ajuster Forecast Finish", _
-            "Forecast Finish violates upstream finish constraints", _
-            "adjust Forecast Finish"
+        If contextKey = "TEST" Or contextKey = "SCENARIO" Then
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
+                "Test Finish incompatible avec les contraintes de fin amont", _
+                "corriger Test Finish ou la logique amont", _
+                "Test Finish is incompatible with upstream finish constraints", _
+                "fix Test Finish or upstream logic"
+        Else
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
+                "Forecast Finish incompatible avec les contraintes de fin amont", _
+                "corriger Forecast Finish ou la logique amont", _
+                "Forecast Finish is incompatible with upstream finish constraints", _
+                "fix Forecast Finish or upstream logic"
+        End If
     End If
-
     If errConstraintRootMessages.Count > 0 Then
         CalcBridge_AddConstraintRootMessages consoleMessages, errConstraintRootMessages
     End If
@@ -1006,20 +1288,33 @@ NextRow:
 
     If errFinishBeforeStart.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errFinishBeforeStart, idToWbs, _
-            "Fin avant début détectée", _
-            "vérifier les dates ou la durée", _
-            "Finish before start detected", _
-            "check dates or duration"
+            "Fin incompatible avec le d" & ChrW$(233) & "but", _
+            "corriger les dates ou la dur" & ChrW$(233) & "e", _
+            "Finish is incompatible with start", _
+            "fix dates or duration"
     End If
 
     If errOtherRoot.Count > 0 And Not hasSpecificRootError Then
-        CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
-            "Erreur bloquante détectée par le moteur", _
-            "vérifier ErrorMsg dans tbl_CALC pour le détail technique", _
-            "Blocking error detected by the engine", _
-            "check ErrorMsg in tbl_CALC for technical details"
+        If contextKey = "TEST" Then
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
+                "Erreur de calcul dans le moteur live", _
+                "corriger les valeurs test ou la logique amont", _
+                "Calculation error in live engine", _
+                "fix test values or upstream logic"
+        ElseIf contextKey = "SCENARIO" Then
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
+                "Erreur de calcul dans le sc" & ChrW$(233) & "nario", _
+                "corriger les valeurs de test ou la logique amont", _
+                "Calculation error in scenario", _
+                "fix test values or upstream logic"
+        Else
+            CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
+                "Erreur bloquante d" & ChrW$(233) & "tect" & ChrW$(233) & "e par le moteur", _
+                "v" & ChrW$(233) & "rifier ErrorMsg dans tbl_CALC pour le d" & ChrW$(233) & "tail technique", _
+                "Blocking error detected by the engine", _
+                "check ErrorMsg in tbl_CALC for technical details"
+        End If
     End If
-
     Exit Sub
 
 FailSafe:
@@ -1371,7 +1666,6 @@ FailSafe:
     CalcBridge_PreCore_CheckCycles = True
 
 End Function
-
 
 Private Function CalcBridge_PreCore_DetectCycleIds( _
     ByVal validIds As Object, _
@@ -2150,6 +2444,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
     Dim idToWbs As Object
     Dim outCriticalREX() As Variant
     Dim errMissingBaselineForREX As Object
+    Dim analyticsPredLagBySuccPred As Object
+    Dim analyticsPredTypeBySuccPred As Object
 
     On Error GoTo ErrHandler
 
@@ -2170,7 +2466,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
     Set idToWbs = CalcBridge_BuildIdToWbsFromData(dataArr, mapCalc, rowById)
     Set errMissingBaselineForREX = CreateObject("Scripting.Dictionary")
 
-    CalcBridge_FillPredsAndChildrenFromLinks linksBySuccId, validIds, predsById, childrenById
+    CalcBridge_BuildAnalyticsNetworkFromExpandedLinks linksBySuccId, validIds, predsById, childrenById, _
+        analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred
     Set topoOrder = CalcBridge_TopologicalOrder(validIds, predsById, childrenById)
 
     If topoOrder.Count <> validIds.Count Then
@@ -2186,17 +2483,18 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
 
     ComputeCurrentFloatAndCritical _
         tblCalc, mapCalc, rowById, childrenById, directChildrenById, parentIds, validIds, topoOrder, _
-        consoleMessages
+        consoleMessages, analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred
 
     ReDim outCriticalREX(1 To tblCalc.ListRows.Count, 1 To 1)
 
     ComputeLongestPath _
-        tblCalc, mapCalc, rowById, predsById, childrenById, validIds
+        tblCalc, mapCalc, rowById, predsById, childrenById, validIds, _
+        analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred
 
     ComputeCriticalPathREX _
         tblCalc, mapCalc, rowById, predsById, childrenById, directChildrenById, _
         parentIds, validIds, topoOrder, idToWbs, outCriticalREX, errMissingBaselineForREX, _
-        consoleMessages
+        consoleMessages, analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred
 
     If errMissingBaselineForREX.Count > 0 Then
         If consoleMessages Is Nothing Then
@@ -2314,17 +2612,28 @@ Private Function CalcBridge_BuildDirectChildrenById( _
 
 End Function
 
-Private Sub CalcBridge_FillPredsAndChildrenFromLinks( _
+Private Sub CalcBridge_BuildAnalyticsNetworkFromExpandedLinks( _
     ByVal linksBySuccId As Object, _
     ByVal validIds As Object, _
     ByVal predsById As Object, _
-    ByVal childrenById As Object)
+    ByVal childrenById As Object, _
+    ByRef predLagBySuccPred As Object, _
+    ByRef predTypeBySuccPred As Object)
 
     Dim succId As Variant
     Dim oneLink As Variant
     Dim predId As String
+    Dim linkType As String
+    Dim linkLag As Double
+    Dim linkKey As String
+
+    Set predLagBySuccPred = CreateObject("Scripting.Dictionary")
+    Set predTypeBySuccPred = CreateObject("Scripting.Dictionary")
 
     If linksBySuccId Is Nothing Then Exit Sub
+    If validIds Is Nothing Then Exit Sub
+    If predsById Is Nothing Then Exit Sub
+    If childrenById Is Nothing Then Exit Sub
 
     For Each succId In linksBySuccId.Keys
         If validIds.Exists(CStr(succId)) Then
@@ -2333,10 +2642,28 @@ Private Sub CalcBridge_FillPredsAndChildrenFromLinks( _
 
                 If predId <> "" Then
                     If validIds.Exists(predId) Then
+                        On Error Resume Next
+                        linkType = Core_GetLinkType(oneLink)
+                        linkLag = Core_GetLinkLag(oneLink)
+                        If Err.Number <> 0 Then
+                            Err.Clear
+                            On Error GoTo 0
+                            GoTo NextLink
+                        End If
+                        On Error GoTo 0
+
+                        linkType = UCase$(Trim$(linkType))
+                        If linkType <> "FS" And linkType <> "SS" And linkType <> "FF" Then GoTo NextLink
+
+                        linkKey = CStr(succId) & "|" & predId
+                        predLagBySuccPred(linkKey) = linkLag
+                        predTypeBySuccPred(linkKey) = linkType
                         predsById(CStr(succId)).Add predId
                         childrenById(predId).Add CStr(succId)
                     End If
                 End If
+
+NextLink:
             Next oneLink
         End If
     Next succId
@@ -2584,20 +2911,22 @@ Private Function CalcBridge_PreCore_CheckLOEAsPredecessor( _
     ByVal mapCalc As Object, _
     Optional ByVal consoleMessages As Collection) As Boolean
 
-    Dim wsCalc As Worksheet
-    Dim tblLinks As ListObject
-    Dim mapLinks As Object
     Dim arrCalc As Variant
-    Dim arrLinks As Variant
     Dim rowById As Object
     Dim idToWbs As Object
+    Dim loeIds As Object
     Dim errIds As Object
+    Dim linksBySuccId As Object
+    Dim explicitDetails As Collection
+    Dim parentDetails As Collection
 
-    Dim i As Long
-    Dim r As Long
-    Dim succId As String
+    Dim succId As Variant
+    Dim oneLink As Variant
     Dim predId As String
+    Dim sourceParentId As String
     Dim predRow As Long
+    Dim detail As Object
+    Dim localMessages As Collection
 
     On Error GoTo FailSafe
 
@@ -2610,62 +2939,71 @@ Private Function CalcBridge_PreCore_CheckLOEAsPredecessor( _
     If Not mapCalc.Exists("ID") Then Exit Function
     If Not mapCalc.Exists("Task Type") Then Exit Function
 
-    Set wsCalc = ThisWorkbook.Worksheets("CALC")
-    Set tblLinks = wsCalc.ListObjects("tbl_LOGIC_LINKS")
-
-    If tblLinks Is Nothing Then Exit Function
-    If tblLinks.DataBodyRange Is Nothing Then Exit Function
-
-    Set mapLinks = CreateObject("Scripting.Dictionary")
-    For i = 1 To tblLinks.ListColumns.Count
-        mapLinks(tblLinks.ListColumns(i).Name) = i
-    Next i
-
-    If Not mapLinks.Exists("Succ ID") Then Exit Function
-    If Not mapLinks.Exists("Pred ID") Then Exit Function
-
     arrCalc = tblCalc.DataBodyRange.value
-    arrLinks = tblLinks.DataBodyRange.value
 
     Set rowById = Core_BuildRowById(arrCalc, mapCalc)
     Set idToWbs = CalcBridge_PreCore_BuildIdToWbsFromCalc(tblCalc, mapCalc)
+    Set loeIds = CreateObject("Scripting.Dictionary")
     Set errIds = CreateObject("Scripting.Dictionary")
+    Set explicitDetails = New Collection
+    Set parentDetails = New Collection
 
-    For r = 1 To UBound(arrLinks, 1)
+    For Each succId In rowById.Keys
+        predRow = CLng(rowById(CStr(succId)))
+        If CalcBridge_IsLevelOfEffortRow(arrCalc, mapCalc, predRow) Then
+            loeIds(CStr(succId)) = True
+        End If
+    Next succId
 
-        succId = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-        predId = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
+    If loeIds.Count = 0 Then Exit Function
 
-        If succId <> "" And predId <> "" Then
-            If rowById.Exists(predId) Then
-                predRow = CLng(rowById(predId))
+    Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
+    If linksBySuccId Is Nothing Then Exit Function
 
-                If CalcBridge_IsLevelOfEffortRow(arrCalc, mapCalc, predRow) Then
+    For Each succId In linksBySuccId.Keys
+        For Each oneLink In linksBySuccId(CStr(succId))
+            predId = Core_GetLinkPredId(oneLink)
+
+            If predId <> "" Then
+                If loeIds.Exists(predId) Then
                     errIds(predId) = True
-                    errIds(succId) = True
+                    errIds(CStr(succId)) = True
+
+                    sourceParentId = Core_GetLinkSummarySourceId(oneLink)
+                    Set detail = CalcBridge_BuildLOEPredecessorDetail( _
+                        CStr(succId), predId, sourceParentId, oneLink, idToWbs)
+
+                    If sourceParentId <> "" Then
+                        parentDetails.Add detail
+                    Else
+                        explicitDetails.Add detail
+                    End If
                 End If
             End If
-        End If
-
-    Next r
+        Next oneLink
+    Next succId
 
     If errIds.Count > 0 Then
 
         CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, errIds, "LOE cannot be used as predecessor"
 
         If consoleMessages Is Nothing Then
-            CalcBridge_ShowGroupedErrorMessage errIds, idToWbs, _
-                "LOE utilisée comme prédécesseur", _
-                "supprimer la LOE de la logique amont ; une LOE est pilotée par le réseau mais ne doit pas piloter d'autres tâches", _
-                "LOE used as predecessor", _
-                "remove the LOE from upstream logic; a LOE is driven by the network but must not drive other tasks"
+            Set localMessages = New Collection
         Else
-            CalcBridge_AddGroupedStopToCollection consoleMessages, errIds, idToWbs, _
-                "LOE utilisée comme prédécesseur", _
-                "supprimer la LOE de la logique amont ; une LOE est pilotée par le réseau mais ne doit pas piloter d'autres tâches", _
-                "LOE used as predecessor", _
-                "remove the LOE from upstream logic; a LOE is driven by the network but must not drive other tasks"
+            Set localMessages = consoleMessages
         End If
+
+        If explicitDetails.Count > 0 Then
+            CalcBridge_AddConsoleMessage localMessages, "STOP", _
+                CalcBridge_BuildLOEExplicitPredecessorMessage(explicitDetails)
+        End If
+
+        If parentDetails.Count > 0 Then
+            CalcBridge_AddConsoleMessage localMessages, "STOP", _
+                CalcBridge_BuildLOEParentPredecessorMessage(parentDetails)
+        End If
+
+        If consoleMessages Is Nothing Then CalcBridge_ShowPlanningConsole localMessages
 
         CalcBridge_PreCore_CheckLOEAsPredecessor = True
 
@@ -2675,12 +3013,156 @@ Private Function CalcBridge_PreCore_CheckLOEAsPredecessor( _
 
 FailSafe:
     CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur pendant le contrôle des LOE utilisées comme prédécesseur." & vbCrLf & _
-        "-> calcul arrêté avant écriture WBS.", _
+        "Erreur pendant le controle des LOE utilisees comme predecesseur." & vbCrLf & _
+        "-> calcul arrete avant ecriture WBS.", _
         "Error while checking LOE used as predecessor." & vbCrLf & _
         "-> calculation stopped before WBS write."
 
     CalcBridge_PreCore_CheckLOEAsPredecessor = True
+
+End Function
+
+Private Function CalcBridge_BuildLOEPredecessorDetail( _
+    ByVal succId As String, _
+    ByVal loeId As String, _
+    ByVal sourceParentId As String, _
+    ByRef oneLink As Variant, _
+    ByVal idToWbs As Object) As Object
+
+    Dim d As Object
+
+    Set d = CreateObject("Scripting.Dictionary")
+    d("Succ ID") = succId
+    d("Succ WBS") = CalcBridge_GetWbsForId(idToWbs, succId)
+    d("LOE ID") = loeId
+    d("LOE WBS") = CalcBridge_GetWbsForId(idToWbs, loeId)
+    d("Parent ID") = sourceParentId
+    d("Parent WBS") = CalcBridge_GetWbsForId(idToWbs, sourceParentId)
+    d("Link Type") = Core_GetLinkType(oneLink)
+    d("Lag") = Core_GetLinkLag(oneLink)
+
+    Set CalcBridge_BuildLOEPredecessorDetail = d
+
+End Function
+
+Private Function CalcBridge_BuildLOEExplicitPredecessorMessage(ByVal details As Collection) As String
+
+    Dim detail As Object
+    Dim blocksFR As String
+    Dim blocksEN As String
+
+    For Each detail In details
+        CalcBridge_AppendTextBlock blocksFR, _
+            "La tache " & CStr(detail("Succ WBS")) & " reference directement la LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
+            "Details :" & vbCrLf & vbCrLf & _
+            "Successeur :" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
+            "LOE detectee :" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
+            "Lien :" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+
+        CalcBridge_AppendTextBlock blocksEN, _
+            "Task " & CStr(detail("Succ WBS")) & " directly references LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
+            "Details:" & vbCrLf & vbCrLf & _
+            "Successor:" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
+            "Detected LOE:" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
+            "Link:" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+    Next detail
+
+    CalcBridge_BuildLOEExplicitPredecessorMessage = _
+        "FR:" & vbCrLf & _
+        "LOE utilisee comme predecesseur" & vbCrLf & vbCrLf & _
+        blocksFR & vbCrLf & vbCrLf & _
+        "Une LOE est pilotee par le reseau mais ne doit pas piloter d'autres taches." & vbCrLf & vbCrLf & _
+        "-> remplacer la LOE par une vraie tache feuille ou une milestone." & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
+        "LOE used as predecessor" & vbCrLf & vbCrLf & _
+        blocksEN & vbCrLf & vbCrLf & _
+        "A LOE is driven by the network but must not drive other tasks." & vbCrLf & vbCrLf & _
+        "-> replace the LOE with a real leaf task or milestone."
+
+End Function
+
+Private Function CalcBridge_BuildLOEParentPredecessorMessage(ByVal details As Collection) As String
+
+    Dim detail As Object
+    Dim blocksFR As String
+    Dim blocksEN As String
+
+    For Each detail In details
+        CalcBridge_AppendTextBlock blocksFR, _
+            "La tache " & CStr(detail("Succ WBS")) & " reference le parent " & CStr(detail("Parent WBS")) & "." & vbCrLf & _
+            "Ce parent contient la LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
+            "Lors de l'expansion du lien parent, la LOE devient predecesseur indirect." & vbCrLf & vbCrLf & _
+            "Details :" & vbCrLf & vbCrLf & _
+            "Successeur :" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
+            "Predecesseur saisi :" & vbCrLf & CStr(detail("Parent WBS")) & " (ID " & CStr(detail("Parent ID")) & ")" & vbCrLf & vbCrLf & _
+            "LOE detectee :" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
+            "Lien :" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+
+        CalcBridge_AppendTextBlock blocksEN, _
+            "Task " & CStr(detail("Succ WBS")) & " references parent " & CStr(detail("Parent WBS")) & "." & vbCrLf & _
+            "This parent contains LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
+            "When the parent link is expanded, the LOE becomes an indirect predecessor." & vbCrLf & vbCrLf & _
+            "Details:" & vbCrLf & vbCrLf & _
+            "Successor:" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
+            "Entered predecessor:" & vbCrLf & CStr(detail("Parent WBS")) & " (ID " & CStr(detail("Parent ID")) & ")" & vbCrLf & vbCrLf & _
+            "Detected LOE:" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
+            "Link:" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+    Next detail
+
+    CalcBridge_BuildLOEParentPredecessorMessage = _
+        "FR:" & vbCrLf & _
+        "LOE utilisee comme predecesseur via un lien parent" & vbCrLf & vbCrLf & _
+        blocksFR & vbCrLf & vbCrLf & _
+        "-> remplacer le parent par une tache feuille ou une milestone de fin." & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
+        "LOE used as predecessor through a parent link" & vbCrLf & vbCrLf & _
+        blocksEN & vbCrLf & vbCrLf & _
+        "-> replace the parent with a leaf task or finish milestone."
+
+End Function
+
+Private Sub CalcBridge_AppendTextBlock( _
+    ByRef target As String, _
+    ByVal blockText As String)
+
+    If target <> "" Then target = target & vbCrLf & vbCrLf
+    target = target & blockText
+
+End Sub
+
+Private Function CalcBridge_GetWbsForId( _
+    ByVal idToWbs As Object, _
+    ByVal idVal As String) As String
+
+    idVal = Trim$(CStr(idVal))
+
+    If idVal <> "" Then
+        If Not idToWbs Is Nothing Then
+            If idToWbs.Exists(idVal) Then
+                CalcBridge_GetWbsForId = CStr(idToWbs(idVal))
+                Exit Function
+            End If
+        End If
+    End If
+
+    CalcBridge_GetWbsForId = idVal
+
+End Function
+
+Private Function CalcBridge_FormatLOELinkLabel(ByVal detail As Object) As String
+
+    Dim lagVal As Double
+    Dim signText As String
+
+    lagVal = CDbl(detail("Lag"))
+
+    If lagVal >= 0 Then
+        signText = "+"
+    Else
+        signText = ""
+    End If
+
+    CalcBridge_FormatLOELinkLabel = CStr(detail("Link Type")) & signText & CStr(CLng(lagVal))
 
 End Function
 
@@ -3066,7 +3548,11 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
         Exit Sub
     End If
 
-    Set displayMessages = MessageEngine_PrepareDisplayMessages(historyMessages)
+    If IsPlanningWorkflowStopOnlyDisplay() Then
+        Set displayMessages = CalcBridge_FilterConsoleMessagesBySeverity(historyMessages, "STOP")
+    Else
+        Set displayMessages = MessageEngine_PrepareDisplayMessages(historyMessages)
+    End If
     If Not MessageEngine_ShouldShowConsole(displayMessages) Then Exit Sub
     If Not CanCurrentWorkflowDisplay("CalcBridge_ShowPlanningConsole") Then Exit Sub
 
@@ -3074,6 +3560,30 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
     frmPlanningMessages.Show vbModal
 
 End Sub
+
+Private Function CalcBridge_FilterConsoleMessagesBySeverity( _
+    ByVal messages As Collection, _
+    ByVal severity As String) As Collection
+
+    Dim result As Collection
+    Dim item As Variant
+
+    Set result = New Collection
+
+    If messages Is Nothing Then
+        Set CalcBridge_FilterConsoleMessagesBySeverity = result
+        Exit Function
+    End If
+
+    For Each item In messages
+        If UCase$(Trim$(CStr(item("Type")))) = UCase$(Trim$(severity)) Then
+            result.Add item
+        End If
+    Next item
+
+    Set CalcBridge_FilterConsoleMessagesBySeverity = result
+
+End Function
 
 Public Function CalcBridge_RecordPlanningMessages( _
     ByVal messages As Collection, _
@@ -3204,12 +3714,4 @@ Public Sub CalcBridge_AddOrShowConsoleMessage( _
         BiMsg(frText, enText)
 
 End Sub
-
-
-
-
-
-
-
-
 

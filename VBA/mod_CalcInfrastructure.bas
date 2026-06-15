@@ -171,7 +171,7 @@ Private Function GetCalcHeaders() As Variant
 
     Dim arr
     arr = Array( _
-        "ID", "WBS", "Task Name", "ParentID", "IsSummary", "Predecessors WBS", _
+        "ID", "WBS", "Task Name", "ParentID", "IsSummary", "S", "Predecessors WBS", _
         "Cal", _
         "Baseline Start", "Baseline Duration", "Baseline Finish", "Actual Start", "Actual Finish", "Actual Duration", _
         "Forecast Start", "Forecast Finish", "Deadline", "Calculated Start", "Calculated Finish", "Calculated Duration", _
@@ -221,6 +221,7 @@ Private Function Create_tbl_CALC(ByVal wsCalc As Worksheet) As ListObject
         "WBS", _
         "ParentID", _
         "IsSummary", _
+        "S", _
         "Calculated Start", _
         "Calculated Finish", _
         "Calculated Duration" _
@@ -247,8 +248,8 @@ Private Function Create_tbl_CALC(ByVal wsCalc As Worksheet) As ListObject
     lastCol = UBound(headers) - LBound(headers) + 1
     Set rng = wsCalc.Range("A1").Resize(2, lastCol)
 
-    WriteHeaderArrayToRange rng.Rows(1), headers
-    rng.Rows(2).ClearContents
+    WriteHeaderArrayToRange rng.rows(1), headers
+    rng.rows(2).ClearContents
 
     Set tbl = wsCalc.ListObjects.Add(xlSrcRange, rng, , xlYes)
     tbl.Name = "tbl_CALC"
@@ -324,6 +325,7 @@ Private Sub Apply_tbl_CALC_ColumnFormats(ByVal tblCalc As ListObject)
     tblCalc.ListColumns("Longest Path").Range.NumberFormat = "@"
     tblCalc.ListColumns("Critical Path REX").Range.NumberFormat = "@"
     tblCalc.ListColumns("IsSummary").Range.NumberFormat = "@"
+    tblCalc.ListColumns("S").Range.NumberFormat = "@"
 
     ' Numeric / general
     tblCalc.ListColumns("ID").Range.NumberFormat = "0"
