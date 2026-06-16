@@ -1,13 +1,214 @@
 Attribute VB_Name = "mod_WBSButtons"
 Option Explicit
 
+Private Const RESET_PLANNING_EMPTY_WBS_ROWS As Long = 5
+Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
+
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim answer As VbMsgBoxResult
+    Dim oldEvents As Boolean
+    Dim oldScreenUpdating As Boolean
+
+    oldEvents = Application.EnableEvents
+    oldScreenUpdating = Application.ScreenUpdating
+
+    On Error GoTo ErrHandler
+
+    If Not skipConfirmation Then
+        answer = MsgBox( _
+            FormatPlanningConsoleMessageForCurrentLanguage(BiMsg( _
+                "Cette action va vider le planning, le Dashboard, l'historique et les acquittements." & vbCrLf & _
+                "Continuer ?", _
+                "This will clear the planning, Dashboard, event history and acknowledgements." & vbCrLf & _
+                "Continue?")), _
+            vbQuestion + vbYesNo + vbDefaultButton2, _
+            FormatPlanningConsoleMessageForCurrentLanguage(BiMsg("Full Reset", "Full Reset")))
+
+        If answer <> vbYes Then Exit Sub
+    End If
+
+    Set ws = ThisWorkbook.Worksheets("WBS")
+    Set tbl = ws.ListObjects("tbl_WBS")
+
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+    ResetPlanning_PrepareEmptyWBS ws, tbl
+    Application.ScreenUpdating = oldScreenUpdating
+    Application.EnableEvents = oldEvents
+
+    Run_Full_Update
+    Reset_Dashboard
+    ClearPlanningWarningAcknowledgements
+    ClearPlanningEventHistory
+    Exit Sub
+
+ErrHandler:
+    On Error Resume Next
+    Application.ScreenUpdating = oldScreenUpdating
+    Application.EnableEvents = oldEvents
+    On Error GoTo 0
+
+    WBSButtons_ShowConsoleError _
+        "Armageddon", _
+        "Erreur dans Full Reset : " & Err.Description, _
+        "Error in Full Reset: " & Err.Description
+
+End Sub
+
+Public Sub Reset_Planning()
+
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim answer As VbMsgBoxResult
+    Dim oldEvents As Boolean
+    Dim oldScreenUpdating As Boolean
+
+    On Error GoTo ErrHandler
+
+    answer = MsgBox( _
+        FormatPlanningConsoleMessageForCurrentLanguage(BiMsg( _
+            "Cette action va vider le WBS et nettoyer les sorties calcul planning." & vbCrLf & _
+            "Gantt, S-Curve, Dashboard, historique et acknowledgements ne seront pas modifies." & vbCrLf & vbCrLf & _
+            "Continuer ?", _
+            "This will clear the WBS and clean planning calculation outputs." & vbCrLf & _
+            "Gantt, S-Curve, Dashboard, history and acknowledgements will not be modified." & vbCrLf & vbCrLf & _
+            "Continue?") ), _
+        vbQuestion + vbYesNo + vbDefaultButton2, _
+        FormatPlanningConsoleMessageForCurrentLanguage(BiMsg("Reset Planning", "Reset Planning")))
+
+    If answer <> vbYes Then Exit Sub
+
+    Set ws = ThisWorkbook.Worksheets("WBS")
+    Set tbl = ws.ListObjects("tbl_WBS")
+
+    oldEvents = Application.EnableEvents
+    oldScreenUpdating = Application.ScreenUpdating
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+
+    ResetPlanning_PrepareEmptyWBS ws, tbl
+
+CleanReset:
+    Application.ScreenUpdating = oldScreenUpdating
+    Application.EnableEvents = oldEvents
+
+    Run_Planning_Update
+    Exit Sub
+
+ErrHandler:
+    On Error Resume Next
+    Application.ScreenUpdating = oldScreenUpdating
+    Application.EnableEvents = oldEvents
+    On Error GoTo 0
+
+    WBSButtons_ShowConsoleError _
+        "Reset_Planning", _
+        "Erreur dans Reset Planning : " & Err.Description, _
+        "Error in Reset Planning: " & Err.Description
+
+End Sub
+
+Private Sub ResetPlanning_PrepareEmptyWBS( _
+    ByVal ws As Worksheet, _
+    ByVal tbl As ListObject)
+
+    If ws Is Nothing Then Exit Sub
+    If tbl Is Nothing Then Exit Sub
+
+    Do While tbl.ListRows.Count > RESET_PLANNING_EMPTY_WBS_ROWS
+        tbl.ListRows(tbl.ListRows.Count).Delete
+    Loop
+
+    Do While tbl.ListRows.Count < RESET_PLANNING_EMPTY_WBS_ROWS
+        tbl.ListRows.Add
+    Loop
+
+    If Not tbl.DataBodyRange Is Nothing Then
+        tbl.DataBodyRange.ClearContents
+        ResetPlanning_ApplyWBSInputSetup tbl
+    End If
+
+End Sub
+
+Private Sub ResetPlanning_ApplyWBSInputSetup(ByVal tbl As ListObject)
+
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    ResetPlanning_ApplyListValidation tbl, "Task Type", "Task,Milestone,Level of Effort", _
+        "Task Type", "Choose: Task, Milestone, or Level of Effort.", _
+        "Invalid Task Type", "Allowed values: Task, Milestone, Level of Effort."
+
+    ResetPlanning_ApplyListValidation tbl, "S", "Y,N", _
+        "S", "Choose Y to show in Summary, N to hide.", _
+        "Invalid S", "Allowed values: blank, Y, N."
+
+    ResetPlanning_ApplyListValidation tbl, "Cal", CALENDAR_7D & "," & CALENDAR_6D & "," & CALENDAR_5D, _
+        "Cal", "Choose: 7j/7, 6j/7, or 5j/7.", _
+        "Invalid Cal", "Allowed values: blank, 7j/7, 6j/7, 5j/7."
+
+    ResetPlanning_ApplyWBSFormats tbl
+
+End Sub
+
+Private Sub ResetPlanning_ApplyListValidation( _
+    ByVal tbl As ListObject, _
+    ByVal columnName As String, _
+    ByVal listFormula As String, _
+    ByVal inputTitle As String, _
+    ByVal inputMessage As String, _
+    ByVal errorTitle As String, _
+    ByVal errorMessage As String)
+
+    Dim rng As Range
+
+    If Not WBS_TableHasColumn(tbl, columnName) Then Exit Sub
+    Set rng = tbl.ListColumns(columnName).DataBodyRange
+    If rng Is Nothing Then Exit Sub
+
+    rng.NumberFormat = "@"
+    With rng.Validation
+        .Delete
+        .Add Type:=xlValidateList, _
+             AlertStyle:=xlValidAlertStop, _
+             Operator:=xlBetween, _
+             Formula1:=listFormula
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = inputTitle
+        .InputMessage = inputMessage
+        .ErrorTitle = errorTitle
+        .errorMessage = errorMessage
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+End Sub
+
+Private Sub ResetPlanning_ApplyWBSFormats(ByVal tbl As ListObject)
+
+    If WBS_TableHasColumn(tbl, "WBS") Then tbl.ListColumns("WBS").DataBodyRange.NumberFormat = "@"
+    If WBS_TableHasColumn(tbl, "ID") Then tbl.ListColumns("ID").DataBodyRange.NumberFormat = "0"
+    If WBS_TableHasColumn(tbl, "Baseline Start") Then tbl.ListColumns("Baseline Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Baseline Finish") Then tbl.ListColumns("Baseline Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Actual Start") Then tbl.ListColumns("Actual Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Actual Finish") Then tbl.ListColumns("Actual Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Forecast Start") Then tbl.ListColumns("Forecast Start").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Forecast Finish") Then tbl.ListColumns("Forecast Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    If WBS_TableHasColumn(tbl, "Baseline Duration") Then tbl.ListColumns("Baseline Duration").DataBodyRange.NumberFormat = "0"
+    If WBS_TableHasColumn(tbl, "Actual Duration") Then tbl.ListColumns("Actual Duration").DataBodyRange.NumberFormat = "0"
+    If WBS_TableHasColumn(tbl, "Calculated Duration") Then tbl.ListColumns("Calculated Duration").DataBodyRange.NumberFormat = "0"
+
+End Sub
+
 '=====================================================
 ' mod_WBSButtons
 '
 ' WBS main buttons + Task Type setup.
 '
 ' Console routing:
-' - aucune MsgBox directe dans ce module
+' - confirmation utilisateur autorisee pour Reset Planning
 ' - les erreurs sont envoyées vers frmPlanningMessages
 '=====================================================
 
@@ -19,6 +220,8 @@ Public Sub Ensure_WBS_Main_Buttons()
     Dim btnWidthGreen As Double
     Dim btnWidthRed As Double
     Dim btnWidthForced As Double
+    Dim btnWidthReset As Double
+    Dim btnWidthFullReset As Double
     Dim btnHeight As Double
     Dim gap As Double
 
@@ -33,6 +236,8 @@ Public Sub Ensure_WBS_Main_Buttons()
     btnWidthGreen = 68
     btnWidthRed = 82
     btnWidthForced = 104
+    btnWidthReset = 86
+    btnWidthFullReset = 86
     btnHeight = 34
     gap = 8
 
@@ -88,6 +293,28 @@ Public Sub Ensure_WBS_Main_Buttons()
         startLeft + (btnWidthGreen + gap) * 3 + btnWidthForced + gap, _
         topPos, _
         btnWidthRed, _
+        btnHeight, _
+        RGB(192, 0, 0)
+
+    CreateOrUpdateWBSFloatingButton _
+        ws, _
+        "btn_WBS_ResetPlanning", _
+        "Reset" & vbCrLf & "Planning", _
+        "Reset_Planning", _
+        startLeft + (btnWidthGreen + gap) * 3 + btnWidthForced + gap + btnWidthRed + gap, _
+        topPos, _
+        btnWidthReset, _
+        btnHeight, _
+        RGB(192, 0, 0)
+
+    CreateOrUpdateWBSFloatingButton _
+        ws, _
+        "btn_WBS_FullReset", _
+        "Full" & vbCrLf & "Reset", _
+        "Armageddon", _
+        startLeft + (btnWidthGreen + gap) * 3 + btnWidthForced + gap + btnWidthRed + gap + btnWidthReset + (gap * 2), _
+        topPos, _
+        btnWidthFullReset, _
         btnHeight, _
         RGB(192, 0, 0)
 
@@ -152,6 +379,7 @@ Private Sub Ensure_WBS_TaskType_Input_Setup(ByVal ws As Worksheet)
     Dim rng As Range
     Dim cell As Range
     Dim normalizedValue As String
+    Dim rowIndex As Long
     Dim oldEvents As Boolean
 
     If ws Is Nothing Then Exit Sub
@@ -177,12 +405,18 @@ Private Sub Ensure_WBS_TaskType_Input_Setup(ByVal ws As Worksheet)
 
     For Each cell In rng.Cells
 
-        normalizedValue = Normalize_WBS_TaskType_Value(cell.value)
+        rowIndex = cell.Row - rng.Row + 1
 
-        If Trim$(CStr(cell.value)) = "" Then
-            cell.value = "Task"
-        ElseIf CStr(cell.value) <> normalizedValue Then
-            cell.value = normalizedValue
+        If Not WBSButtons_RowHasTaskIdentity(tbl, rowIndex) Then
+            If Trim$(CStr(cell.value)) <> "" Then cell.ClearContents
+        Else
+            normalizedValue = Normalize_WBS_TaskType_Value(cell.value)
+
+            If Trim$(CStr(cell.value)) = "" Then
+                cell.value = "Task"
+            ElseIf CStr(cell.value) <> normalizedValue Then
+                cell.value = normalizedValue
+            End If
         End If
 
     Next cell
@@ -241,6 +475,32 @@ Private Function Normalize_WBS_TaskType_Value(ByVal rawValue As Variant) As Stri
 
 End Function
 
+Private Function WBSButtons_RowHasTaskIdentity( _
+    ByVal tbl As ListObject, _
+    ByVal rowIndex As Long) As Boolean
+
+    Dim idVal As String
+    Dim wbsVal As String
+
+    On Error GoTo SafeExit
+
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If rowIndex < 1 Or rowIndex > tbl.ListRows.Count Then Exit Function
+
+    If WBS_TableHasColumn(tbl, "ID") Then
+        idVal = Trim$(CStr(tbl.ListColumns("ID").DataBodyRange.Cells(rowIndex, 1).value))
+    End If
+
+    If WBS_TableHasColumn(tbl, "WBS") Then
+        wbsVal = Trim$(CStr(tbl.ListColumns("WBS").DataBodyRange.Cells(rowIndex, 1).value))
+    End If
+
+    wbsVal = Replace$(wbsVal, ",", ".")
+    WBSButtons_RowHasTaskIdentity = (idVal <> "" Or wbsVal <> "")
+
+SafeExit:
+End Function
 Private Function WBS_TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
     Dim col As ListColumn
@@ -272,5 +532,16 @@ Private Sub WBSButtons_ShowConsoleError( _
     CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
+
+
+
+
+
+
+
+
+
+
+
 
 

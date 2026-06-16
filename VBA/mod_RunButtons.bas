@@ -101,7 +101,11 @@ Public Sub Run_Gantt_Update()
     'Run_Calc_Engine_CoreBridge already displayed the real business error message.
     'Do not launch Refresh_Gantt after a blocking calculation error.
     If CalcEngine_HasBlockingErrorsForState() Then
-        Gantt_SafeEmptyState
+        If Planning_WBSIsEmpty() Then
+            Planning_GanttSafeEmptyState
+        Else
+            Gantt_SafeEmptyState
+        End If
         If Not wsCaller Is Nothing Then wsCaller.Activate
         GoTo CleanExit
     End If
@@ -179,7 +183,11 @@ Public Sub Run_Full_Update()
     Run_Calc_Engine True
 
     If CalcEngine_HasBlockingErrorsForState() Then
-        Gantt_SafeEmptyState
+        If Planning_WBSIsEmpty() Then
+            Planning_FullSafeEmptyState
+        Else
+            Gantt_SafeEmptyState
+        End If
         GoTo CleanExit
     End If
     If IsMacroAbortRequested() Then GoTo CleanExit
@@ -201,4 +209,5 @@ SafeExit:
     Resume CleanExit
 
 End Sub
+
 

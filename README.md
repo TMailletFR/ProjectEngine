@@ -1,124 +1,185 @@
 # ProjectEngine
+
 Excel-native dependency-driven planning engine focused on transparency, simulation, diagnostics, and project controls workflows.
 
+ProjectEngine transforms a standard Excel workbook into a lightweight scheduling and project controls platform powered entirely by VBA. It combines dependency-driven schedule calculation, planning analytics, Gantt visualization, S-Curve reporting, constraints management, simulation tools, and runtime diagnostics in a single portable workbook.
 
-Open-source Excel/VBA project planning engine for dependency-driven schedule calculation, scenario analysis, and project controls reporting.
-
-
-
-ProjectEngine turns an Excel workbook into a lightweight planning engine with native VBA scheduling logic, Gantt rendering, S-curve analytics, constraints, floats, and runtime diagnostics.
-
-![ProjectEngine Demo](Screenshots/Hero-gantt.gif)
-
-
+---
 
 ## Screenshots
 
-### Gantt
+### Interactive Gantt
 
-![Gantt](Screenshots/hero-gantt-sc.png)
+![Interactive Gantt](Screenshots/hero-gantt-sc.png)
 
-### WBS Inputs
+Dependency-driven scheduling with progress tracking, milestones, summary tasks, critical path analysis, and real-time project status visualization.
 
-![WBS Inputs](Screenshots/wbs-inputs.png)
+### Executive Dashboard
 
-### Planning Analytics
+![Executive Dashboard](Screenshots/dashboard.png)
 
-![Planning Analytics](Screenshots/analytics.png)
+High-level project overview including progress indicators, forecast finish analysis, critical activities, schedule momentum, S-Curve snapshot, and planning overview.
 
-### S-Curve
+### Hot Spots Analysis
 
-![S-Curve](Screenshots/s-curve.png)
+![Hot Spots Analysis](Screenshots/dashboard2.png)
 
-### Runtime Diagnostics
+Dedicated planning analytics highlighting top delays, deadline health, upcoming milestones, and next critical activities requiring attention.
 
-![Runtime Diagnostics](Screenshots/event-console.png)
+### Month View
 
+![Month View](Screenshots/gantt-month.png)
 
+Long-range schedule visualization with monthly scaling, WBS hierarchy, task classifications, constraints, dependencies, milestones, and progress status.
 
-## Features
+### S-Curve Analytics
 
+![S-Curve Analytics](Screenshots/s-curve.png)
 
+Baseline, Actual, Forecast, and Calculated progress curves combined with daily workload distribution for project controls reporting and performance analysis.
 
-- Dependency-driven scheduling with FS / SS / FF relationships and lag support
+### Animated Demo
 
-- Baseline / Forecast / Actual planning logic
+![ProjectEngine Demo](Screenshots/hero-gantt.gif)
 
-- Incremental recalculation with forced full recalculation option
+---
 
-- Critical Path, Total Float, Free Float, and Longest Path analytics
+## Core Features
 
-- Multi-network / multi-project criticality mode
+### Scheduling Engine
 
-- Hard constraints engine with dedicated constraint table
+* Dependency-driven scheduling
+* FS / SS / FF relationships
+* Positive and negative lag support
+* Multi-predecessor logic
+* Automatic schedule propagation
+* Parent / child rollups
+* Level of Effort (LOE) support
+* Milestone support
 
-- Soft Deadline analytics with Deadline Float and warnings
+### Planning Logic
 
-- Gantt chart generation with timeline, links, milestones, constraints, and analytics overlays
+* Baseline planning
+* Forecast planning
+* Actual progress integration
+* Calculated schedule generation
+* Incremental recalculation
+* Forced full recalculation
 
-- Live / Test planning simulation without committing changes
+### Analytics
 
-- Scenario workflow with fork-to-new-planning capability
+* Critical Path analysis
+* Longest Path analysis
+* Total Float calculation
+* Free Float calculation
+* Multi-project criticality mode
+* Delay analysis
+* Deadline monitoring
+* Schedule momentum tracking
 
-- S-curve data generation and analytics
+### Constraints & Controls
 
-- Runtime console with INFO / WARNING / STOP severities
+* Hard constraints engine
+* Deadline management
+* Constraint diagnostics
+* Constraint impact analysis
+* Dedicated constraints table
 
-- Event History and Alarm History tables for audit/debug
+### Visualization
 
-- Warning hide/acknowledge system based on stable event signatures
+* Interactive Gantt chart
+* Day / Week / Month timeline scaling
+* Dependency link rendering
+* Critical path overlays
+* Progress overlays
+* Constraint overlays
+* Executive Dashboard
+* S-Curve reporting
 
-- WBS input validation and guarded system writes to calculated columns
+### Simulation
 
+* Test mode planning
+* Scenario mode planning
+* Schedule comparison workflows
+* Non-destructive schedule simulation
 
+### Diagnostics
+
+* Runtime warning console
+* INFO / WARNING / STOP severities
+* Event History
+* Alarm History
+* Warning acknowledgement workflow
+* Stable event signature tracking
+* Input validation framework
+
+### Maintenance & Safety
+
+* Safe Empty State for Gantt
+* Safe Empty State for S-Curve
+* Planning Reset workflow
+* Full Reset workflow
+* Protected calculated columns
+* Controlled system writes
+
+---
 
 ## Architecture
 
+ProjectEngine is organized around a calculation core and multiple visualization layers.
 
+| Layer         | Purpose                            |
+| ------------- | ---------------------------------- |
+| WBS           | User planning inputs and outputs   |
+| CALC          | Scheduling engine runtime layer    |
+| CONSTRAINTS   | Constraints and deadlines          |
+| GANTT         | Schedule visualization             |
+| SCURVE        | Progress and workload analytics    |
+| DASHBOARD     | Executive reporting                |
+| EVENT_HISTORY | Runtime traceability               |
+| CALC_ALARM    | Active warnings and stops          |
+| EVENT_ACK     | Warning acknowledgement management |
 
-The project is structured around a VBA scheduling core and separate projection layers:
+The scheduling engine is the single source of truth.
 
+Visualization layers consume calculated data but never drive schedule calculations.
 
+---
 
-- `WBS` is the user-facing planning input and output table.
+## Typical Workflow
 
-- `CALC` is the runtime calculation layer.
+1. Enter planning data in WBS.
+2. Run Planning Update.
+3. Review warnings and diagnostics.
+4. Analyze schedule health through Dashboard and S-Curve.
+5. Review Critical Path and Float analytics.
+6. Simulate alternatives using Test and Scenario modes.
+7. Generate reporting through Gantt and Dashboard views.
 
-- `CONSTRAINTS` stores hard constraints and deadlines.
+---
 
-- `GANTT` is a visual projection of the calculated schedule.
+## Project Status
 
-- `EVENT\_HISTORY`, `CALC\_ALARM`, and `EVENT\_ACK` provide runtime diagnostics and warning management.
+### Current Stage
 
+**Beta**
 
+The engine is actively used and continuously improved through real-world planning use cases.
 
-The Gantt and reporting layers do not drive the schedule calculation. They consume calculated outputs from the planning engine.
+Major scheduling, analytics, dashboard, diagnostics, and reset frameworks are operational.
 
+Future releases will continue improving usability, visualization, and advanced planning capabilities.
 
-
-## Status
-
-
-
-Active development — alpha.
-
-
-
-The engine is functional and under continuous hardening. APIs, workbook structure, and VBA module organization may still evolve.
-
-
+---
 
 ## Support the Project
 
-If ProjectEngine helps your work and you want to support ongoing development:
+If ProjectEngine helps your work and you would like to support ongoing development:
 
 ![QRCode](Screenshots/qrcode.png)
 
-
+---
 
 ## License
 
-
-
-GPL v3
-
+GPL-3.0

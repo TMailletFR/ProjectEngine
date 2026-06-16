@@ -39,16 +39,11 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     Set wsWBS = ThisWorkbook.Worksheets("WBS")
     Set tblWBS = wsWBS.ListObjects("tbl_WBS")
 
-    If tblWBS.DataBodyRange Is Nothing Then
-        CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-            BiMsg( _
-                "La table tbl_WBS est vide.", _
-                "Table tbl_WBS is empty.")
-        Write_CalcState_Snapshot_Console "ERROR", consoleMessages
-        CalcBridge_ShowPlanningConsole consoleMessages
+    If Planning_WBSIsEmpty() Then
+        Planning_CalcSafeEmptyState
+        Application.StatusBar = "No project data - calculation outputs cleared."
         GoTo SafeExit
     End If
-
     Ensure_Calc_Infrastructure consoleMessages
     Ensure_Analytics_Toggle
     AbortIfRequested "Run_Calc_Engine_CoreBridge.AfterEnsureCalc"
@@ -61,6 +56,9 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     'Partial mode needs previous calculated dates available as predecessor state.
     Sync_WBS_To_CALC True
     AbortIfRequested "Run_Calc_Engine_CoreBridge.AfterSync"
+
+    Import_WBS_To_Constraints
+    AbortIfRequested "Run_Calc_Engine_CoreBridge.AfterConstraintImport"
 
     If Not Sync_Constraints_To_CALC_ForWorkflow(consoleMessages) Then
         Write_CalcState_Snapshot_Console "ERROR", consoleMessages
@@ -3714,4 +3712,9 @@ Public Sub CalcBridge_AddOrShowConsoleMessage( _
         BiMsg(frText, enText)
 
 End Sub
+
+
+
+
+
 

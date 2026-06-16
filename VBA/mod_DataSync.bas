@@ -353,6 +353,147 @@ SafeExit:
 
 End Sub
 
+Public Function Planning_WBSIsEmpty() As Boolean
+
+    Dim wsWBS As Worksheet
+    Dim tblWBS As ListObject
+    Dim r As Long
+
+    On Error GoTo FailSafe
+
+    Set wsWBS = ThisWorkbook.Worksheets("WBS")
+    Set tblWBS = wsWBS.ListObjects("tbl_WBS")
+
+    If tblWBS.DataBodyRange Is Nothing Then
+        Planning_WBSIsEmpty = True
+        Exit Function
+    End If
+
+    RestoreWBSFormulaColumns tblWBS
+
+    Planning_WBSIsEmpty = True
+    For r = 1 To tblWBS.ListRows.Count
+        If WBSRowHasTaskIdentity(tblWBS, r, Nothing) Then
+            Planning_WBSIsEmpty = False
+            Exit Function
+        End If
+    Next r
+
+    Exit Function
+
+FailSafe:
+    Planning_WBSIsEmpty = True
+
+End Function
+
+Private Function WBSRowHasTaskIdentity( _
+    ByVal tblWBS As ListObject, _
+    ByVal rowIndex As Long, _
+    ByVal mapWBS As Object) As Boolean
+
+    Dim idVal As String
+    Dim wbsVal As String
+
+    On Error GoTo SafeExit
+
+    If tblWBS Is Nothing Then Exit Function
+    If tblWBS.DataBodyRange Is Nothing Then Exit Function
+    If rowIndex < 1 Or rowIndex > tblWBS.ListRows.Count Then Exit Function
+
+    If Not mapWBS Is Nothing Then
+        If mapWBS.Exists("ID") Then
+            idVal = Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("ID")).value))
+        End If
+        If mapWBS.Exists("WBS") Then
+            wbsVal = Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS("WBS")).value))
+        End If
+    Else
+        If TableHasColumn(tblWBS, "ID") Then
+            idVal = Trim$(CStr(tblWBS.ListColumns("ID").DataBodyRange.Cells(rowIndex, 1).value))
+        End If
+        If TableHasColumn(tblWBS, "WBS") Then
+            wbsVal = Trim$(CStr(tblWBS.ListColumns("WBS").DataBodyRange.Cells(rowIndex, 1).value))
+        End If
+    End If
+
+    wbsVal = Replace$(wbsVal, ",", ".")
+    WBSRowHasTaskIdentity = (idVal <> "" Or wbsVal <> "")
+
+SafeExit:
+End Function
+
+Public Sub Planning_CalcSafeEmptyState()
+
+    Dim oldScreenUpdating As Boolean
+    Dim oldEvents As Boolean
+
+    On Error GoTo SafeExit
+
+    oldScreenUpdating = Application.ScreenUpdating
+    oldEvents = Application.EnableEvents
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
+    Ensure_Calc_Infrastructure
+    Import_WBS_To_Constraints
+
+    ClearPlanningTableRows "CALC", "tbl_CALC"
+    ClearPlanningTableRows "CALC", "tbl_LOGIC_LINKS"
+
+SafeExit:
+    Application.EnableEvents = oldEvents
+    Application.ScreenUpdating = oldScreenUpdating
+
+End Sub
+
+Public Sub Planning_GanttSafeEmptyState()
+
+    Dim oldScreenUpdating As Boolean
+    Dim oldEvents As Boolean
+
+    On Error GoTo SafeExit
+
+    oldScreenUpdating = Application.ScreenUpdating
+    oldEvents = Application.EnableEvents
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
+    ClearPlanningTableRows "CALC_STATE", "tbl_CALC_STATE"
+    ClearPlanningTableRows "CALC_GANTT_TEST", "tbl_CALC_GANTT_TEST"
+    Gantt_SafeEmptyState
+
+SafeExit:
+    Application.EnableEvents = oldEvents
+    Application.ScreenUpdating = oldScreenUpdating
+
+End Sub
+
+Public Sub Planning_FullSafeEmptyState()
+
+    Planning_CalcSafeEmptyState
+    Planning_GanttSafeEmptyState
+    SCurve_SafeEmptyState
+
+End Sub
+
+Private Sub ClearPlanningTableRows(ByVal sheetName As String, ByVal tableName As String)
+
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(sheetName)
+    If Not ws Is Nothing Then Set tbl = ws.ListObjects(tableName)
+    On Error GoTo 0
+
+    If tbl Is Nothing Then Exit Sub
+
+    Do While tbl.ListRows.Count > 0
+        tbl.ListRows(tbl.ListRows.Count).Delete
+    Loop
+
+End Sub
+
 Private Sub EnsureTaskTypeColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -717,6 +858,7 @@ Public Sub Push_Calculated_Back_To_WBS()
 
     Dim allowedFields As Variant
     Dim authorizedFields As Variant
+    Dim writeStarted As Boolean
     Dim outCols As Object
 
     Dim arrWBS As Variant
@@ -876,7 +1018,7 @@ Public Sub Push_Calculated_Back_To_WBS()
     RestoreWBSFormulaColumns tblWBS
 
 SafeExit:
-    EndAuthorizedWBSWrite
+    If writeStarted Then EndAuthorizedWBSWrite
 
     If Err.Number <> 0 Then
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
@@ -1218,6 +1360,9 @@ End Sub
 Private Sub RestoreWBSFormulaColumns(ByVal tblWBS As ListObject)
 
     Dim consoleMessages As Collection
+    Dim r As Long
+    Dim hasIdentity As Boolean
+    Dim authorizedFields As Variant
 
     On Error GoTo SafeExit
 
@@ -1226,25 +1371,55 @@ Private Sub RestoreWBSFormulaColumns(ByVal tblWBS As ListObject)
     If tblWBS Is Nothing Then Exit Sub
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
 
-    If TableHasColumn(tblWBS, "Baseline Finish") Then
-        tblWBS.ListColumns("Baseline Finish").DataBodyRange.FormulaLocal = _
-            "=SI(OU([@[Baseline Start]]="""";[@[Baseline Duration]]="""");"""";[@[Baseline Start]]+[@[Baseline Duration]]-1)"
+    authorizedFields = Array("Baseline Finish", "Actual Duration", "Calculated Duration")
+    BeginAuthorizedWBSWrite "RestoreWBSFormulaColumns", authorizedFields
+
+    For r = 1 To tblWBS.ListRows.Count
+
+        hasIdentity = WBSRowHasTaskIdentity(tblWBS, r, Nothing)
+
+        If TableHasColumn(tblWBS, "Baseline Finish") Then
+            With tblWBS.ListColumns("Baseline Finish").DataBodyRange.Cells(r, 1)
+                If hasIdentity Then
+                    .FormulaLocal = "=SI(OU([@[Baseline Start]]="""";[@[Baseline Duration]]="""");"""";[@[Baseline Start]]+[@[Baseline Duration]]-1)"
+                Else
+                    .ClearContents
+                End If
+            End With
+        End If
+
+        If TableHasColumn(tblWBS, "Actual Duration") Then
+            With tblWBS.ListColumns("Actual Duration").DataBodyRange.Cells(r, 1)
+                If hasIdentity Then
+                    .FormulaLocal = "=SI(OU([@[Actual Start]]="""";[@[Actual Finish]]="""");"""";[@[Actual Finish]]-[@[Actual Start]]+1)"
+                Else
+                    .ClearContents
+                End If
+            End With
+        End If
+
+        If TableHasColumn(tblWBS, "Calculated Duration") Then
+            With tblWBS.ListColumns("Calculated Duration").DataBodyRange.Cells(r, 1)
+                If hasIdentity Then
+                    .FormulaLocal = "=SI(OU([@[Calculated Start]]="""";[@[Calculated Finish]]="""");"""";[@[Calculated Finish]]-[@[Calculated Start]]+1)"
+                Else
+                    .ClearContents
+                End If
+            End With
+        End If
+
+    Next r
+
+    If TableHasColumn(tblWBS, "Baseline Finish") Then _
         tblWBS.ListColumns("Baseline Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
-    End If
-
-    If TableHasColumn(tblWBS, "Actual Duration") Then
-        tblWBS.ListColumns("Actual Duration").DataBodyRange.FormulaLocal = _
-            "=SI(OU([@[Actual Start]]="""";[@[Actual Finish]]="""");"""";[@[Actual Finish]]-[@[Actual Start]]+1)"
+    If TableHasColumn(tblWBS, "Actual Duration") Then _
         tblWBS.ListColumns("Actual Duration").DataBodyRange.NumberFormat = "0"
-    End If
-
-    If TableHasColumn(tblWBS, "Calculated Duration") Then
-        tblWBS.ListColumns("Calculated Duration").DataBodyRange.FormulaLocal = _
-            "=SI(OU([@[Calculated Start]]="""";[@[Calculated Finish]]="""");"""";[@[Calculated Finish]]-[@[Calculated Start]]+1)"
+    If TableHasColumn(tblWBS, "Calculated Duration") Then _
         tblWBS.ListColumns("Calculated Duration").DataBodyRange.NumberFormat = "0"
-    End If
 
 SafeExit:
+    EndAuthorizedWBSWrite
+
     If Err.Number <> 0 Then
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
         DataSync_AddConsoleMessage consoleMessages, "STOP", _
@@ -1254,7 +1429,6 @@ SafeExit:
     End If
 
 End Sub
-
 
 Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
@@ -1296,6 +1470,7 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
     Dim rng As Range
     Dim cell As Range
     Dim normalizedValue As String
+    Dim rowIndex As Long
 
     If tblWBS Is Nothing Then Exit Sub
 
@@ -1308,15 +1483,21 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
     Set rng = tblWBS.ListColumns("Task Type").DataBodyRange
 
-    'Default blank cells to Task.
+    'Default blank cells to Task only on rows that have an ID/WBS identity.
     For Each cell In rng.Cells
 
-        normalizedValue = NormalizeTaskTypeValue(cell.value)
+        rowIndex = cell.Row - rng.Row + 1
 
-        If Trim$(CStr(cell.value)) = "" Then
-            cell.value = "Task"
-        ElseIf CStr(cell.value) <> normalizedValue Then
-            cell.value = normalizedValue
+        If Not WBSRowHasTaskIdentity(tblWBS, rowIndex, Nothing) Then
+            If Trim$(CStr(cell.value)) <> "" Then cell.ClearContents
+        Else
+            normalizedValue = NormalizeTaskTypeValue(cell.value)
+
+            If Trim$(CStr(cell.value)) = "" Then
+                cell.value = "Task"
+            ElseIf CStr(cell.value) <> normalizedValue Then
+                cell.value = normalizedValue
+            End If
         End If
 
     Next cell
@@ -1467,7 +1648,9 @@ Private Sub NormalizeWBSSummaryDisplayValues( _
     For r = 1 To tblWBS.ListRows.Count
         Set cell = tblWBS.DataBodyRange.Cells(r, mapWBS("S"))
 
-        If Trim$(CStr(cell.value)) = "" Then
+        If Not WBSRowHasTaskIdentity(tblWBS, r, mapWBS) Then
+            If Trim$(CStr(cell.value)) <> "" Then cell.ClearContents
+        ElseIf Trim$(CStr(cell.value)) = "" Then
             cell.value = DefaultSummaryDisplayValue(tblWBS, mapWBS, r, summaryWbsByWbs)
         Else
             normalizedValue = NormalizeSummaryDisplayValue(cell.value)
@@ -1602,6 +1785,7 @@ Private Sub NormalizeWBSCalendarValues( _
     Dim r As Long
     Dim cell As Range
     Dim normalizedValue As String
+    Dim rowIndex As Long
 
     If tblWBS Is Nothing Then Exit Sub
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
@@ -1610,14 +1794,19 @@ Private Sub NormalizeWBSCalendarValues( _
 
     For r = 1 To tblWBS.ListRows.Count
         Set cell = tblWBS.DataBodyRange.Cells(r, mapWBS("Cal"))
-        normalizedValue = NormalizeCalendarType(cell.value)
 
-        If Trim$(CStr(cell.value)) = "" Then
-            If Not IsCalendarIgnoredWBSRow(tblWBS, mapWBS, r, summaryWbsByWbs) Then
-                cell.value = CALENDAR_7D
+        If Not WBSRowHasTaskIdentity(tblWBS, r, mapWBS) Then
+            If Trim$(CStr(cell.value)) <> "" Then cell.ClearContents
+        Else
+            normalizedValue = NormalizeCalendarType(cell.value)
+
+            If Trim$(CStr(cell.value)) = "" Then
+                If Not IsCalendarIgnoredWBSRow(tblWBS, mapWBS, r, summaryWbsByWbs) Then
+                    cell.value = CALENDAR_7D
+                End If
+            ElseIf CStr(cell.value) <> normalizedValue Then
+                cell.value = normalizedValue
             End If
-        ElseIf CStr(cell.value) <> normalizedValue Then
-            cell.value = normalizedValue
         End If
     Next r
 
@@ -1756,4 +1945,13 @@ Private Sub DataSync_AddConsoleMessage( _
         BiMsg(frText, enText)
 
 End Sub
+
+
+
+
+
+
+
+
+
 

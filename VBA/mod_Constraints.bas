@@ -59,18 +59,14 @@ Public Sub Import_WBS_To_Constraints()
     Dim mapWBS As Object
     Dim mapConstraints As Object
     Dim existingById As Object
-    Dim wbsIds As Object
     Dim summaryByWbs As Object
 
     Dim arrWBS As Variant
     Dim outArr() As Variant
     Dim rowCountWBS As Long
-    Dim orphanCount As Long
     Dim targetRows As Long
     Dim outRow As Long
     Dim r As Long
-    Dim idVal As String
-    Dim key As Variant
     Dim consoleMessages As Collection
 
     On Error GoTo ErrHandler
@@ -93,7 +89,6 @@ Public Sub Import_WBS_To_Constraints()
     RequireColumns_Constraints mapConstraints, ConstraintsHeaders(), CONSTRAINTS_TABLE_NAME
 
     Set existingById = BuildExistingConstraintRows(tblConstraints, mapConstraints)
-    Set wbsIds = CreateObject("Scripting.Dictionary")
 
     If tblWBS.DataBodyRange Is Nothing Then
         rowCountWBS = 0
@@ -102,19 +97,13 @@ Public Sub Import_WBS_To_Constraints()
         arrWBS = tblWBS.DataBodyRange.value
         rowCountWBS = UBound(arrWBS, 1)
         Set summaryByWbs = BuildSummaryWbsMap(arrWBS, mapWBS)
-
-        For r = 1 To rowCountWBS
-            idVal = Trim$(CStr(arrWBS(r, mapWBS("ID"))))
-            If idVal <> "" Then wbsIds(idVal) = True
-        Next r
     End If
 
-    orphanCount = 0
-    For Each key In existingById.Keys
-        If Not wbsIds.Exists(CStr(key)) Then orphanCount = orphanCount + 1
-    Next key
-
-    targetRows = rowCountWBS + orphanCount
+    If rowCountWBS > 0 Then
+        targetRows = CountConstraintSourceRows(arrWBS, mapWBS)
+    Else
+        targetRows = 0
+    End If
     ResizeTableToRowCount_Constraints tblConstraints, targetRows
 
     If targetRows = 0 Then
@@ -128,17 +117,12 @@ Public Sub Import_WBS_To_Constraints()
 
     If rowCountWBS > 0 Then
         For r = 1 To rowCountWBS
-            outRow = outRow + 1
-            FillConstraintOutputRowFromWBS outArr, outRow, arrWBS, r, mapWBS, mapConstraints, existingById, summaryByWbs
+            If ConstraintSourceRowHasIdentity(arrWBS, r, mapWBS) Then
+                outRow = outRow + 1
+                FillConstraintOutputRowFromWBS outArr, outRow, arrWBS, r, mapWBS, mapConstraints, existingById, summaryByWbs
+            End If
         Next r
     End If
-
-    For Each key In existingById.Keys
-        If Not wbsIds.Exists(CStr(key)) Then
-            outRow = outRow + 1
-            FillConstraintOutputRowFromExisting outArr, outRow, mapConstraints, existingById(CStr(key))
-        End If
-    Next key
 
     tblConstraints.DataBodyRange.value = outArr
     ApplyConstraintsFormats tblConstraints
@@ -944,6 +928,36 @@ Private Function BuildExistingConstraintRows( _
 
 End Function
 
+Private Function CountConstraintSourceRows( _
+    ByRef arrWBS As Variant, _
+    ByVal mapWBS As Object) As Long
+
+    Dim r As Long
+
+    For r = 1 To UBound(arrWBS, 1)
+        If ConstraintSourceRowHasIdentity(arrWBS, r, mapWBS) Then
+            CountConstraintSourceRows = CountConstraintSourceRows + 1
+        End If
+    Next r
+
+End Function
+
+Private Function ConstraintSourceRowHasIdentity( _
+    ByRef arrWBS As Variant, _
+    ByVal rowIndex As Long, _
+    ByVal mapWBS As Object) As Boolean
+
+    Dim idVal As String
+    Dim wbsVal As String
+
+    If mapWBS Is Nothing Then Exit Function
+
+    If mapWBS.Exists("ID") Then idVal = Trim$(CStr(arrWBS(rowIndex, mapWBS("ID"))))
+    If mapWBS.Exists("WBS") Then wbsVal = NormalizeWBS(CStr(arrWBS(rowIndex, mapWBS("WBS"))))
+
+    ConstraintSourceRowHasIdentity = (idVal <> "" Or wbsVal <> "")
+
+End Function
 Private Function BuildSummaryWbsMap( _
     ByRef arrWBS As Variant, _
     ByVal mapWBS As Object) As Object
@@ -1187,5 +1201,7 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
     End With
 
 End Sub
+
+
 
 
