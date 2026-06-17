@@ -14,11 +14,38 @@ Option Explicit
 ' - aucun MsgBox direct dans ce module
 '=====================================================
 
-Private Sub RunButtons_ShowConsoleError(ByVal procName As String)
+Private Sub RunButtons_ShowDeferredWorkflowConsole( _
+    Optional ByVal extraProcName As String = "")
 
-    Dim consoleMessages As Collection
+    Dim deferredMessages As Collection
+    Dim finalDisplayStarted As Boolean
 
-    Set consoleMessages = New Collection
+    On Error GoTo SafeExit
+
+    Set deferredMessages = New Collection
+    DrainPlanningWorkflowDeferredDisplayMessages deferredMessages
+
+    If Trim$(extraProcName) <> "" Then
+        RunButtons_AddConsoleError deferredMessages, extraProcName
+    End If
+
+    If deferredMessages.Count > 0 Then
+        BeginPlanningWorkflowFinalDisplay
+        finalDisplayStarted = True
+        CalcBridge_ShowPlanningConsole deferredMessages
+    End If
+
+SafeExit:
+    If finalDisplayStarted Then EndPlanningWorkflowFinalDisplay
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+
+End Sub
+
+Private Sub RunButtons_AddConsoleError( _
+    ByVal consoleMessages As Collection, _
+    ByVal procName As String)
+
+    If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, _
         "STOP", _
@@ -29,6 +56,14 @@ Private Sub RunButtons_ShowConsoleError(ByVal procName As String)
         "VBA error in " & procName & vbCrLf & _
         "-> check the last edited block in mod_RunButtons"
 
+End Sub
+
+Private Sub RunButtons_ShowConsoleError(ByVal procName As String)
+
+    Dim consoleMessages As Collection
+
+    Set consoleMessages = New Collection
+    RunButtons_AddConsoleError consoleMessages, procName
     CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
@@ -174,6 +209,7 @@ Public Sub Run_Full_Update()
 
     Dim workflowStarted As Boolean
     Dim wsCaller As Worksheet
+    Dim deferredConsoleShown As Boolean
 
     On Error GoTo SafeExit
 
@@ -201,13 +237,24 @@ CleanExit:
     On Error Resume Next
     If Not wsCaller Is Nothing Then wsCaller.Activate
     On Error GoTo 0
+    If workflowStarted And Not deferredConsoleShown Then RunButtons_ShowDeferredWorkflowConsole
     If workflowStarted Then EndPlanningWorkflow
     Exit Sub
 
 SafeExit:
-    RunButtons_ShowConsoleError "Run_Full_Update"
+    If workflowStarted Then
+        RunButtons_ShowDeferredWorkflowConsole "Run_Full_Update"
+        deferredConsoleShown = True
+    Else
+        RunButtons_ShowConsoleError "Run_Full_Update"
+    End If
     Resume CleanExit
 
 End Sub
+
+
+
+
+
 
 

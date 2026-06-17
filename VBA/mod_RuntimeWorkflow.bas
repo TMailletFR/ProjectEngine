@@ -17,6 +17,7 @@ Private gPlanningWorkflowSequence As Long
 Private gPlanningWorkflowDisplayOwnerId As String
 Private gPlanningWorkflowDeferredDisplayMessages As Collection
 Private gPlanningWorkflowStopOnlyDisplayDepth As Long
+Private gPlanningWorkflowFinalDisplayDepth As Long
 
 Public Function BeginPlanningWorkflow(Optional ByVal sourceProcedure As String = "") As String
 
@@ -91,6 +92,7 @@ Public Sub ClearPlanningWorkflowContext()
     gPlanningWorkflowDisplayOwnerId = vbNullString
     Set gPlanningWorkflowDeferredDisplayMessages = New Collection
     gPlanningWorkflowStopOnlyDisplayDepth = 0
+    gPlanningWorkflowFinalDisplayDepth = 0
 
 End Sub
 
@@ -111,6 +113,26 @@ End Sub
 Public Function IsPlanningWorkflowStopOnlyDisplay() As Boolean
 
     IsPlanningWorkflowStopOnlyDisplay = (gPlanningWorkflowStopOnlyDisplayDepth > 0)
+
+End Function
+
+Public Sub BeginPlanningWorkflowFinalDisplay()
+
+    gPlanningWorkflowFinalDisplayDepth = gPlanningWorkflowFinalDisplayDepth + 1
+
+End Sub
+
+Public Sub EndPlanningWorkflowFinalDisplay()
+
+    If gPlanningWorkflowFinalDisplayDepth > 0 Then
+        gPlanningWorkflowFinalDisplayDepth = gPlanningWorkflowFinalDisplayDepth - 1
+    End If
+
+End Sub
+
+Public Function IsPlanningWorkflowFinalDisplay() As Boolean
+
+    IsPlanningWorkflowFinalDisplay = (gPlanningWorkflowFinalDisplayDepth > 0)
 
 End Function
 
@@ -256,16 +278,20 @@ Public Function ShouldDeferCurrentWorkflowDisplayToRoot(Optional ByVal sourcePro
 
     Set ctx = GetCurrentPlanningWorkflow()
     If ctx Is Nothing Then Exit Function
-    If IsRootPlanningWorkflow() Then Exit Function
 
     Set rootCtx = GetRootPlanningWorkflow()
     If rootCtx Is Nothing Then Exit Function
+    If IsPlanningWorkflowFinalDisplay() Then Exit Function
 
     rootSource = UCase$(Trim$(CStr(rootCtx("SourceProcedure"))))
-    ShouldDeferCurrentWorkflowDisplayToRoot = (rootSource = "RUN_GANTT_LOCK_CHANGES")
+    If rootSource = "RUN_FULL_UPDATE" Then
+        ShouldDeferCurrentWorkflowDisplayToRoot = True
+    Else
+        ShouldDeferCurrentWorkflowDisplayToRoot = (Not IsRootPlanningWorkflow() And rootSource = "RUN_GANTT_LOCK_CHANGES")
+    End If
 
     If ShouldDeferCurrentWorkflowDisplayToRoot Then
-        TracePlanningWorkflow "Child workflow display deferred to root. Source=" & _
+        TracePlanningWorkflow "Workflow display deferred to root. Source=" & _
             Trim$(sourceProcedure) & " WorkflowId=" & CStr(ctx("WorkflowId")) & _
             " RootWorkflowId=" & CStr(ctx("RootWorkflowId"))
     End If
@@ -475,3 +501,7 @@ Private Function CleanPlanningWorkflowIdPart(ByVal value As String) As String
     CleanPlanningWorkflowIdPart = result
 
 End Function
+
+
+
+

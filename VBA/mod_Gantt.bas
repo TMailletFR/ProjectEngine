@@ -567,9 +567,7 @@ Private Sub RunGanttRefreshCore( _
         PrepareGanttFullLayout wsGantt, dataArr, mapWBS, hasChildren, calcDrivingMap, rowCount, projectStart, totalDays, testInputMap, isNewSheet, activateGantt
     End If
 
-    If needsVisualLayoutStabilization Then
-        EnsureGanttVisualLayoutReadyBeforeDrawing wsGantt
-    ElseIf activateGantt Then
+    If Not displayOnly Then
         EnsureGanttVisualLayoutReadyBeforeDrawing wsGantt
     End If
 
@@ -1496,27 +1494,22 @@ Private Sub DrawGanttShapes( _
 
         If isParent Then
 
-            DrawSummaryBar ws, ganttRow, projectStart, renderStartVal, renderFinishVal, isCritical, totalDays, _
+            DrawSummaryBar ws, ganttRow, projectStart, rawStartVal, rawFinishVal, isCritical, totalDays, _
                 "SUM_" & CStr(r), Trim$(CStr(dataArr(r, mapWBS("Task Name")))), hasDelta, _
                 ParentIsCompleteFromMap(wbs, parentCompleteMap)
 
         ElseIf isMilestone Then
 
-            DrawMilestone ws, ganttRow, projectStart, renderStartVal, progressVal, isCritical, totalDays, "MS_" & CStr(r), hasDelta
+            DrawMilestone ws, ganttRow, projectStart, rawStartVal, progressVal, isCritical, totalDays, "MS_" & CStr(r), hasDelta
 
-        ElseIf rawDurationDays <= 1 Then
+        ElseIf ShouldDrawCompactTaskMarker(ws, ganttRow, projectStart, rawStartVal, rawFinishVal, rawDurationDays, isLoE) Then
 
-            DrawSingleWeekTask ws, ganttRow, projectStart, renderStartVal, progressVal, isCritical, totalDays, _
-                "TASK_" & CStr(r), hasDelta
-
-        ElseIf IsAggregatedScaleMode() And IsTaskContainedInSingleScalePeriod(rawStartVal, rawFinishVal) Then
-
-            DrawSingleWeekTask ws, ganttRow, projectStart, renderStartVal, progressVal, isCritical, totalDays, _
-                "TASK_" & CStr(r), hasDelta
+            DrawSingleWeekTask ws, ganttRow, projectStart, rawStartVal, progressVal, isCritical, totalDays, _
+                "TASK_" & CStr(r), hasDelta, rawFinishVal
 
         Else
 
-            DrawTaskBar ws, ganttRow, projectStart, renderStartVal, renderFinishVal, progressVal, isCritical, totalDays, _
+            DrawTaskBar ws, ganttRow, projectStart, rawStartVal, rawFinishVal, progressVal, isCritical, totalDays, _
                 "TASK_" & CStr(r), hasDelta, rawStartVal, rawFinishVal, isLoE
 
         End If
@@ -1526,6 +1519,33 @@ NextShape:
 
 End Sub
 
+Private Function ShouldDrawCompactTaskMarker( _
+    ByVal ws As Worksheet, _
+    ByVal ganttRow As Long, _
+    ByVal projectStart As Variant, _
+    ByVal startVal As Variant, _
+    ByVal finishVal As Variant, _
+    ByVal rawDurationDays As Long, _
+    ByVal isLoE As Boolean) As Boolean
+
+    Dim visualWidth As Double
+    Dim minimumReadableWidth As Double
+
+    If isLoE Then Exit Function
+    If Not HasValue(startVal) Then Exit Function
+    If Not HasValue(finishVal) Then Exit Function
+
+    If rawDurationDays <= 1 Then
+        ShouldDrawCompactTaskMarker = True
+        Exit Function
+    End If
+
+    visualWidth = TimelineWidth(ws, projectStart, startVal, finishVal)
+    minimumReadableWidth = GetGanttBarHeight(ws, ganttRow)
+
+    ShouldDrawCompactTaskMarker = (visualWidth > 0 And visualWidth < minimumReadableWidth)
+
+End Function
 Private Sub DrawTaskBar( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -1649,17 +1669,106 @@ Private Sub DrawTaskBar( _
 
 End Sub
 
+Private Function TimelineDateStartX( _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal taskDate As Variant) As Double
+
+    TimelineDateStartX = TimelineDateX(ws, projectStart, taskDate, False)
+
+End Function
+
+Private Function TimelineDateFinishX( _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal taskDate As Variant) As Double
+
+    TimelineDateFinishX = TimelineDateX(ws, projectStart, taskDate, True)
+
+End Function
+
+Private Function TimelineDateRangeMidX( _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal startVal As Variant, _
+    ByVal finishVal As Variant) As Double
+
+    Dim leftX As Double
+    Dim rightX As Double
+
+    If Not HasValue(startVal) Then Exit Function
+    If Not HasValue(finishVal) Then Exit Function
+
+    leftX = TimelineDateStartX(ws, projectStart, startVal)
+    rightX = TimelineDateFinishX(ws, projectStart, finishVal)
+
+    If rightX <= leftX Then Exit Function
+
+    TimelineDateRangeMidX = leftX + ((rightX - leftX) / 2)
+
+End Function
+
+Private Function TimelineDateX( _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal taskDate As Variant, _
+    ByVal isFinishSide As Boolean) As Double
+
+    Dim targetCol As Long
+    Dim cellLeft As Double
+    Dim cellWidth As Double
+    Dim dateVal As Date
+    Dim periodStart As Date
+    Dim periodDays As Long
+    Dim offsetDays As Double
+
+    If ws Is Nothing Then Exit Function
+    If Not HasValue(projectStart) Then Exit Function
+    If Not HasValue(taskDate) Then Exit Function
+
+    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, taskDate)
+    If targetCol < FIRST_TIMELINE_COL Then Exit Function
+
+    cellLeft = ws.Cells(HEADER_ROW_2, targetCol).Left
+    cellWidth = ws.Cells(HEADER_ROW_2, targetCol).Width
+
+    If Not IsAggregatedScaleMode() Then
+        If isFinishSide Then
+            TimelineDateX = cellLeft + cellWidth
+        Else
+            TimelineDateX = cellLeft
+        End If
+        Exit Function
+    End If
+
+    dateVal = CDate(taskDate)
+
+    If IsWeekScaleMode() Then
+        periodStart = GetIsoWeekMonday(dateVal)
+        periodDays = 7
+    ElseIf IsMonthScaleMode() Then
+        periodStart = GetMonthStart(dateVal)
+        periodDays = Day(DateSerial(Year(periodStart), Month(periodStart) + 1, 0))
+    Else
+        periodStart = dateVal
+        periodDays = 1
+    End If
+
+    offsetDays = CDbl(DateDiff("d", periodStart, dateVal))
+    If isFinishSide Then offsetDays = offsetDays + 1
+
+    If offsetDays < 0 Then offsetDays = 0
+    If offsetDays > periodDays Then offsetDays = periodDays
+
+    TimelineDateX = cellLeft + (cellWidth * (offsetDays / periodDays))
+
+End Function
 Private Function TimelineRightAfterFinish( _
     ByVal ws As Worksheet, _
     ByVal projectStart As Variant, _
     ByVal taskFinish As Variant) As Double
 
-    Dim targetCol As Long
-
-    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, taskFinish)
-    If targetCol < FIRST_TIMELINE_COL Then Exit Function
-
-    TimelineRightAfterFinish = ws.Cells(HEADER_ROW_2, targetCol).Left + ws.Cells(HEADER_ROW_2, targetCol).Width
+    TimelineRightAfterFinish = TimelineDateFinishX(ws, projectStart, taskFinish)
 
 End Function
 
@@ -2106,10 +2215,8 @@ End Sub
 Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal totalDays As Long, ByVal rowCount As Long)
 
     Dim todayVal As Date
-    Dim renderToday As Date
     Dim projectFinish As Date
 
-    Dim targetCol As Long
     Dim x As Double
     Dim yTop As Double
     Dim yBottom As Double
@@ -2121,20 +2228,11 @@ Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, 
     If rowCount < 1 Then Exit Sub
 
     todayVal = Date
-
-    If IsAggregatedScaleMode() Then
-        renderToday = GetScalePeriodStart(todayVal)
-    Else
-        renderToday = todayVal
-    End If
     projectFinish = GetScaleProjectFinishFromSlots(projectStart, totalDays)
 
-    If renderToday < CDate(projectStart) Or renderToday > projectFinish Then Exit Sub
+    If todayVal < CDate(projectStart) Or todayVal > projectFinish Then Exit Sub
 
-    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, renderToday)
-    If targetCol < FIRST_TIMELINE_COL Then Exit Sub
-
-    x = ws.Cells(HEADER_ROW_2, targetCol).Left + (ws.Cells(HEADER_ROW_2, targetCol).Width / 2)
+    x = GetTaskMidX(ws, projectStart, todayVal)
 
     yTop = ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL).Top
     yBottom = GetGanttRowTop(ws, FIRST_TASK_ROW + rowCount - 1) + _
@@ -2197,12 +2295,7 @@ Private Function TimelineLeft( _
     ByVal projectStart As Variant, _
     ByVal taskStart As Variant) As Double
 
-    Dim targetCol As Long
-
-    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, taskStart)
-    If targetCol < FIRST_TIMELINE_COL Then Exit Function
-
-    TimelineLeft = ws.Cells(HEADER_ROW_2, targetCol).Left
+    TimelineLeft = TimelineDateStartX(ws, projectStart, taskStart)
 
 End Function
 
@@ -4361,7 +4454,8 @@ Private Sub DrawSingleWeekTask( _
     ByVal isCritical As Boolean, _
     ByVal totalDays As Long, _
     ByVal shapeKey As String, _
-    ByVal hasDelta As Boolean)
+    ByVal hasDelta As Boolean, _
+    Optional ByVal finishVal As Variant)
 
     Dim leftPos As Double
     Dim topPos As Double
@@ -4369,23 +4463,29 @@ Private Sub DrawSingleWeekTask( _
     Dim shp As Shape
     Dim shpProgress As Shape
     Dim targetCol As Long
-    Dim cellLeft As Double
     Dim cellWidth As Double
     Dim fillColor As Long
     Dim innerSize As Double
+    Dim markerCenterX As Double
+    Dim markerFinishVal As Variant
 
     If Not HasValue(startVal) Then Exit Sub
+
+    markerFinishVal = finishVal
+    If Not HasValue(markerFinishVal) Then markerFinishVal = startVal
 
     targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, startVal)
     If targetCol < FIRST_TIMELINE_COL Then Exit Sub
 
-    cellLeft = ws.Cells(HEADER_ROW_2, targetCol).Left
     cellWidth = ws.Cells(HEADER_ROW_2, targetCol).Width
 
-    sizeVal = WorksheetFunction.Min(ws.rows(ganttRow).Height - 6, cellWidth - 6)
+    sizeVal = GetGanttCompactTaskMarkerSize(ws, ganttRow, cellWidth)
     If sizeVal < 2 Then sizeVal = 2
 
-    leftPos = cellLeft + ((cellWidth - sizeVal) / 2)
+    markerCenterX = TimelineDateRangeMidX(ws, projectStart, startVal, markerFinishVal)
+    If markerCenterX <= 0 Then Exit Sub
+
+    leftPos = markerCenterX - (sizeVal / 2)
     topPos = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + ((ws.rows(ganttRow).Height - sizeVal) / 2)
 
     If progressVal >= 1 Then
@@ -4416,7 +4516,7 @@ Private Sub DrawSingleWeekTask( _
 
     If progressVal > 0 And progressVal < 1 Then
 
-        innerSize = sizeVal * 0.55
+        innerSize = sizeVal * 0.5
 
         Set shpProgress = ws.Shapes.AddShape( _
             msoShapeOval, _
@@ -4434,7 +4534,7 @@ Private Sub DrawSingleWeekTask( _
             .Width = innerSize
             .Height = innerSize
             .Line.Visible = msoFalse
-            .Fill.ForeColor.RGB = GetProgressFillColor(startVal, startVal, progressVal)
+            .Fill.ForeColor.RGB = GetProgressFillColor(startVal, markerFinishVal, progressVal)
             .Fill.Transparency = 0.15
         End With
 
@@ -4518,6 +4618,15 @@ Private Function GetGanttBarHeight(ByVal ws As Worksheet, ByVal ganttRow As Long
 
 End Function
 
+Private Function GetGanttCompactTaskMarkerSize( _
+    ByVal ws As Worksheet, _
+    ByVal ganttRow As Long, _
+    ByVal cellWidth As Double) As Double
+
+    GetGanttCompactTaskMarkerSize = WorksheetFunction.Min(GetGanttBarHeight(ws, ganttRow), cellWidth - 6)
+    If GetGanttCompactTaskMarkerSize < 2 Then GetGanttCompactTaskMarkerSize = 2
+
+End Function
 Private Function GetGanttMilestoneSize(ByVal ws As Worksheet, ByVal ganttRow As Long) As Double
 
     GetGanttMilestoneSize = GetGanttRowHeight(ws, ganttRow) - 6
@@ -4989,12 +5098,7 @@ Private Function GetTaskMidX( _
     ByVal projectStart As Variant, _
     ByVal taskDate As Variant) As Double
 
-    Dim targetCol As Long
-
-    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, taskDate)
-    If targetCol < FIRST_TIMELINE_COL Then Exit Function
-
-    GetTaskMidX = ws.Cells(HEADER_ROW_2, targetCol).Left + (ws.Cells(HEADER_ROW_2, targetCol).Width / 2)
+    GetTaskMidX = TimelineDateRangeMidX(ws, projectStart, taskDate, taskDate)
 
 End Function
 
