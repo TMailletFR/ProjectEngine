@@ -64,7 +64,10 @@ Option Explicit
 '
 ' ============================================================
 
+
 Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collection)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim tblWBS As ListObject
@@ -85,6 +88,8 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
     Dim outDV() As Variant
 
     Dim requiredCols As Variant
+
+    Set perfScope = Profiler_BeginScope("Compute_And_Push_Variances", "Variances")
 
     On Error GoTo ErrHandler
 

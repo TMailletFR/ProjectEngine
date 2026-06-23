@@ -71,7 +71,12 @@ Public Function GanttLive_GetPendingRenderMode() As String
     GanttLive_GetPendingRenderMode = UCase$(Trim$(gPendingRenderMode))
 End Function
 
-Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
+Public Sub Run_Gantt_Test_Engine( _
+    Optional ByVal silentMode As Boolean = False, _
+    Optional ByRef transactionSucceeded As Variant, _
+    Optional ByRef transactionMessages As Variant, _
+    Optional ByRef transactionGanttRebuilt As Variant, _
+    Optional ByVal recordSilentMessages As Boolean = True)
 
     Dim wsGantt As Worksheet
     Dim wsWBS As Worksheet
@@ -131,6 +136,8 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
 
     Dim consoleMessages As Collection
     Dim workflowStarted As Boolean
+    Dim testSucceeded As Boolean
+    Dim ganttRebuilt As Boolean
 
     On Error GoTo SafeExit
 
@@ -275,7 +282,7 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
     If Not Run_Gantt_Test_Backend(tblTest, consoleMessages) Then
         GanttLive_AbortTestEngine wsGantt
         If silentMode Then
-            CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
+            If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
         Else
             CalcBridge_ShowPlanningConsole consoleMessages
         End If
@@ -285,9 +292,11 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
     hasRenderableDelta = GanttLive_HasAnyRenderableTestDelta(tblTest)
 
     GanttLive_ApplyTestRender wsGantt
+    testSucceeded = True
+    ganttRebuilt = True
 
     If silentMode Then
-        CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
+        If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
         GoTo CleanExit
     End If
 
@@ -316,10 +325,15 @@ Public Sub Run_Gantt_Test_Engine(Optional ByVal silentMode As Boolean = False)
     CalcBridge_ShowPlanningConsole consoleMessages
 
 CleanExit:
+    If Not IsMissing(transactionSucceeded) Then transactionSucceeded = testSucceeded
+    If Not IsMissing(transactionGanttRebuilt) Then transactionGanttRebuilt = ganttRebuilt
+    If Not IsMissing(transactionMessages) Then Set transactionMessages = consoleMessages
+
     If workflowStarted Then EndPlanningWorkflow
     Exit Sub
 
 SafeExit:
+    testSucceeded = False
     GanttLive_SafeExit_TestEngine
 
     If Err.Number <> 0 Then
@@ -328,15 +342,47 @@ SafeExit:
         GanttLive_AddVbaOrStructuredError consoleMessages, "Run_Gantt_Test_Engine", Err.Description
 
         If silentMode Then
-            CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
+            If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
         Else
             CalcBridge_ShowPlanningConsole consoleMessages
         End If
     End If
 
-    If workflowStarted Then EndPlanningWorkflow
+    GoTo CleanExit
 
 End Sub
+
+Public Function GanttLive_RunTestTransaction( _
+    ByRef consoleMessages As Collection, _
+    ByRef ganttRebuilt As Boolean) As Boolean
+
+    Dim transactionSucceeded As Variant
+    Dim transactionMessages As Variant
+    Dim transactionGanttRebuilt As Variant
+
+    Set consoleMessages = New Collection
+    ganttRebuilt = False
+
+    Run_Gantt_Test_Engine _
+        True, _
+        transactionSucceeded, _
+        transactionMessages, _
+        transactionGanttRebuilt, _
+        False
+
+    If IsObject(transactionMessages) Then
+        Set consoleMessages = transactionMessages
+    End If
+
+    If Not IsEmpty(transactionGanttRebuilt) Then
+        ganttRebuilt = CBool(transactionGanttRebuilt)
+    End If
+
+    If Not IsEmpty(transactionSucceeded) Then
+        GanttLive_RunTestTransaction = CBool(transactionSucceeded)
+    End If
+
+End Function
 
 Private Function GanttLive_HasAnyTestInput(ByVal tblTest As ListObject) As Boolean
 
@@ -1120,6 +1166,8 @@ End Function
 
 Public Function GanttLive_BuildTestByIdMap() As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim ws As Worksheet
     Dim tbl As ListObject
@@ -1127,6 +1175,8 @@ Public Function GanttLive_BuildTestByIdMap() As Object
     Dim arr As Variant
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("GanttLive_BuildTestByIdMap", "Excel Read")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -1166,6 +1216,8 @@ End Function
 
 Public Function GanttLive_BuildBaseByIdMap() As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim ws As Worksheet
     Dim tbl As ListObject
@@ -1173,6 +1225,8 @@ Public Function GanttLive_BuildBaseByIdMap() As Object
     Dim arr As Variant
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("GanttLive_BuildBaseByIdMap", "Excel Read")
 
     Set d = CreateObject("Scripting.Dictionary")
 

@@ -4,7 +4,10 @@ Option Explicit
 Private Const LOGIC_LINKS_TABLE_NAME As String = "tbl_LOGIC_LINKS"
 Private Const LOGIC_LINKS_FIRST_CELL As String = "Z1"
 
+
 Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -37,6 +40,8 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Dim calVal As String
 
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Sync_WBS_To_CALC", "Excel Table Sync")
 
     On Error GoTo SafeExit
 
@@ -353,11 +358,16 @@ SafeExit:
 
 End Sub
 
+
 Public Function Planning_WBSIsEmpty() As Boolean
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim tblWBS As ListObject
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("Planning_WBSIsEmpty", "Excel Read")
 
     On Error GoTo FailSafe
 
@@ -391,8 +401,12 @@ Private Function WBSRowHasTaskIdentity( _
     ByVal rowIndex As Long, _
     ByVal mapWBS As Object) As Boolean
 
+    Dim perfScope As clsPerfScope
+
     Dim idVal As String
     Dim wbsVal As String
+
+    Set perfScope = Profiler_BeginScope("WBSRowHasTaskIdentity", "Excel Cell Read")
 
     On Error GoTo SafeExit
 
@@ -845,7 +859,10 @@ SafeExit:
 
 End Function
 
+
 Public Sub Push_Calculated_Back_To_WBS()
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -877,6 +894,8 @@ Public Sub Push_Calculated_Back_To_WBS()
     Dim calcRow As Long
 
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Push_Calculated_Back_To_WBS", "Excel Table Write")
 
     On Error GoTo SafeExit
 
@@ -1077,54 +1096,52 @@ Private Sub ApplyWBSDateFormats(ByVal tblWBS As ListObject)
 
 End Sub
 
+
 Public Sub RebuildLogicLinksTable()
 
+    Dim perfScope As clsPerfScope
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
     Dim tblWBS As ListObject
     Dim tblLinks As ListObject
-
     Dim mapWBS As Object
     Dim wbsToId As Object
-
     Dim arr As Variant
     Dim r As Long
     Dim rowCount As Long
-
     Dim succId As String
     Dim succWBS As String
     Dim predText As String
-
     Dim linksOut As Collection
+    Dim allLinks As Collection
     Dim errText As String
     Dim linkRow As Object
-
     Dim outArr() As Variant
     Dim outCount As Long
     Dim i As Long
-    Dim writeRow As Long
-
     Dim consoleMessages As Collection
     Dim missingPredRefs As Collection
     Dim missingPredMessageFR As String
     Dim missingPredMessageEN As String
 
+    Set perfScope = Profiler_BeginScope("RebuildLogicLinksTable", "Excel Table Sync")
+
     On Error GoTo SafeExit
 
     Set consoleMessages = New Collection
     Set missingPredRefs = New Collection
+    Set allLinks = New Collection
 
     Application.ScreenUpdating = False
     Application.EnableEvents = False
 
     Set wsWBS = ThisWorkbook.Worksheets("WBS")
     Set wsCalc = ThisWorkbook.Worksheets("CALC")
-
     Set tblWBS = wsWBS.ListObjects("tbl_WBS")
     Set tblLinks = EnsureLogicLinksTable(wsCalc)
 
     If tblWBS.DataBodyRange Is Nothing Then
-        ClearLogicLinksTableRows tblLinks
+        If Not LogicLinksTableMatchesEmpty(tblLinks) Then ClearLogicLinksTableRows tblLinks
         GoTo SafeExit
     End If
 
@@ -1134,96 +1151,60 @@ Public Sub RebuildLogicLinksTable()
     Next i
 
     Set wbsToId = BuildWbsToIdMapFromTable(tblWBS, mapWBS)
-
     arr = tblWBS.DataBodyRange.value
     rowCount = UBound(arr, 1)
 
-    outCount = 0
-
     For r = 1 To rowCount
-
         succId = Trim$(CStr(arr(r, mapWBS("ID"))))
         succWBS = NormalizeWBS(CStr(arr(r, mapWBS("WBS"))))
         predText = Trim$(CStr(arr(r, mapWBS("Predecessors WBS"))))
 
         If succId <> "" And succWBS <> "" Then
-
             If Not ParsePredecessorsText(succId, succWBS, predText, wbsToId, linksOut, errText) Then
                 DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                    "Erreur lors de la reconstruction de tbl_LOGIC_LINKS." & vbCrLf & _
-                    "-> " & errText, _
-                    "Error while rebuilding tbl_LOGIC_LINKS." & vbCrLf & _
-                    "-> " & errText
+                    "Erreur lors de la reconstruction de tbl_LOGIC_LINKS." & vbCrLf & "-> " & errText, _
+                    "Error while rebuilding tbl_LOGIC_LINKS." & vbCrLf & "-> " & errText
                 GoTo SafeExit
             End If
 
             DataSync_CollectMissingPredecessorRefs linksOut, missingPredRefs
-
-            outCount = outCount + linksOut.Count
-
+            For i = 1 To linksOut.Count
+                allLinks.Add linksOut(i)
+            Next i
         End If
-
     Next r
 
     If missingPredRefs.Count > 0 Then
         DataSync_BuildMissingPredecessorMessages missingPredRefs, missingPredMessageFR, missingPredMessageEN
-
         If IsMacroRunActive() Then
             RequestMacroAbort "RebuildLogicLinksTable", missingPredMessageFR, missingPredMessageEN
         Else
             DataSync_AddConsoleMessage consoleMessages, "STOP", missingPredMessageFR, missingPredMessageEN
         End If
-
         GoTo SafeExit
     End If
 
+    outCount = allLinks.Count
     If outCount <= 0 Then
-        ClearLogicLinksTableRows tblLinks
+        If Not LogicLinksTableMatchesEmpty(tblLinks) Then ClearLogicLinksTableRows tblLinks
         GoTo SafeExit
     End If
 
     ReDim outArr(1 To outCount, 1 To 7)
+    For i = 1 To outCount
+        Set linkRow = allLinks(i)
+        outArr(i, 1) = CStr(linkRow("Succ ID"))
+        outArr(i, 2) = CStr(linkRow("Succ WBS"))
+        outArr(i, 3) = CStr(linkRow("Pred ID"))
+        outArr(i, 4) = CStr(linkRow("Pred WBS"))
+        outArr(i, 5) = CStr(linkRow("Link Type"))
+        outArr(i, 6) = CLng(linkRow("Lag"))
+        outArr(i, 7) = CStr(linkRow("Raw Token"))
+    Next i
 
-    writeRow = 0
-
-    For r = 1 To rowCount
-
-        succId = Trim$(CStr(arr(r, mapWBS("ID"))))
-        succWBS = NormalizeWBS(CStr(arr(r, mapWBS("WBS"))))
-        predText = Trim$(CStr(arr(r, mapWBS("Predecessors WBS"))))
-
-        If succId <> "" And succWBS <> "" Then
-
-            If Not ParsePredecessorsText(succId, succWBS, predText, wbsToId, linksOut, errText) Then
-                DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                    "Erreur lors de la reconstruction de tbl_LOGIC_LINKS." & vbCrLf & _
-                    "-> " & errText, _
-                    "Error while rebuilding tbl_LOGIC_LINKS." & vbCrLf & _
-                    "-> " & errText
-                GoTo SafeExit
-            End If
-
-            If linksOut.Count > 0 Then
-                For i = 1 To linksOut.Count
-                    Set linkRow = linksOut(i)
-
-                    writeRow = writeRow + 1
-
-                    outArr(writeRow, 1) = CStr(linkRow("Succ ID"))
-                    outArr(writeRow, 2) = CStr(linkRow("Succ WBS"))
-                    outArr(writeRow, 3) = CStr(linkRow("Pred ID"))
-                    outArr(writeRow, 4) = CStr(linkRow("Pred WBS"))
-                    outArr(writeRow, 5) = CStr(linkRow("Link Type"))
-                    outArr(writeRow, 6) = CLng(linkRow("Lag"))
-                    outArr(writeRow, 7) = CStr(linkRow("Raw Token"))
-                Next i
-            End If
-
-        End If
-
-    Next r
-
-    RewriteLogicLinksTable tblLinks, outArr, outCount
+    If Not LogicLinksTableMatchesOutput(tblLinks, outArr, outCount) Then
+        RewriteLogicLinksTable tblLinks, outArr, outCount
+    End If
 
 SafeExit:
     Application.EnableEvents = True
@@ -1236,17 +1217,19 @@ SafeExit:
             "VBA error in RebuildLogicLinksTable: " & Err.Description
     End If
 
-    If Not consoleMessages Is Nothing Then
-        CalcBridge_ShowPlanningConsole consoleMessages
-    End If
+    If Not consoleMessages Is Nothing Then CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
 
 Private Function EnsureLogicLinksTable(ByVal wsCalc As Worksheet) As ListObject
 
+    Dim perfScope As clsPerfScope
+
     Dim tbl As ListObject
     Dim headerRange As Range
     Dim fullRange As Range
+
+    Set perfScope = Profiler_BeginScope("EnsureLogicLinksTable", "Excel Infrastructure")
 
     On Error Resume Next
     Set tbl = wsCalc.ListObjects(LOGIC_LINKS_TABLE_NAME)
@@ -1285,62 +1268,115 @@ End Sub
 
 Private Sub ClearLogicLinksTableRows(ByVal tbl As ListObject)
 
-    Do While tbl.ListRows.Count > 1
-        tbl.ListRows(tbl.ListRows.Count).Delete
-    Loop
+    Dim perfScope As clsPerfScope
+    Dim targetRange As Range
 
-    If tbl.ListRows.Count = 1 Then
-        tbl.DataBodyRange.rows(1).ClearContents
-    End If
+    Set perfScope = Profiler_BeginScope("ClearLogicLinksTableRows", "Excel Table Resize")
+
+    If tbl Is Nothing Then Exit Sub
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
+
+    Set targetRange = tbl.HeaderRowRange.Cells(1, 1).Resize(2, tbl.ListColumns.Count)
+    If tbl.Range.Rows.Count <> 2 Then tbl.Resize targetRange
 
 End Sub
 
+Private Function LogicLinksTableMatchesEmpty(ByVal tbl As ListObject) As Boolean
+
+    Dim values As Variant
+    Dim c As Long
+
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then
+        LogicLinksTableMatchesEmpty = True
+        Exit Function
+    End If
+    If tbl.ListRows.Count <> 1 Then Exit Function
+
+    values = tbl.DataBodyRange.value
+    For c = 1 To tbl.ListColumns.Count
+        If Len(CStr(values(1, c))) > 0 Then Exit Function
+    Next c
+
+    LogicLinksTableMatchesEmpty = True
+
+End Function
+
+Private Function LogicLinksTableMatchesOutput( _
+    ByVal tbl As ListObject, _
+    ByRef outArr() As Variant, _
+    ByVal outCount As Long) As Boolean
+
+    Dim currentArr As Variant
+    Dim r As Long
+    Dim c As Long
+
+    If tbl Is Nothing Then Exit Function
+    If outCount <= 0 Then
+        LogicLinksTableMatchesOutput = LogicLinksTableMatchesEmpty(tbl)
+        Exit Function
+    End If
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If tbl.ListRows.Count <> outCount Then Exit Function
+
+    currentArr = tbl.DataBodyRange.value
+    For r = 1 To outCount
+        For c = 1 To 7
+            If c = 6 Then
+                If Not IsNumeric(currentArr(r, c)) Then Exit Function
+                If CLng(currentArr(r, c)) <> CLng(outArr(r, c)) Then Exit Function
+            ElseIf StrComp(CStr(currentArr(r, c)), CStr(outArr(r, c)), vbBinaryCompare) <> 0 Then
+                Exit Function
+            End If
+        Next c
+        For c = 8 To tbl.ListColumns.Count
+            If Len(CStr(currentArr(r, c))) > 0 Then Exit Function
+        Next c
+    Next r
+
+    LogicLinksTableMatchesOutput = True
+
+End Function
 
 Private Sub RewriteLogicLinksTable( _
     ByVal tbl As ListObject, _
     ByRef outArr() As Variant, _
     ByVal outCount As Long)
 
+    Dim perfScope As clsPerfScope
     Dim targetRows As Long
-    Dim currentRows As Long
     Dim targetRange As Range
 
-    ClearLogicLinksTableRows tbl
+    Set perfScope = Profiler_BeginScope("RewriteLogicLinksTable", "Excel Table Write")
 
-    If outCount <= 0 Then Exit Sub
-
-    currentRows = tbl.ListRows.Count
+    If tbl Is Nothing Then Exit Sub
     targetRows = outCount
+    If targetRows < 1 Then targetRows = 1
 
-    If currentRows < targetRows Then
-        Do While tbl.ListRows.Count < targetRows
-            tbl.ListRows.Add
-        Loop
-    ElseIf currentRows > targetRows Then
-        Do While tbl.ListRows.Count > targetRows
-            tbl.ListRows(tbl.ListRows.Count).Delete
-        Loop
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
+    Set targetRange = tbl.HeaderRowRange.Cells(1, 1).Resize(targetRows + 1, tbl.ListColumns.Count)
+    If tbl.Range.Rows.Count <> targetRows + 1 Then tbl.Resize targetRange
+
+    If outCount > 0 Then
+        Set targetRange = tbl.DataBodyRange.Resize(outCount, 7)
+        targetRange.Columns(1).NumberFormat = "@"
+        targetRange.Columns(2).NumberFormat = "@"
+        targetRange.Columns(3).NumberFormat = "@"
+        targetRange.Columns(4).NumberFormat = "@"
+        targetRange.Columns(5).NumberFormat = "@"
+        targetRange.Columns(7).NumberFormat = "@"
+        targetRange.Columns(6).NumberFormat = "0"
+        targetRange.value = outArr
+        ApplyLogicLinksTableFormats tbl
     End If
-
-    Set targetRange = tbl.DataBodyRange.Resize(targetRows, 7)
-
-    ' Force text format BEFORE writing values
-    targetRange.Columns(1).NumberFormat = "@"
-    targetRange.Columns(2).NumberFormat = "@"
-    targetRange.Columns(3).NumberFormat = "@"
-    targetRange.Columns(4).NumberFormat = "@"
-    targetRange.Columns(5).NumberFormat = "@"
-    targetRange.Columns(7).NumberFormat = "@"
-    targetRange.Columns(6).NumberFormat = "0"
-
-    targetRange.value = outArr
-
-    ApplyLogicLinksTableFormats tbl
 
 End Sub
 
-
 Private Sub ApplyLogicLinksTableFormats(ByVal tbl As ListObject)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("ApplyLogicLinksTableFormats", "Excel Format")
 
     On Error Resume Next
 
@@ -1359,10 +1395,22 @@ End Sub
 
 Private Sub RestoreWBSFormulaColumns(ByVal tblWBS As ListObject)
 
+    Dim perfScope As clsPerfScope
     Dim consoleMessages As Collection
-    Dim r As Long
-    Dim hasIdentity As Boolean
     Dim authorizedFields As Variant
+    Dim dataArr As Variant
+    Dim hasIdentity() As Boolean
+    Dim rowCount As Long
+    Dim r As Long
+    Dim idColIndex As Long
+    Dim wbsColIndex As Long
+    Dim idVal As String
+    Dim wbsVal As String
+    Dim baselineFinishCol As ListColumn
+    Dim actualDurationCol As ListColumn
+    Dim calculatedDurationCol As ListColumn
+
+    Set perfScope = Profiler_BeginScope("RestoreWBSFormulaColumns", "Excel Formula Restore")
 
     On Error GoTo SafeExit
 
@@ -1371,51 +1419,48 @@ Private Sub RestoreWBSFormulaColumns(ByVal tblWBS As ListObject)
     If tblWBS Is Nothing Then Exit Sub
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
 
+    On Error Resume Next
+    idColIndex = tblWBS.ListColumns("ID").Index
+    wbsColIndex = tblWBS.ListColumns("WBS").Index
+    Set baselineFinishCol = tblWBS.ListColumns("Baseline Finish")
+    Set actualDurationCol = tblWBS.ListColumns("Actual Duration")
+    Set calculatedDurationCol = tblWBS.ListColumns("Calculated Duration")
+    Err.Clear
+    On Error GoTo SafeExit
+
+    dataArr = tblWBS.DataBodyRange.value
+    rowCount = UBound(dataArr, 1)
+    ReDim hasIdentity(1 To rowCount)
+
+    For r = 1 To rowCount
+        idVal = vbNullString
+        wbsVal = vbNullString
+        If idColIndex > 0 Then idVal = Trim$(CStr(dataArr(r, idColIndex)))
+        If wbsColIndex > 0 Then wbsVal = Trim$(CStr(dataArr(r, wbsColIndex)))
+        wbsVal = Replace$(wbsVal, ",", ".")
+        hasIdentity(r) = (idVal <> vbNullString Or wbsVal <> vbNullString)
+    Next r
+
     authorizedFields = Array("Baseline Finish", "Actual Duration", "Calculated Duration")
     BeginAuthorizedWBSWrite "RestoreWBSFormulaColumns", authorizedFields
 
-    For r = 1 To tblWBS.ListRows.Count
+    If Not baselineFinishCol Is Nothing Then
+        RestoreWBSFormulaColumnIfNeeded baselineFinishCol, hasIdentity, _
+            "=SI(OU([@[Baseline Start]]="""";[@[Baseline Duration]]="""");"""";[@[Baseline Start]]+[@[Baseline Duration]]-1)", _
+            "dd/mm/yyyy"
+    End If
 
-        hasIdentity = WBSRowHasTaskIdentity(tblWBS, r, Nothing)
+    If Not actualDurationCol Is Nothing Then
+        RestoreWBSFormulaColumnIfNeeded actualDurationCol, hasIdentity, _
+            "=SI(OU([@[Actual Start]]="""";[@[Actual Finish]]="""");"""";[@[Actual Finish]]-[@[Actual Start]]+1)", _
+            "0"
+    End If
 
-        If TableHasColumn(tblWBS, "Baseline Finish") Then
-            With tblWBS.ListColumns("Baseline Finish").DataBodyRange.Cells(r, 1)
-                If hasIdentity Then
-                    .FormulaLocal = "=SI(OU([@[Baseline Start]]="""";[@[Baseline Duration]]="""");"""";[@[Baseline Start]]+[@[Baseline Duration]]-1)"
-                Else
-                    .ClearContents
-                End If
-            End With
-        End If
-
-        If TableHasColumn(tblWBS, "Actual Duration") Then
-            With tblWBS.ListColumns("Actual Duration").DataBodyRange.Cells(r, 1)
-                If hasIdentity Then
-                    .FormulaLocal = "=SI(OU([@[Actual Start]]="""";[@[Actual Finish]]="""");"""";[@[Actual Finish]]-[@[Actual Start]]+1)"
-                Else
-                    .ClearContents
-                End If
-            End With
-        End If
-
-        If TableHasColumn(tblWBS, "Calculated Duration") Then
-            With tblWBS.ListColumns("Calculated Duration").DataBodyRange.Cells(r, 1)
-                If hasIdentity Then
-                    .FormulaLocal = "=SI(OU([@[Calculated Start]]="""";[@[Calculated Finish]]="""");"""";[@[Calculated Finish]]-[@[Calculated Start]]+1)"
-                Else
-                    .ClearContents
-                End If
-            End With
-        End If
-
-    Next r
-
-    If TableHasColumn(tblWBS, "Baseline Finish") Then _
-        tblWBS.ListColumns("Baseline Finish").DataBodyRange.NumberFormat = "dd/mm/yyyy"
-    If TableHasColumn(tblWBS, "Actual Duration") Then _
-        tblWBS.ListColumns("Actual Duration").DataBodyRange.NumberFormat = "0"
-    If TableHasColumn(tblWBS, "Calculated Duration") Then _
-        tblWBS.ListColumns("Calculated Duration").DataBodyRange.NumberFormat = "0"
+    If Not calculatedDurationCol Is Nothing Then
+        RestoreWBSFormulaColumnIfNeeded calculatedDurationCol, hasIdentity, _
+            "=SI(OU([@[Calculated Start]]="""";[@[Calculated Finish]]="""");"""";[@[Calculated Finish]]-[@[Calculated Start]]+1)", _
+            "0"
+    End If
 
 SafeExit:
     EndAuthorizedWBSWrite
@@ -1430,9 +1475,70 @@ SafeExit:
 
 End Sub
 
+Private Sub RestoreWBSFormulaColumnIfNeeded( _
+    ByVal targetColumn As ListColumn, _
+    ByRef hasIdentity() As Boolean, _
+    ByVal expectedFormula As String, _
+    ByVal expectedNumberFormat As String)
+
+    Dim targetRange As Range
+    Dim currentFormulas As Variant
+    Dim outputFormulas() As Variant
+    Dim currentValue As Variant
+    Dim expectedValue As String
+    Dim currentFormat As Variant
+    Dim rowCount As Long
+    Dim r As Long
+    Dim needsWrite As Boolean
+
+    If targetColumn Is Nothing Then Exit Sub
+    Set targetRange = targetColumn.DataBodyRange
+    If targetRange Is Nothing Then Exit Sub
+
+    rowCount = targetRange.Rows.Count
+    currentFormulas = targetRange.FormulaLocal
+    ReDim outputFormulas(1 To rowCount, 1 To 1)
+
+    For r = 1 To rowCount
+        If hasIdentity(r) Then
+            expectedValue = expectedFormula
+        Else
+            expectedValue = vbNullString
+        End If
+
+        outputFormulas(r, 1) = expectedValue
+
+        If rowCount = 1 And Not IsArray(currentFormulas) Then
+            currentValue = currentFormulas
+        Else
+            currentValue = currentFormulas(r, 1)
+        End If
+
+        If IsError(currentValue) Or IsNull(currentValue) Then
+            needsWrite = True
+        ElseIf StrComp(CStr(currentValue), expectedValue, vbTextCompare) <> 0 Then
+            needsWrite = True
+        End If
+    Next r
+
+    If needsWrite Then targetRange.FormulaLocal = outputFormulas
+
+    currentFormat = targetRange.NumberFormat
+    If IsNull(currentFormat) Then
+        targetRange.NumberFormat = expectedNumberFormat
+    ElseIf StrComp(CStr(currentFormat), expectedNumberFormat, vbTextCompare) <> 0 Then
+        targetRange.NumberFormat = expectedNumberFormat
+    End If
+
+End Sub
+
 Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
+    Dim perfScope As clsPerfScope
+
     Dim col As ListColumn
+
+    Set perfScope = Profiler_BeginScope("TableHasColumn", "Excel Metadata")
 
     On Error Resume Next
     Set col = tbl.ListColumns(columnName)
@@ -1467,10 +1573,14 @@ End Function
 
 Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
+    Dim perfScope As clsPerfScope
+
     Dim rng As Range
     Dim cell As Range
     Dim normalizedValue As String
     Dim rowIndex As Long
+
+    Set perfScope = Profiler_BeginScope("EnsureWBSTaskTypeInputSetup", "Excel Validation")
 
     If tblWBS Is Nothing Then Exit Sub
 
@@ -1527,8 +1637,12 @@ Private Sub EnsureSummaryDisplayColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
 
+    Dim perfScope As clsPerfScope
+
     Dim newCol As ListColumn
     Dim targetIndex As Long
+
+    Set perfScope = Profiler_BeginScope("EnsureSummaryDisplayColumnExists", "Excel Infrastructure")
 
     If Not tblWBS Is Nothing Then
         If Not TableHasColumn(tblWBS, "S") Then
@@ -1636,9 +1750,13 @@ Private Sub NormalizeWBSSummaryDisplayValues( _
     ByVal mapWBS As Object, _
     ByVal summaryWbsByWbs As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim r As Long
     Dim cell As Range
     Dim normalizedValue As String
+
+    Set perfScope = Profiler_BeginScope("NormalizeWBSSummaryDisplayValues", "Excel Cell Write")
 
     If tblWBS Is Nothing Then Exit Sub
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
@@ -1661,10 +1779,14 @@ Private Sub NormalizeWBSSummaryDisplayValues( _
 End Sub
 Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
 
+    Dim perfScope As clsPerfScope
+
     Dim rng As Range
     Dim cell As Range
     Dim normalizedValue As String
     Dim newCol As ListColumn
+
+    Set perfScope = Profiler_BeginScope("EnsureWBSCalendarInputSetup", "Excel Validation")
 
     If tblWBS Is Nothing Then Exit Sub
 
@@ -1708,10 +1830,14 @@ Private Function BuildWBSSummaryWbsLookup( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim summaryWbs As Object
     Dim r As Long
     Dim wbsVal As String
     Dim parentWbs As String
+
+    Set perfScope = Profiler_BeginScope("BuildWBSSummaryWbsLookup", "Dictionary")
 
     Set summaryWbs = CreateObject("Scripting.Dictionary")
 
@@ -1782,10 +1908,14 @@ Private Sub NormalizeWBSCalendarValues( _
     ByVal mapWBS As Object, _
     ByVal summaryWbsByWbs As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim r As Long
     Dim cell As Range
     Dim normalizedValue As String
     Dim rowIndex As Long
+
+    Set perfScope = Profiler_BeginScope("NormalizeWBSCalendarValues", "Excel Cell Write")
 
     If tblWBS Is Nothing Then Exit Sub
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub

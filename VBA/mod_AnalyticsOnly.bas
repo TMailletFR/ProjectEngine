@@ -181,7 +181,10 @@ Public Sub Refresh_Analytics_Toggle_Visual()
 SafeExit:
 End Sub
 
+
 Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Nothing)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim tblCalc As ListObject
@@ -189,6 +192,8 @@ Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Not
     Dim linksBySuccId As Object
     Dim localConsole As Collection
     Dim showLocalConsole As Boolean
+
+    Set perfScope = Profiler_BeginScope("Run_Analytics_Only", "Analytics")
 
     On Error GoTo ErrHandler
 

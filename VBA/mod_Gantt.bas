@@ -120,6 +120,7 @@ Private gShowConstraints As Boolean
 Private gShowConstraintsInitialized As Boolean
 Private gTimelineScaleMode As String
 Private gGanttUiStateBootstrapped As Boolean
+Private gGanttLanguage As String
 
 Public Sub SetGanttInternalWrite(ByVal internalWrite As Boolean)
     gGanttInternalWrite = internalWrite
@@ -138,6 +139,10 @@ Public Function GetGanttPreserveTestInputs() As Boolean
 End Function
 
 Private Sub EnsureGanttViewInitialized()
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("EnsureGanttViewInitialized", "Gantt State")
 
     BootstrapGanttUiStateFromSheet
 
@@ -363,10 +368,14 @@ End Function
 
 Private Function BuildGanttTestInputMap(ByVal ws As Worksheet) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim lastRow As Long
     Dim r As Long
     Dim wbsVal As String
+
+    Set perfScope = Profiler_BeginScope("BuildGanttTestInputMap", "Excel Read")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -395,10 +404,14 @@ End Function
 
 Private Sub RestoreGanttTestInputs(ByVal ws As Worksheet, ByVal testInputMap As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim lastRow As Long
     Dim r As Long
     Dim wbsVal As String
     Dim savedVals As Variant
+
+    Set perfScope = Profiler_BeginScope("RestoreGanttTestInputs", "Excel Cell Write")
 
     If testInputMap Is Nothing Then Exit Sub
 
@@ -427,7 +440,12 @@ Private Sub RestoreGanttTestInputs(ByVal ws As Worksheet, ByVal testInputMap As 
 
 End Sub
 
+
 Public Sub Refresh_Gantt(Optional ByVal isNewSheet As Boolean = False, Optional ByVal activateGantt As Boolean = True)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("Refresh_Gantt", "Workflow")
 
     RunGanttRefreshCore False, isNewSheet, activateGantt
 
@@ -439,10 +457,13 @@ Public Sub Refresh_Gantt_DisplayOnly()
 
 End Sub
 
+
 Private Sub RunGanttRefreshCore( _
     ByVal displayOnly As Boolean, _
     ByVal isNewSheet As Boolean, _
     ByVal activateGantt As Boolean)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -476,6 +497,8 @@ Private Sub RunGanttRefreshCore( _
     Dim wasGanttSheetCreated As Boolean
     Dim needsVisualLayoutStabilization As Boolean
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("RunGanttRefreshCore", "Gantt")
 
     On Error GoTo SafeExit
 
@@ -574,13 +597,15 @@ Private Sub RunGanttRefreshCore( _
     DrawGanttShapes wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, baseById, testById, isTestMode
     DrawDependencyLinks wsGantt, mapWBS, dataArr, hasChildren, rowById, projectStart, totalDays, baseById, testById, isTestMode
     DrawTodayLine wsGantt, projectStart, totalDays, rowCount
-    If renderConstraintMarkers Or renderDeadlineMarkers Then DrawConstraintMarkers_Gantt wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, constraintById, renderConstraintMarkers, renderDeadlineMarkers
     ApplyGanttUiState wsGantt
+    If renderConstraintMarkers Or renderDeadlineMarkers Then DrawConstraintMarkers_Gantt wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, constraintById, renderConstraintMarkers, renderDeadlineMarkers
 
 SafeExit:
     Application.EnableEvents = True
     Application.ScreenUpdating = True
     SetGanttInternalWrite False
+
+    If GanttDrag_IsWatching() Then GanttDrag_RebuildWatchMaps
 
     If Not GetGanttPreserveTestInputs() Then
         GanttLive_ClearTestRenderRequest
@@ -647,11 +672,16 @@ SafeExit:
 
 End Sub
 
+
 Private Function CountRenderableGanttRows(ByRef dataArr As Variant, ByVal mapWBS As Object) As Long
+
+    Dim perfScope As clsPerfScope
 
     Dim r As Long
     Dim rowCount As Long
     Dim summaryDisplayVal As String
+
+    Set perfScope = Profiler_BeginScope("CountRenderableGanttRows", "Gantt Scan")
 
     rowCount = UBound(dataArr, 1)
     EnsureGanttViewInitialized
@@ -692,6 +722,7 @@ Private Sub PrepareGanttDisplayOnlyLayout( _
 
 End Sub
 
+
 Private Sub PrepareGanttFullLayout( _
     ByVal wsGantt As Worksheet, _
     ByVal dataArr As Variant, _
@@ -705,8 +736,12 @@ Private Sub PrepareGanttFullLayout( _
     ByVal isNewSheet As Boolean, _
     ByVal activateGantt As Boolean)
 
+    Dim perfScope As clsPerfScope
+
     Dim ganttRow As Long
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("PrepareGanttFullLayout", "Gantt Layout")
 
     ClearGanttSheet wsGantt
     SetupStaticLayout wsGantt
@@ -731,6 +766,7 @@ Private Sub PrepareGanttFullLayout( _
 
 End Sub
 
+
 Private Sub ResolveDisplayedProjectRange( _
     ByVal dataArr As Variant, _
     ByVal mapWBS As Object, _
@@ -740,6 +776,10 @@ Private Sub ResolveDisplayedProjectRange( _
     ByVal isTestMode As Boolean, _
     ByRef projectStart As Variant, _
     ByRef projectFinish As Variant)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("ResolveDisplayedProjectRange", "Gantt Scan")
 
     GetProjectDisplayRange dataArr, mapWBS, hasChildren, baseById, testById, isTestMode, projectStart, projectFinish
 
@@ -764,10 +804,15 @@ Private Function IsManagedGanttShape(ByVal shapeName As String) As Boolean
 
 End Function
 
+
 Private Sub DeleteManagedGanttShapes(ByVal wsGantt As Worksheet)
+
+    Dim perfScope As clsPerfScope
 
     Dim shp As Shape
     Dim i As Long
+
+    Set perfScope = Profiler_BeginScope("DeleteManagedGanttShapes", "Shape Delete")
 
     For i = wsGantt.Shapes.Count To 1 Step -1
         Set shp = wsGantt.Shapes(i)
@@ -778,9 +823,14 @@ Private Sub DeleteManagedGanttShapes(ByVal wsGantt As Worksheet)
 
 End Sub
 
+
 Private Sub ClearGanttRightPaneOnly(ByVal wsGantt As Worksheet)
 
+    Dim perfScope As clsPerfScope
+
     Dim lastCol As Long
+
+    Set perfScope = Profiler_BeginScope("ClearGanttRightPaneOnly", "Excel Clear")
 
     lastCol = wsGantt.Cells(HEADER_ROW_2, wsGantt.Columns.Count).End(xlToLeft).Column
     If lastCol < FIRST_TIMELINE_COL Then lastCol = FIRST_TIMELINE_COL
@@ -811,10 +861,15 @@ Private Sub ClearGanttRightPaneOnly(ByVal wsGantt As Worksheet)
 
 End Sub
 
+
 Private Sub FinalizeGanttSheet(ByVal ws As Worksheet, ByVal totalDays As Long, ByVal rowCount As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim lastCol As Long
     Dim lastRow As Long
+
+    Set perfScope = Profiler_BeginScope("FinalizeGanttSheet", "Gantt Layout")
 
     lastCol = FIRST_TIMELINE_COL + totalDays - 1
     lastRow = FIRST_TASK_ROW + rowCount - 1
@@ -827,6 +882,10 @@ Private Sub FinalizeGanttSheet(ByVal ws As Worksheet, ByVal totalDays As Long, B
 End Sub
 
 Private Function EnsureGanttSheet(Optional ByRef isNewSheet As Boolean = False) As Worksheet
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("EnsureGanttSheet", "Gantt Layout")
 
     On Error Resume Next
     Set EnsureGanttSheet = ThisWorkbook.Worksheets(GANTT_SHEET)
@@ -842,10 +901,15 @@ Private Function EnsureGanttSheet(Optional ByRef isNewSheet As Boolean = False) 
 
 End Function
 
+
 Private Function BuildWBSColumnMap(ByVal tbl As ListObject) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim d As Object
     Dim i As Long
+
+    Set perfScope = Profiler_BeginScope("BuildWBSColumnMap", "Excel Metadata")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -885,7 +949,11 @@ End Sub
 
 Private Sub ClearGanttSheet(ByVal ws As Worksheet)
 
+    Dim perfScope As clsPerfScope
+
     Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("ClearGanttSheet", "Excel Clear")
 
     For Each shp In ws.Shapes
         shp.Delete
@@ -895,7 +963,134 @@ Private Sub ClearGanttSheet(ByVal ws As Worksheet)
 
 End Sub
 
+Public Sub Gantt_ApplyLanguage(Optional ByVal languageCode As String = "")
+
+    Dim ws As Worksheet
+    Dim oldEvents As Boolean
+    Dim oldInternalWrite As Boolean
+    Dim stateCaptured As Boolean
+    Dim errorDescription As String
+
+    On Error GoTo ErrHandler
+
+    oldEvents = Application.EnableEvents
+    oldInternalWrite = GetGanttInternalWrite()
+    stateCaptured = True
+    Application.EnableEvents = False
+    SetGanttInternalWrite True
+
+    Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
+
+    If Trim$(languageCode) <> "" Then
+        Gantt_SetLanguage languageCode
+    Else
+        EnsureGanttLanguageInitialized
+    End If
+
+    ws.Cells(TITLE_ROW, COL_WBS).value = Gantt_L("VUE GANTT", "GANTT VIEW")
+
+    ws.Range("A" & HEADER_ROW_2).value = "WBS"
+    ws.Range("B" & HEADER_ROW_2).value = Gantt_L("Nom tâche", "Task Name")
+    ws.Range("C" & HEADER_ROW_2).value = Gantt_L("Début", "Start")
+    ws.Range("D" & HEADER_ROW_2).value = Gantt_L("Fin", "Finish")
+    ws.Range("E" & HEADER_ROW_2).value = Gantt_L("Début test", "Test Start")
+    ws.Range("F" & HEADER_ROW_2).value = Gantt_L("Fin test", "Test Finish")
+    ws.Range("G" & HEADER_ROW_2).value = Gantt_L("Durée", "Duration")
+    ws.Range("H" & HEADER_ROW_2).value = "%"
+    ws.Range("I" & HEADER_ROW_2).value = Gantt_L("Test %", "Test %")
+    ws.Range("J" & HEADER_ROW_2).value = Gantt_L("Logique", "Logic")
+
+    Gantt_SetShapeText ws, BTN_SCENARIO_NAME, Gantt_L("Scénario", "Scenario")
+    Gantt_SetShapeText ws, BTN_TEST_NAME, Gantt_L("Test", "Test")
+    Gantt_SetShapeText ws, BTN_LOCK_NAME, Gantt_L("Verrou", "Lock")
+
+    Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, Gantt_L("Détail / Synthèse", "Detail / Summary")
+    Gantt_SetShapeText ws, BTN_SCALE_LEFT_NAME, Gantt_L("Jour / Sem. / Mois", "Day / Week / Month")
+    Gantt_SetShapeText ws, BTN_CONSTRAINT_LEFT_NAME, Gantt_L("Contrainte", "Constraint")
+    Gantt_SetShapeText ws, BTN_CP_LEFT_NAME, Gantt_L("N/A / Chem. Crit. / Le plus long", "None / Critical Path / Longest Path")
+    Gantt_SetShapeText ws, BTN_CP_MULTI_LEFT_NAME, Gantt_L("Unique / Multi-projet", "Single / Multiple Project")
+
+    GoTo SafeExit
+
+ErrHandler:
+    errorDescription = Err.Description
+
+SafeExit:
+    If stateCaptured Then
+        SetGanttInternalWrite oldInternalWrite
+        Application.EnableEvents = oldEvents
+    End If
+
+    If errorDescription <> "" Then
+        CalcBridge_ShowSingleConsoleMessage _
+            "STOP", _
+            "Erreur dans Gantt_ApplyLanguage : " & errorDescription, _
+            "Error in Gantt_ApplyLanguage: " & errorDescription
+    End If
+
+End Sub
+Public Sub Gantt_SetLanguage(ByVal languageCode As String)
+
+    Select Case UCase$(Trim$(languageCode))
+        Case "FR"
+            gGanttLanguage = "FR"
+        Case "EN"
+            gGanttLanguage = "EN"
+        Case Else
+            gGanttLanguage = "EN"
+    End Select
+
+End Sub
+
+Public Function Gantt_CurrentLanguage() As String
+
+    EnsureGanttLanguageInitialized
+    Gantt_CurrentLanguage = gGanttLanguage
+
+End Function
+
+Private Sub EnsureGanttLanguageInitialized()
+
+    If UCase$(Trim$(gGanttLanguage)) <> "FR" And UCase$(Trim$(gGanttLanguage)) <> "EN" Then
+        gGanttLanguage = "EN"
+    End If
+
+End Sub
+
+Private Function Gantt_L(ByVal frText As String, ByVal enText As String) As String
+
+    If Gantt_CurrentLanguage() = "FR" Then
+        Gantt_L = frText
+    Else
+        Gantt_L = enText
+    End If
+
+End Function
+
+Private Sub Gantt_SetShapeText( _
+    ByVal ws As Worksheet, _
+    ByVal shapeName As String, _
+    ByVal captionText As String)
+
+    Dim shp As Shape
+
+    If ws Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    Set shp = ws.Shapes(shapeName)
+    On Error GoTo 0
+
+    If shp Is Nothing Then Exit Sub
+
+    shp.TextFrame2.TextRange.Text = captionText
+
+End Sub
 Private Sub SetupStaticLayout(ByVal ws As Worksheet)
+
+    Dim perfScope As clsPerfScope
+
+
+    Set perfScope = Profiler_BeginScope("SetupStaticLayout", "Gantt Layout")
 
     ws.Cells(TITLE_ROW, COL_WBS).value = "GANTT VIEW"
 
@@ -936,6 +1131,8 @@ Private Sub SetupStaticLayout(ByVal ws As Worksheet)
     ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Interior.Color = RGB(217, 217, 217)
     ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Borders.LineStyle = xlContinuous
 
+    Gantt_ApplyLanguage
+
 End Sub
 
 Private Function IsWeekScaleMode() As Boolean
@@ -967,7 +1164,60 @@ End Function
 
 Private Function GetIsoWeekLabel(ByVal anyDate As Date) As String
 
-    GetIsoWeekLabel = "W" & Format$(WorksheetFunction.IsoWeekNum(anyDate), "00")
+    GetIsoWeekLabel = Gantt_FormatWeekLabel(anyDate)
+
+End Function
+
+Private Function Gantt_FormatWeekLabel(ByVal anyDate As Date) As String
+
+    Gantt_FormatWeekLabel = Gantt_L("S", "W") & Format$(WorksheetFunction.IsoWeekNum(anyDate), "00")
+
+End Function
+
+Private Function Gantt_FormatMonthShort(ByVal anyDate As Date) As String
+
+    Static frMonths(1 To 12) As String
+    Static enMonths(1 To 12) As String
+
+    If frMonths(1) = "" Then
+        frMonths(1) = "jan"
+        frMonths(2) = "fév"
+        frMonths(3) = "mar"
+        frMonths(4) = "avr"
+        frMonths(5) = "mai"
+        frMonths(6) = "juin"
+        frMonths(7) = "juil"
+        frMonths(8) = "août"
+        frMonths(9) = "sep"
+        frMonths(10) = "oct"
+        frMonths(11) = "nov"
+        frMonths(12) = "déc"
+
+        enMonths(1) = "Jan"
+        enMonths(2) = "Feb"
+        enMonths(3) = "Mar"
+        enMonths(4) = "Apr"
+        enMonths(5) = "May"
+        enMonths(6) = "Jun"
+        enMonths(7) = "Jul"
+        enMonths(8) = "Aug"
+        enMonths(9) = "Sep"
+        enMonths(10) = "Oct"
+        enMonths(11) = "Nov"
+        enMonths(12) = "Dec"
+    End If
+
+    If Gantt_CurrentLanguage() = "FR" Then
+        Gantt_FormatMonthShort = frMonths(Month(anyDate))
+    Else
+        Gantt_FormatMonthShort = enMonths(Month(anyDate))
+    End If
+
+End Function
+
+Private Function Gantt_FormatMonthYear(ByVal anyDate As Date) As String
+
+    Gantt_FormatMonthYear = Gantt_FormatMonthShort(anyDate) & " " & CStr(Year(anyDate))
 
 End Function
 
@@ -1144,7 +1394,12 @@ Private Function GetRenderFinishForCurrentScale(ByVal finishVal As Variant) As V
 
 End Function
 
+
 Private Sub BuildTimeline(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("BuildTimeline", "Timeline")
 
     Select Case gTimelineScaleMode
         Case GANTT_SCALE_WEEK
@@ -1157,12 +1412,17 @@ Private Sub BuildTimeline(ByVal ws As Worksheet, ByVal projectStart As Variant, 
 
 End Sub
 
+
 Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal totalDays As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim i As Long
     Dim currentDate As Date
     Dim currentMonth As Long
     Dim monthStartCol As Long
+
+    Set perfScope = Profiler_BeginScope("BuildTimeline_Day", "Timeline")
 
     currentMonth = 0
     monthStartCol = FIRST_TIMELINE_COL
@@ -1181,7 +1441,8 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
                     .Merge
                     .HorizontalAlignment = xlCenter
                     .VerticalAlignment = xlCenter
-                    .value = Format(DateSerial(Year(CDate(CDbl(projectStart) + i - 1)), Month(CDate(CDbl(projectStart) + i - 1)), 1), "mmm yyyy")
+                    .NumberFormat = "@"
+                    .value = Gantt_FormatMonthYear(DateSerial(Year(CDate(CDbl(projectStart) + i - 1)), Month(CDate(CDbl(projectStart) + i - 1)), 1))
                     .Interior.Color = RGB(191, 191, 191)
                 End With
             End If
@@ -1199,7 +1460,8 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
         .Merge
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
-        .value = Format(DateSerial(Year(CDate(CDbl(projectStart) + totalDays - 1)), Month(CDate(CDbl(projectStart) + totalDays - 1)), 1), "mmm yyyy")
+        .NumberFormat = "@"
+        .value = Gantt_FormatMonthYear(DateSerial(Year(CDate(CDbl(projectStart) + totalDays - 1)), Month(CDate(CDbl(projectStart) + totalDays - 1)), 1))
         .Interior.Color = RGB(191, 191, 191)
     End With
 
@@ -1207,13 +1469,18 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
 
 End Sub
 
+
 Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim i As Long
     Dim weekStart As Date
     Dim isoYear As Long
     Dim currentYear As Long
     Dim yearStartCol As Long
+
+    Set perfScope = Profiler_BeginScope("BuildTimeline_Week", "Timeline")
 
     currentYear = 0
     yearStartCol = FIRST_TIMELINE_COL
@@ -1223,6 +1490,7 @@ Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Vari
         weekStart = CDate(projectStart) + (i * 7)
         isoYear = GetIsoWeekYear(weekStart)
 
+        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = GetIsoWeekLabel(weekStart)
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
@@ -1256,12 +1524,17 @@ Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Vari
 
 End Sub
 
+
 Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim i As Long
     Dim monthStart As Date
     Dim currentYear As Long
     Dim yearStartCol As Long
+
+    Set perfScope = Profiler_BeginScope("BuildTimeline_Month", "Timeline")
 
     currentYear = 0
     yearStartCol = FIRST_TIMELINE_COL
@@ -1270,7 +1543,8 @@ Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Var
 
         monthStart = DateAdd("m", i, CDate(projectStart))
 
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = Format$(monthStart, "mmm")
+        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
+        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = Gantt_FormatMonthShort(monthStart)
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 8
@@ -1304,8 +1578,13 @@ Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Var
 End Sub
 Private Sub WriteLeftPanelRow(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef dataArr As Variant, ByVal dataRow As Long, ByVal mapWBS As Object)
 
+    Dim perfScope As clsPerfScope
+
+
     Dim logicVal As String
     Dim isLoE As Boolean
+
+    Set perfScope = Profiler_BeginScope("WriteLeftPanelRow", "Excel Cell Write")
 
     ws.rows(ganttRow).rowHeight = GANTT_ROW_HEIGHT_TASK
 
@@ -1366,7 +1645,10 @@ Private Sub WriteLeftPanelRow(ByVal ws As Worksheet, ByVal ganttRow As Long, ByR
 
 End Sub
 
+
 Private Sub ApplyRowStyle(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef dataArr As Variant, ByVal dataRow As Long, ByVal mapWBS As Object, ByVal hasChildren As Object, ByVal calcDrivingMap As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim wbs As String
     Dim levelCount As Long
@@ -1375,6 +1657,8 @@ Private Sub ApplyRowStyle(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef d
     Dim hasActual As Boolean
     Dim isLoE As Boolean
     Dim logicVal As String
+
+    Set perfScope = Profiler_BeginScope("ApplyRowStyle", "Excel Format")
 
     wbs = NormalizeWBS(CStr(dataArr(dataRow, mapWBS("WBS"))))
     levelCount = WBSLevel(wbs)
@@ -1410,6 +1694,7 @@ Private Sub ApplyRowStyle(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef d
 
 End Sub
 
+
 Private Sub DrawGanttShapes( _
     ByVal ws As Worksheet, _
     ByRef dataArr As Variant, _
@@ -1420,6 +1705,8 @@ Private Sub DrawGanttShapes( _
     ByVal baseById As Object, _
     ByVal testById As Object, _
     ByVal isTestMode As Boolean)
+
+    Dim perfScope As clsPerfScope
 
     Dim r As Long
     Dim rowCount As Long
@@ -1442,6 +1729,8 @@ Private Sub DrawGanttShapes( _
     Dim isLoE As Boolean
     Dim isMilestone As Boolean
     Dim parentCompleteMap As Object
+
+    Set perfScope = Profiler_BeginScope("DrawGanttShapes", "Shape Render")
 
     rowCount = UBound(dataArr, 1)
     Set parentCompleteMap = BuildParentCompleteMap(dataArr, mapWBS)
@@ -1519,6 +1808,7 @@ NextShape:
 
 End Sub
 
+
 Private Function ShouldDrawCompactTaskMarker( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -1528,8 +1818,12 @@ Private Function ShouldDrawCompactTaskMarker( _
     ByVal rawDurationDays As Long, _
     ByVal isLoE As Boolean) As Boolean
 
+    Dim perfScope As clsPerfScope
+
     Dim visualWidth As Double
     Dim minimumReadableWidth As Double
+
+    Set perfScope = Profiler_BeginScope("ShouldDrawCompactTaskMarker", "Shape Decision")
 
     If isLoE Then Exit Function
     If Not HasValue(startVal) Then Exit Function
@@ -1561,6 +1855,9 @@ Private Sub DrawTaskBar( _
     ByVal rawFinishVal As Variant, _
     Optional ByVal isLoE As Boolean = False)
 
+    Dim perfScope As clsPerfScope
+
+
     Dim leftPos As Double
     Dim rightPos As Double
     Dim topPos As Double
@@ -1576,6 +1873,8 @@ Private Sub DrawTaskBar( _
     Dim progressLeft As Double
     Dim progressTop As Double
     Dim progressHeight As Double
+
+    Set perfScope = Profiler_BeginScope("DrawTaskBar", "Shape Create")
 
     If Not HasValue(startVal) Then Exit Sub
     If Not HasValue(finishVal) Then Exit Sub
@@ -1708,11 +2007,14 @@ Private Function TimelineDateRangeMidX( _
 
 End Function
 
+
 Private Function TimelineDateX( _
     ByVal ws As Worksheet, _
     ByVal projectStart As Variant, _
     ByVal taskDate As Variant, _
     ByVal isFinishSide As Boolean) As Double
+
+    Dim perfScope As clsPerfScope
 
     Dim targetCol As Long
     Dim cellLeft As Double
@@ -1721,6 +2023,8 @@ Private Function TimelineDateX( _
     Dim periodStart As Date
     Dim periodDays As Long
     Dim offsetDays As Double
+
+    Set perfScope = Profiler_BeginScope("TimelineDateX", "Timeline Geometry")
 
     If ws Is Nothing Then Exit Function
     If Not HasValue(projectStart) Then Exit Function
@@ -1781,6 +2085,7 @@ Private Function TimelineRight( _
 
 End Function
 
+
 Private Sub DrawMilestone( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -1792,11 +2097,15 @@ Private Sub DrawMilestone( _
     ByVal shapeKey As String, _
     ByVal hasDelta As Boolean)
 
+    Dim perfScope As clsPerfScope
+
     Dim leftPos As Double
     Dim topPos As Double
     Dim sizeVal As Double
     Dim cellMidX As Double
     Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("DrawMilestone", "Shape Create")
 
     If Not HasValue(startVal) Then Exit Sub
 
@@ -1834,7 +2143,10 @@ Private Sub DrawMilestone( _
 
 End Sub
 
+
 Private Function BuildGanttConstraintMapFromCalc(Optional ByVal includeDeadline As Boolean = False) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim d As Object
     Dim wsCalc As Worksheet
@@ -1849,6 +2161,8 @@ Private Function BuildGanttConstraintMapFromCalc(Optional ByVal includeDeadline 
     Dim taskTypeVal As String
     Dim deadlineVal As Variant
     Dim hasDeadline As Boolean
+
+    Set perfScope = Profiler_BeginScope("BuildGanttConstraintMapFromCalc", "Excel Read")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -1924,6 +2238,7 @@ Private Sub RequireGanttCalcColumn( _
 
 End Sub
 
+
 Private Sub DrawConstraintMarkers_Gantt( _
     ByVal ws As Worksheet, _
     ByRef dataArr As Variant, _
@@ -1934,6 +2249,8 @@ Private Sub DrawConstraintMarkers_Gantt( _
     ByVal constraintById As Object, _
     ByVal drawHardConstraints As Boolean, _
     ByVal drawDeadlineMarkers As Boolean)
+
+    Dim perfScope As clsPerfScope
 
     Dim r As Long
     Dim rowCount As Long
@@ -1949,6 +2266,8 @@ Private Sub DrawConstraintMarkers_Gantt( _
     Dim deadlineDate As Variant
     Dim isLoE As Boolean
     Dim isMilestone As Boolean
+
+    Set perfScope = Profiler_BeginScope("DrawConstraintMarkers_Gantt", "Constraint Render")
 
     If constraintById Is Nothing Then Exit Sub
     If constraintById.Count = 0 Then Exit Sub
@@ -2212,7 +2531,10 @@ Private Sub DrawConstraintCross_Gantt( _
 
 End Sub
 
+
 Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal totalDays As Long, ByVal rowCount As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim todayVal As Date
     Dim projectFinish As Date
@@ -2221,6 +2543,8 @@ Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, 
     Dim yTop As Double
     Dim yBottom As Double
     Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("DrawTodayLine", "Shape Create")
 
     If ws Is Nothing Then Exit Sub
     If Not HasValue(projectStart) Then Exit Sub
@@ -2333,6 +2657,7 @@ Private Function WBSLevel(ByVal wbs As String) As Long
 
 End Function
 
+
 Private Sub DrawDependencyLinks( _
     ByVal wsGantt As Worksheet, _
     ByVal mapWBS As Object, _
@@ -2345,11 +2670,15 @@ Private Sub DrawDependencyLinks( _
     ByVal testById As Object, _
     ByVal isTestMode As Boolean)
 
+    Dim perfScope As clsPerfScope
+
     Dim succId As Variant
     Dim linkItem As Variant
     Dim predId As String
     Dim shapePrefix As String
     Dim linkIndex As Long
+
+    Set perfScope = Profiler_BeginScope("DrawDependencyLinks", "Dependency Render")
 
     If IsAggregatedScaleMode() Then Exit Sub
 
@@ -2432,6 +2761,7 @@ SafeExit:
 
 End Function
 
+
 Private Sub DrawSingleDependencyLink( _
     ByVal wsGantt As Worksheet, _
     ByVal mapWBS As Object, _
@@ -2448,6 +2778,8 @@ Private Sub DrawSingleDependencyLink( _
     ByVal shapePrefix As String, _
     ByVal linkType As String, _
     ByVal linkLag As Double)
+
+    Dim perfScope As clsPerfScope
 
     Dim predRow As Long
     Dim succRow As Long
@@ -2470,6 +2802,8 @@ Private Sub DrawSingleDependencyLink( _
     Dim succDate As Variant
     Dim gapDays As Long
     Dim useMidLeftEntry As Boolean
+
+    Set perfScope = Profiler_BeginScope("DrawSingleDependencyLink", "Dependency Render")
 
     If Not rowById.Exists(predId) Then Exit Sub
     If Not rowById.Exists(succId) Then Exit Sub
@@ -2842,6 +3176,7 @@ Private Sub FormatDependencyLine(ByVal shp As Shape, ByVal withArrow As Boolean)
 
 End Sub
 
+
 Private Sub DrawLinkSegment( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -2851,7 +3186,11 @@ Private Sub DrawLinkSegment( _
     ByVal y2 As Double, _
     ByVal withArrow As Boolean)
 
+    Dim perfScope As clsPerfScope
+
     Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("DrawLinkSegment", "Shape Create")
 
     If Abs(x2 - x1) < 0.1 And Abs(y2 - y1) < 0.1 Then Exit Sub
 
@@ -2862,7 +3201,10 @@ Private Sub DrawLinkSegment( _
 
 End Sub
 
+
 Private Function BuildCalcDrivingLogicMap() As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim tblCalc As ListObject
@@ -2871,6 +3213,8 @@ Private Function BuildCalcDrivingLogicMap() As Object
     Dim arr As Variant
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("BuildCalcDrivingLogicMap", "Excel Read")
 
     Set wsCalc = ThisWorkbook.Worksheets(CALC_SHEET)
     Set tblCalc = wsCalc.ListObjects(CALC_TABLE)
@@ -2909,6 +3253,10 @@ End Function
 
 Private Sub FreezeGanttAfterFinish(ByVal ws As Worksheet, ByVal rowCount As Long)
 
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("FreezeGanttAfterFinish", "Gantt Layout")
+
     ws.Activate
     ActiveWindow.FreezePanes = False
     ws.Cells(FIRST_TASK_ROW, COL_TEST_START).Select
@@ -2928,7 +3276,12 @@ Private Function IsGanttSheetLayoutEmpty(ByVal ws As Worksheet) As Boolean
 
 End Function
 
+
 Private Sub EnsureGanttVisualLayoutReadyBeforeDrawing(ByVal ws As Worksheet)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("EnsureGanttVisualLayoutReadyBeforeDrawing", "Gantt Layout")
 
     If ws Is Nothing Then Exit Sub
 
@@ -3111,6 +3464,7 @@ Public Sub Ensure_Gantt_Test_Buttons()
     DeleteShapeIfExists ws, BTN_CONSTRAINT_LEFT_NAME
 
     BuildFixedHeaderToggles ws
+    Gantt_ApplyLanguage
 
 End Sub
 
@@ -3397,6 +3751,10 @@ Private Sub CreateFixedHeaderTriToggle( _
 End Sub
 
 Private Sub RefreshFixedHeaderToggleVisuals(ByVal ws As Worksheet)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("RefreshFixedHeaderToggleVisuals", "Gantt UI")
 
     EnsureGanttViewInitialized
 
@@ -3720,60 +4078,102 @@ Public Sub Toggle_Gantt_Scale()
             gTimelineScaleMode = GANTT_SCALE_DAY
     End Select
 
-    Refresh_Gantt_UI_Only
+    Refresh_Gantt_AfterScaleChange
+    GanttDrag_ReconcileWatchState
 
 End Sub
 
-Private Sub SetShapeVisibilityIfExists(ByVal ws As Worksheet, ByVal shapeName As String, ByVal isVisible As Boolean)
+Private Function BuildGanttShapeIndex(ByVal ws As Worksheet) As Object
 
+    Dim perfScope As clsPerfScope
+    Dim shapeIndex As Object
     Dim shp As Shape
 
-    On Error Resume Next
-    Set shp = ws.Shapes(shapeName)
-    On Error GoTo 0
+    Set perfScope = Profiler_BeginScope("BuildGanttShapeIndex", "Shape Index")
+    Set shapeIndex = CreateObject("Scripting.Dictionary")
 
-    If shp Is Nothing Then Exit Sub
+    If ws Is Nothing Then
+        Set BuildGanttShapeIndex = shapeIndex
+        Exit Function
+    End If
 
+    For Each shp In ws.Shapes
+        If Not shapeIndex.Exists(CStr(shp.Name)) Then
+            shapeIndex.Add CStr(shp.Name), shp
+        End If
+    Next shp
+
+    Set BuildGanttShapeIndex = shapeIndex
+
+End Function
+
+Private Sub SetShapeVisibilityIfExists( _
+    ByVal shapeIndex As Object, _
+    ByVal shapeName As String, _
+    ByVal isVisible As Boolean)
+
+    Dim perfScope As clsPerfScope
+    Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("SetShapeVisibilityIfExists", "Shape Lookup")
+
+    If shapeIndex Is Nothing Then Exit Sub
+    If Not shapeIndex.Exists(shapeName) Then Exit Sub
+
+    Set shp = shapeIndex(shapeName)
     shp.Visible = IIf(isVisible, msoTrue, msoFalse)
 
 End Sub
 
-Private Sub SetRowRenderedShapesVisibility(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal isVisible As Boolean)
+Private Sub SetRowRenderedShapesVisibility( _
+    ByVal ws As Worksheet, _
+    ByVal rowNum As Long, _
+    ByVal isVisible As Boolean, _
+    ByVal shapeIndex As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim suffix As String
+
+    Set perfScope = Profiler_BeginScope("SetRowRenderedShapesVisibility", "Shape Visibility")
 
     If rowNum < FIRST_TASK_ROW Then Exit Sub
 
     suffix = CStr(rowNum - FIRST_TASK_ROW + 1)
 
-    SetShapeVisibilityIfExists ws, "TASK_" & suffix, isVisible
-    SetShapeVisibilityIfExists ws, "TASK_" & suffix & "_P", isVisible
+    SetShapeVisibilityIfExists shapeIndex, "TASK_" & suffix, isVisible
+    SetShapeVisibilityIfExists shapeIndex, "TASK_" & suffix & "_P", isVisible
 
-    SetShapeVisibilityIfExists ws, "MS_" & suffix, isVisible
+    SetShapeVisibilityIfExists shapeIndex, "MS_" & suffix, isVisible
 
-    SetShapeVisibilityIfExists ws, "SUM_" & suffix & "_H", isVisible
-    SetShapeVisibilityIfExists ws, "SUM_" & suffix & "_L", isVisible
-    SetShapeVisibilityIfExists ws, "SUM_" & suffix & "_R", isVisible
-    SetShapeVisibilityIfExists ws, "SUM_" & suffix & "_TXT", isVisible
+    SetShapeVisibilityIfExists shapeIndex, "SUM_" & suffix & "_H", isVisible
+    SetShapeVisibilityIfExists shapeIndex, "SUM_" & suffix & "_L", isVisible
+    SetShapeVisibilityIfExists shapeIndex, "SUM_" & suffix & "_R", isVisible
+    SetShapeVisibilityIfExists shapeIndex, "SUM_" & suffix & "_TXT", isVisible
 
-    SetConstraintMarkerVisibilityForRow ws, suffix, isVisible
+    SetConstraintMarkerVisibilityForRow ws, suffix, isVisible, shapeIndex
 
 End Sub
 
 Private Sub SetConstraintMarkerVisibilityForRow( _
     ByVal ws As Worksheet, _
     ByVal suffix As String, _
-    ByVal isVisible As Boolean)
+    ByVal isVisible As Boolean, _
+    ByVal shapeIndex As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim tokens As Variant
     Dim token As Variant
     Dim i As Long
 
+    Set perfScope = Profiler_BeginScope("SetConstraintMarkerVisibilityForRow", "Shape Visibility")
+
     tokens = Array("SNET", "SNLT", "FNET", "FNLT")
 
     For Each token In tokens
         For i = 1 To 5
-            SetShapeVisibilityIfExists ws, "CSTR_" & suffix & "_" & CStr(token) & "_" & CStr(i), isVisible
+            SetShapeVisibilityIfExists shapeIndex, "CSTR_" & suffix & "_" & CStr(token) & "_" & CStr(i), isVisible
         Next i
     Next token
 
@@ -3781,11 +4181,16 @@ End Sub
 
 Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
 
+    Dim perfScope As clsPerfScope
+
     Dim lastRow As Long
     Dim r As Long
     Dim showRow As Boolean
     Dim shp As Shape
     Dim oldScreenUpdating As Boolean
+    Dim shapeIndex As Object
+
+    Set perfScope = Profiler_BeginScope("ApplyCurrentGanttView", "Gantt UI")
 
     EnsureGanttViewInitialized
 
@@ -3795,12 +4200,14 @@ Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
     lastRow = GetLastRenderedGanttRow(ws)
     If lastRow < FIRST_TASK_ROW Then GoTo SafeExit
 
+    Set shapeIndex = BuildGanttShapeIndex(ws)
+
     ws.rows(FIRST_TASK_ROW & ":" & lastRow).Hidden = False
 
     If gGanttViewMode = GANTT_VIEW_DETAIL Then
 
         For r = FIRST_TASK_ROW To lastRow
-            SetRowRenderedShapesVisibility ws, r, True
+            SetRowRenderedShapesVisibility ws, r, True, shapeIndex
         Next r
 
         For Each shp In ws.Shapes
@@ -3823,7 +4230,7 @@ Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
     Next r
 
     For r = FIRST_TASK_ROW To lastRow
-        SetRowRenderedShapesVisibility ws, r, Not ws.rows(r).Hidden
+        SetRowRenderedShapesVisibility ws, r, Not ws.rows(r).Hidden, shapeIndex
     Next r
 
     For Each shp In ws.Shapes
@@ -3841,7 +4248,11 @@ End Sub
 
 Private Function GetLastRenderedGanttRow(ByVal ws As Worksheet) As Long
 
+    Dim perfScope As clsPerfScope
+
     Dim tblWBS As ListObject
+
+    Set perfScope = Profiler_BeginScope("GetLastRenderedGanttRow", "Excel Metadata")
 
     On Error GoTo Fallback
 
@@ -3858,10 +4269,14 @@ End Function
 
 Private Sub ReconcileGanttViewGridAfterFiltering(ByVal ws As Worksheet, ByVal lastRow As Long)
 
+    Dim perfScope As clsPerfScope
+
     Dim lastCol As Long
     Dim r As Long
     Dim leftRange As Range
     Dim timelineRange As Range
+
+    Set perfScope = Profiler_BeginScope("ReconcileGanttViewGridAfterFiltering", "Excel Format")
 
     If ws Is Nothing Then Exit Sub
     If lastRow < FIRST_TASK_ROW Then Exit Sub
@@ -4424,8 +4839,27 @@ End Sub
 
 Private Sub ApplyGanttUiState(ByVal ws As Worksheet)
 
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("ApplyGanttUiState", "Gantt UI")
+
     Ensure_Gantt_Test_Buttons
     ApplyCurrentGanttView ws
+
+End Sub
+
+Private Sub Refresh_Gantt_AfterScaleChange()
+
+    Dim oldPreserve As Boolean
+
+    On Error GoTo SafeExit
+
+    oldPreserve = GetGanttPreserveTestInputs()
+    SetGanttPreserveTestInputs True
+    Refresh_Gantt False, True
+
+SafeExit:
+    SetGanttPreserveTestInputs oldPreserve
 
 End Sub
 
@@ -4445,6 +4879,7 @@ SafeExit:
 
 End Sub
 
+
 Private Sub DrawSingleWeekTask( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -4457,6 +4892,8 @@ Private Sub DrawSingleWeekTask( _
     ByVal hasDelta As Boolean, _
     Optional ByVal finishVal As Variant)
 
+    Dim perfScope As clsPerfScope
+
     Dim leftPos As Double
     Dim topPos As Double
     Dim sizeVal As Double
@@ -4468,6 +4905,8 @@ Private Sub DrawSingleWeekTask( _
     Dim innerSize As Double
     Dim markerCenterX As Double
     Dim markerFinishVal As Variant
+
+    Set perfScope = Profiler_BeginScope("DrawSingleWeekTask", "Shape Create")
 
     If Not HasValue(startVal) Then Exit Sub
 
@@ -4679,14 +5118,19 @@ End Sub
 ' Helpers for factorized refresh core
 '=====================================================
 
+
 Private Function BuildHasChildrenMap( _
     ByRef dataArr As Variant, _
     ByVal mapWBS As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim d As Object
     Dim r As Long
     Dim wbsVal As String
     Dim parentWbs As String
+
+    Set perfScope = Profiler_BeginScope("BuildHasChildrenMap", "Dictionary")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -4703,13 +5147,18 @@ Private Function BuildHasChildrenMap( _
 
 End Function
 
+
 Private Function BuildRowByIdMap( _
     ByRef dataArr As Variant, _
     ByVal mapWBS As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("BuildRowByIdMap", "Dictionary")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -4746,10 +5195,14 @@ Private Sub GetProjectDisplayRange( _
     ByRef projectStart As Variant, _
     ByRef projectFinish As Variant)
 
+    Dim perfScope As clsPerfScope
+
     Dim r As Long
     Dim idVal As String
     Dim displayStart As Variant
     Dim displayFinish As Variant
+
+    Set perfScope = Profiler_BeginScope("GetProjectDisplayRange", "Gantt Scan")
 
     projectStart = Empty
     projectFinish = Empty
@@ -4788,6 +5241,9 @@ Private Sub EnsureExpandedLinksCacheFromCalc()
 End Sub
 Private Function BuildExpandedLinksCacheFromLogicLinksTable() As Object
 
+    Dim perfScope As clsPerfScope
+
+
     Dim wsCalc As Worksheet
     Dim tblLinks As ListObject
     Dim mapLinks As Object
@@ -4805,6 +5261,8 @@ Private Function BuildExpandedLinksCacheFromLogicLinksTable() As Object
     Dim linkType As String
     Dim lagVal As Double
     Dim rawToken As String
+
+    Set perfScope = Profiler_BeginScope("BuildExpandedLinksCacheFromLogicLinksTable", "Excel Read")
 
     Set d = CreateObject("Scripting.Dictionary")
     Set mapLinks = CreateObject("Scripting.Dictionary")
@@ -5233,6 +5691,7 @@ SafeExit:
 
 End Sub
 
+
 Private Sub DrawSummaryBar( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -5245,6 +5704,8 @@ Private Sub DrawSummaryBar( _
     ByVal labelText As String, _
     ByVal hasDelta As Boolean, _
     ByVal isComplete As Boolean)
+
+    Dim perfScope As clsPerfScope
 
     Dim x1 As Double
     Dim x2 As Double
@@ -5259,6 +5720,8 @@ Private Sub DrawSummaryBar( _
     Dim textLeft As Double
     Dim textTop As Double
     Dim lineColor As Long
+
+    Set perfScope = Profiler_BeginScope("DrawSummaryBar", "Shape Create")
 
     If Not HasValue(startVal) Then Exit Sub
     If Not HasValue(finishVal) Then Exit Sub
@@ -5381,57 +5844,31 @@ End Function
 ' HELPER: TimelineColumnFromHeaderDate_Exact
 '
 ' Rôle :
-' - DAY mode : retrouve la colonne en lisant directement les dates construites en ligne HEADER_ROW_2
-' - WEEK mode : conserve le mapping par slot ISO semaine
+' - DAY mode : mappe la date sur son offset de jour.
+' - WEEK / MONTH modes : conservent leur mapping de periode.
 '
 ' Pourquoi :
-' - le rendu doit être ancré sur les colonnes réelles du Gantt
-' - pas sur une accumulation visuelle ou un calcul indirect de pixels
+' - la timeline est construite en slots contigus depuis projectStart ;
+' - le mapping direct evite tout scan ou cache susceptible de devenir perime.
 '=====================================================
 Private Function TimelineColumnFromHeaderDate_Exact( _
     ByVal ws As Worksheet, _
     ByVal projectStart As Variant, _
     ByVal taskDate As Variant) As Long
 
-    Dim targetDate As Date
+    Dim perfScope As clsPerfScope
     Dim targetCol As Long
-    Dim lastCol As Long
-    Dim c As Long
-    Dim headerVal As Variant
+
+    Set perfScope = Profiler_BeginScope("TimelineColumnFromHeaderDate_Exact", "Timeline Direct Lookup")
 
     If ws Is Nothing Then Exit Function
     If Not HasValue(projectStart) Then Exit Function
     If Not HasValue(taskDate) Then Exit Function
 
-    If IsAggregatedScaleMode() Then
-        targetCol = GetTimelineTargetCol(projectStart, taskDate)
-        If targetCol < FIRST_TIMELINE_COL Then Exit Function
-        TimelineColumnFromHeaderDate_Exact = targetCol
-        Exit Function
-    End If
-
-    targetDate = CDate(taskDate)
-
-    lastCol = ws.Cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
-    If lastCol < FIRST_TIMELINE_COL Then Exit Function
-
-    For c = FIRST_TIMELINE_COL To lastCol
-        headerVal = ws.Cells(HEADER_ROW_2, c).value
-
-        If IsDate(headerVal) Then
-            If CLng(CDate(headerVal)) = CLng(targetDate) Then
-                TimelineColumnFromHeaderDate_Exact = c
-                Exit Function
-            End If
-        End If
-    Next c
-
-    'Fallback contrôlé : si la date n'est pas trouvée dans les headers,
-    'on revient au mapping par offset, mais toujours vers une colonne entière.
     targetCol = GetTimelineTargetCol(projectStart, taskDate)
-    If targetCol >= FIRST_TIMELINE_COL Then
-        TimelineColumnFromHeaderDate_Exact = targetCol
-    End If
+    If targetCol < FIRST_TIMELINE_COL Then Exit Function
+
+    TimelineColumnFromHeaderDate_Exact = targetCol
 
 End Function
 

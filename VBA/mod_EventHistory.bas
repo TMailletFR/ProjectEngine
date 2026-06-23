@@ -7,7 +7,8 @@ Private Const EVENT_HISTORY_SHEET As String = "EVENT_HISTORY"
 Private Const EVENT_HISTORY_TABLE As String = "tbl_EVENT_HISTORY"
 Private Const EVENT_ACK_SHEET As String = "EVENT_ACK"
 Private Const EVENT_ACK_TABLE As String = "tbl_EVENT_ACK"
-Private Const EVENT_HISTORY_HEADER_ROW As Long = 3
+Private Const EVENT_HISTORY_HEADER_ROW As Long = 4
+Private Const EVENT_ACK_HEADER_ROW As Long = 3
 
 Private Const EVENT_HISTORY_INFO_LABEL As String = "btn_EventHistory_Info_Label"
 Private Const EVENT_HISTORY_INFO_BG As String = "btn_EventHistory_Info_BG"
@@ -40,10 +41,38 @@ Public Sub EndPlanningEventRun()
 
 End Sub
 
-Public Function GetPlanningConsoleLanguage() As String
+Public Sub EventHistory_SetLanguage(ByVal languageCode As String)
 
     EnsureEventHistoryState
-    GetPlanningConsoleLanguage = gPlanningLanguage
+
+    Select Case UCase$(Trim$(languageCode))
+        Case "EN"
+            gPlanningLanguage = "EN"
+        Case "FR"
+            gPlanningLanguage = "FR"
+        Case Else
+            gPlanningLanguage = "FR"
+    End Select
+
+End Sub
+
+Public Sub EventHistory_ApplyLanguage(Optional ByVal languageCode As String = "")
+
+    If Trim$(languageCode) <> "" Then EventHistory_SetLanguage languageCode
+    Refresh_EventHistory_View
+
+End Sub
+
+Public Function EventHistory_CurrentLanguage() As String
+
+    EnsureEventHistoryState
+    EventHistory_CurrentLanguage = gPlanningLanguage
+
+End Function
+
+Public Function GetPlanningConsoleLanguage() As String
+
+    GetPlanningConsoleLanguage = EventHistory_CurrentLanguage()
 
 End Function
 
@@ -51,6 +80,19 @@ Public Function ShouldShowInfoOnlyPlanningConsole() As Boolean
 
     EnsureEventHistoryState
     ShouldShowInfoOnlyPlanningConsole = gEventHistoryShowInfo
+
+End Function
+
+Public Sub EventHistory_SetShowInfo(ByVal showInfo As Boolean)
+
+    EnsureEventHistoryState
+    gEventHistoryShowInfo = showInfo
+
+End Sub
+
+Public Function EventHistory_CurrentShowInfo() As Boolean
+
+    EventHistory_CurrentShowInfo = ShouldShowInfoOnlyPlanningConsole()
 
 End Function
 
@@ -185,7 +227,10 @@ Private Sub NormalizeManualEventAckRows(ByVal ws As Worksheet, ByVal Target As R
 
 End Sub
 
+
 Public Sub Refresh_EventHistory_View()
+
+    Dim perfScope As clsPerfScope
 
     Dim wsAlarm As Worksheet
     Dim wsHistory As Worksheet
@@ -203,6 +248,8 @@ Public Sub Refresh_EventHistory_View()
     Dim eventHash As String
     Dim internalWriteStarted As Boolean
     Dim oldScreenUpdating As Boolean
+
+    Set perfScope = Profiler_BeginScope("Refresh_EventHistory_View", "Event History")
 
     oldScreenUpdating = Application.ScreenUpdating
     Application.ScreenUpdating = False
@@ -230,7 +277,7 @@ Public Sub Refresh_EventHistory_View()
             Set newRow = tblHistory.ListRows.Add
             With newRow.Range
                 .Cells(1, tblHistory.ListColumns("Date").Index).value = tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Date").Index).value
-                .Cells(1, tblHistory.ListColumns("Heure").Index).value = tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Time").Index).value
+                .Cells(1, tblHistory.ListColumns("Hour").Index).value = tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Time").Index).value
                 .Cells(1, tblHistory.ListColumns("Severity").Index).value = severity
                 .Cells(1, tblHistory.ListColumns("Message").Index).value = msgText
                 .Cells(1, tblHistory.ListColumns("Acknowledged").Index).value = IsEventAcknowledged(ackLookup, severity, eventType, eventHash)
@@ -500,10 +547,8 @@ Public Sub EnsurePlanningEventHistoryInfrastructure()
     Set wsAck = EnsurePlanningEventSheet(EVENT_ACK_SHEET)
 
     EnsurePlanningEventTable wsAlarm, CALC_ALARM_TABLE, CalcAlarmHeaders()
-    EnsureEventHistoryTopRows wsHistory
-    EnsureEventAckTopRow wsAck
     EnsurePlanningEventTable wsHistory, EVENT_HISTORY_TABLE, EventHistoryHeaders(), EVENT_HISTORY_HEADER_ROW
-    EnsurePlanningEventTable wsAck, EVENT_ACK_TABLE, EventAckHeaders(), 2
+    EnsurePlanningEventTable wsAck, EVENT_ACK_TABLE, EventAckHeaders(), EVENT_ACK_HEADER_ROW
 
     Set tblAlarm = wsAlarm.ListObjects(CALC_ALARM_TABLE)
     Set tblHistory = wsHistory.ListObjects(EVENT_HISTORY_TABLE)
@@ -660,6 +705,9 @@ Public Sub LogPlanningConsoleMessages( _
     ByVal consoleMessages As Collection, _
     Optional ByVal sourceProcedure As String = "CalcBridge_ShowPlanningConsole")
 
+    Dim perfScope As clsPerfScope
+
+
     Dim item As Variant
     Dim severity As String
     Dim eventType As String
@@ -674,6 +722,8 @@ Public Sub LogPlanningConsoleMessages( _
     Dim wsHistory As Worksheet
     Dim wsAck As Worksheet
     Dim internalWriteStarted As Boolean
+
+    Set perfScope = Profiler_BeginScope("LogPlanningConsoleMessages", "Event History")
 
     If consoleMessages Is Nothing Then Exit Sub
     If consoleMessages.Count = 0 Then Exit Sub
@@ -1023,8 +1073,41 @@ Private Sub EnsurePlanningEventTable( _
         Set tbl = ws.ListObjects.Add(xlSrcRange, rng, , xlYes)
         tbl.Name = tableName
     Else
+        If tableName = EVENT_HISTORY_TABLE Then MigrateEventHistoryHourHeader tbl
         EnsurePlanningEventTableHeaders tbl, headers
     End If
+
+End Sub
+
+Private Sub MigrateEventHistoryHourHeader(ByVal tbl As ListObject)
+
+    Dim legacyColumn As ListColumn
+    Dim hourColumn As ListColumn
+    Dim r As Long
+
+    If tbl Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    Set legacyColumn = tbl.ListColumns("Heure")
+    Set hourColumn = tbl.ListColumns("Hour")
+    On Error GoTo 0
+
+    If legacyColumn Is Nothing Then Exit Sub
+
+    If hourColumn Is Nothing Then
+        legacyColumn.Name = "Hour"
+        Exit Sub
+    End If
+
+    If Not legacyColumn.DataBodyRange Is Nothing And Not hourColumn.DataBodyRange Is Nothing Then
+        For r = 1 To tbl.ListRows.Count
+            If Trim$(CStr(hourColumn.DataBodyRange.Cells(r, 1).value)) = "" Then
+                hourColumn.DataBodyRange.Cells(r, 1).value = legacyColumn.DataBodyRange.Cells(r, 1).value
+            End If
+        Next r
+    End If
+
+    legacyColumn.Delete
 
 End Sub
 
@@ -1090,40 +1173,6 @@ Private Function TryReadEventHistoryTwoStateToggle( _
     TryReadEventHistoryTwoStateToggle = True
 
 End Function
-
-Private Sub EnsureEventHistoryTopRows(ByVal ws As Worksheet)
-
-    Dim tbl As ListObject
-
-    On Error Resume Next
-    Set tbl = ws.ListObjects(EVENT_HISTORY_TABLE)
-    On Error GoTo 0
-
-    If Not tbl Is Nothing Then
-        If tbl.HeaderRowRange.Row < EVENT_HISTORY_HEADER_ROW Then
-            ws.rows("1:2").Insert Shift:=xlDown
-        End If
-    End If
-
-    ws.rows("1:2").rowHeight = 22
-
-End Sub
-
-Private Sub EnsureEventAckTopRow(ByVal ws As Worksheet)
-
-    Dim tbl As ListObject
-
-    On Error Resume Next
-    Set tbl = ws.ListObjects(EVENT_ACK_TABLE)
-    On Error GoTo 0
-
-    If Not tbl Is Nothing Then
-        If tbl.HeaderRowRange.Row < 2 Then ws.rows("1:1").Insert Shift:=xlDown
-    End If
-
-    ws.rows("1:1").rowHeight = 22
-
-End Sub
 
 Private Function BuildEventHistoryDisplayMessage( _
     ByVal frMessage As String, _
@@ -1488,7 +1537,7 @@ Private Sub ApplyPlanningEventFormats( _
 
     If Not tblHistory.DataBodyRange Is Nothing Then
         tblHistory.ListColumns("Date").DataBodyRange.NumberFormat = "dd/mm/yyyy"
-        tblHistory.ListColumns("Heure").DataBodyRange.NumberFormat = "hh:mm:ss"
+        tblHistory.ListColumns("Hour").DataBodyRange.NumberFormat = "hh:mm:ss"
         tblHistory.ListColumns("Message").DataBodyRange.WrapText = True
 
         For r = 1 To tblHistory.ListRows.Count
@@ -1525,35 +1574,16 @@ End Sub
 
 Private Sub EnsureEventHistoryToggleShapes(ByVal ws As Worksheet)
 
-    Dim leftPos As Double
-    Dim topPos As Double
-    Dim labelW As Double
-    Dim trackW As Double
-    Dim trackH As Double
-    Dim knobSize As Double
-    Dim gap As Double
-
-    EnsureEventHistoryState
-
-    leftPos = ws.Range("A1").Left + 4
-    topPos = ws.Range("A1").Top + 4
-    labelW = 42
-    trackW = 36
-    trackH = 14
-    knobSize = 10
-    gap = 18
-
-    AddEventHistoryToggleLabel ws, EVENT_HISTORY_INFO_LABEL, "Info", leftPos, topPos, labelW, trackH, "Toggle_EventHistory_Info"
-    AddEventHistoryToggleTrack ws, EVENT_HISTORY_INFO_BG, leftPos + labelW, topPos, trackW, trackH, "Toggle_EventHistory_Info"
-    AddEventHistoryToggleKnob ws, EVENT_HISTORY_INFO_KNOB, leftPos + labelW, topPos + 2, knobSize, "Toggle_EventHistory_Info"
-
-    leftPos = leftPos + labelW + trackW + gap
-    AddEventHistoryToggleLabel ws, EVENT_HISTORY_LANG_LABEL, "FR / EN", leftPos, topPos, 56, trackH, "Toggle_EventHistory_Language"
-    AddEventHistoryToggleTrack ws, EVENT_HISTORY_LANG_BG, leftPos + 56, topPos, trackW, trackH, "Toggle_EventHistory_Language"
-    AddEventHistoryToggleKnob ws, EVENT_HISTORY_LANG_KNOB, leftPos + 56, topPos + 2, knobSize, "Toggle_EventHistory_Language"
+    On Error Resume Next
+    ws.Shapes(EVENT_HISTORY_INFO_LABEL).Delete
+    ws.Shapes(EVENT_HISTORY_INFO_BG).Delete
+    ws.Shapes(EVENT_HISTORY_INFO_KNOB).Delete
+    ws.Shapes(EVENT_HISTORY_LANG_LABEL).Delete
+    ws.Shapes(EVENT_HISTORY_LANG_BG).Delete
+    ws.Shapes(EVENT_HISTORY_LANG_KNOB).Delete
+    On Error GoTo 0
 
 End Sub
-
 Private Sub EnsureEventHistoryCommandButtons( _
     ByVal wsHistory As Worksheet, _
     ByVal wsAck As Worksheet)
@@ -1899,7 +1929,7 @@ Private Function EventHistoryHeaders() As Variant
 
     EventHistoryHeaders = Array( _
         "Date", _
-        "Heure", _
+        "Hour", _
         "Severity", _
         "Message", _
         "Acknowledged")

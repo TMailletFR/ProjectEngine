@@ -29,11 +29,14 @@ Option Explicit
 ' - les warnings restent en dehors du cœur pour l'instant
 '=====================================================
 
+
 Public Sub Run_Calc_Core( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal linksBySuccId As Object, _
     Optional ByVal recalcScope As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim requiredCols As Variant
 
@@ -54,6 +57,8 @@ Public Sub Run_Calc_Core( _
     Dim rowIdx As Long
     Dim shouldCompute As Boolean
     Dim isPartialMode As Boolean
+
+    Set perfScope = Profiler_BeginScope("Run_Calc_Core", "Core Calculation")
 
     requiredCols = Array( _
         "ID", _
@@ -158,6 +163,7 @@ Public Sub Run_Calc_Core( _
 SafeExit:
 End Sub
 
+
 Private Sub Core_LoadExistingCalcOutputs( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -165,10 +171,14 @@ Private Sub Core_LoadExistingCalcOutputs( _
     ByVal calcStartById As Object, _
     ByVal calcFinishById As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim idVal As Variant
     Dim rowIdx As Long
     Dim calcStart As Variant
     Dim calcFinish As Variant
+
+    Set perfScope = Profiler_BeginScope("Core_LoadExistingCalcOutputs", "Array")
 
     For Each idVal In rowById.Keys
 
@@ -189,6 +199,7 @@ Private Sub Core_LoadExistingCalcOutputs( _
 
 End Sub
 
+
 Private Sub Core_ComputeOneLeafTask( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -198,6 +209,8 @@ Private Sub Core_ComputeOneLeafTask( _
     ByVal calcStartById As Object, _
     ByVal calcFinishById As Object, _
     ByVal blockingErrors As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim rowIdx As Long
 
@@ -248,6 +261,8 @@ Private Sub Core_ComputeOneLeafTask( _
     Dim effectiveDuration As Variant
     Dim taskTypeVal As String
     Dim calType As String
+
+    Set perfScope = Profiler_BeginScope("Core_ComputeOneLeafTask", "Core Leaf")
 
     If Not rowById.Exists(taskId) Then Exit Sub
     rowIdx = CLng(rowById(taskId))
@@ -1080,6 +1095,7 @@ Private Sub Core_PropagateBlockingErrors( _
 
 End Sub
 
+
 Private Sub Core_ClearCalcOutputs_ForScope( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1088,9 +1104,13 @@ Private Sub Core_ClearCalcOutputs_ForScope( _
     Optional ByVal calcStartById As Object, _
     Optional ByVal calcFinishById As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim idKey As Variant
     Dim taskId As String
     Dim rowIdx As Long
+
+    Set perfScope = Profiler_BeginScope("Core_ClearCalcOutputs_ForScope", "Array")
 
     If recalcScope Is Nothing Then Exit Sub
     If rowById Is Nothing Then Exit Sub
@@ -1116,15 +1136,20 @@ Private Sub Core_ClearCalcOutputs_ForScope( _
 
 End Sub
 
+
 Private Function Core_BuildLOEIds( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal rowById As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim idVal As Variant
     Dim rowIdx As Long
     Dim taskType As String
+
+    Set perfScope = Profiler_BeginScope("Core_BuildLOEIds", "Dictionary")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -1241,6 +1266,7 @@ Private Sub Core_ValidateLOEAsNonPredecessor( _
 
 End Sub
 
+
 Private Sub Core_ApplyLOEPostProcess( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1250,6 +1276,8 @@ Private Sub Core_ApplyLOEPostProcess( _
     ByVal calcStartById As Object, _
     ByVal calcFinishById As Object, _
     ByVal blockingErrors As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim loeId As Variant
     Dim rowIdx As Long
@@ -1274,6 +1302,8 @@ Private Sub Core_ApplyLOEPostProcess( _
     Dim candidateStart As Variant
     Dim candidateFinish As Variant
     Dim calType As String
+
+    Set perfScope = Profiler_BeginScope("Core_ApplyLOEPostProcess", "Core LOE")
 
     If loeIds Is Nothing Then Exit Sub
     If loeIds.Count = 0 Then Exit Sub

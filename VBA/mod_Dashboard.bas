@@ -115,7 +115,7 @@ On Error GoTo ErrHandler
     Dashboard_UpdateHeaderTimestamp ws
     Dashboard_SetupSnapshotControls ws, fromLabel, toLabel, False
     Dashboard_EnsureResetButton ws
-    Dashboard_UpdateLanguageToggle ws
+    Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
     Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
     Dashboard_UpdateSCurveChartInPlace ws, tblSCurve, mapSCurve
@@ -130,6 +130,26 @@ ErrHandler:
     Debug.Print "Refresh_Dashboard_ContentOnly error " & Err.Number & ": " & Err.Description
     Resume SafeExit
 End Sub
+Public Sub Dashboard_SetLanguage(ByVal languageCode As String)
+
+    Select Case UCase$(Trim$(languageCode))
+        Case "FR"
+            gDashboardLanguage = "FR"
+        Case "EN"
+            gDashboardLanguage = "EN"
+        Case Else
+            gDashboardLanguage = "EN"
+    End Select
+
+End Sub
+
+Public Sub Dashboard_ApplyLanguage(Optional ByVal languageCode As String = "")
+
+    If Trim$(languageCode) <> "" Then Dashboard_SetLanguage languageCode
+    Refresh_Dashboard_TextsAndComparisonOnly
+
+End Sub
+
 Public Sub Toggle_Dashboard_Language()
 
     If Dashboard_IsFrench() Then
@@ -349,7 +369,7 @@ Private Sub Refresh_Dashboard_TextsAndComparisonOnly()
     Dashboard_UpdateHeaderTimestamp ws
     Dashboard_SetupSnapshotControls ws, fromLabel, toLabel, False
     Dashboard_EnsureResetButton ws
-    Dashboard_UpdateLanguageToggle ws
+    Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
     Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
     Dashboard_UpdateSCurveChartInPlace ws, tblSCurve, mapSCurve
@@ -560,6 +580,18 @@ Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
     End If
 
 End Sub
+Private Sub Dashboard_RemoveLegacyLanguageToggle(ByVal ws As Worksheet)
+
+    If ws Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    ws.Shapes("DASH_Language_Label").Delete
+    ws.Shapes("DASH_Language_BG").Delete
+    ws.Shapes("DASH_Language_Knob").Delete
+    On Error GoTo 0
+
+End Sub
+
 Private Sub Dashboard_UpdateLanguageToggle(ByVal ws As Worksheet)
 
     Dim trackShape As Shape
@@ -676,7 +708,7 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
     Dashboard_AddBadge ws, Dashboard_FormatTimestamp(Now), ws.Range("T1").Left, ws.Range("T1").Top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
     Dashboard_SetupSnapshotControls ws, selectedFromLabel, selectedToLabel, True
     Dashboard_AddResetButton ws, ws.Range("Q3").Left, ws.Range("Q3").Top + 4, 126, 24
-    Dashboard_AddLanguageToggle ws, ws.Range("N4").Left, ws.Range("N4").Top + 2, 92, 14
+    Dashboard_RemoveLegacyLanguageToggle ws
 
 End Sub
 
@@ -3931,7 +3963,7 @@ Private Function Dashboard_FormatPercentSigned(ByVal valueVal As Double) As Stri
 
 End Function
 
-Private Function Dashboard_CurrentLanguage() As String
+Public Function Dashboard_CurrentLanguage() As String
 
     If UCase$(Trim$(gDashboardLanguage)) <> "FR" And UCase$(Trim$(gDashboardLanguage)) <> "EN" Then
         gDashboardLanguage = "EN"

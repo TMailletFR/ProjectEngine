@@ -1,9 +1,14 @@
 Attribute VB_Name = "mod_CalcEngine"
 Option Explicit
 
+
 Public Sub Run_Calc_Engine(Optional ByVal forceFullRecalcOverride As Boolean = False)
 
+    Dim perfScope As clsPerfScope
+
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Run_Calc_Engine", "Workflow")
 
     On Error GoTo ErrHandler
 
@@ -172,6 +177,7 @@ Private Function BuildInlineWBSList(ByVal idsDict As Object, ByVal idToWbs As Ob
 
 End Function
 
+
 Public Sub ComputeCurrentFloatAndCritical( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -184,6 +190,8 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Optional ByVal consoleMessages As Collection = Nothing, _
     Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
     Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
+
+    Dim perfScope As clsPerfScope
 
     Dim dataArr As Variant
     Dim currentLateStartById As Object
@@ -230,6 +238,8 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
     Dim hasNegativeFloat As Boolean
     Dim useMultiNetwork As Boolean
+
+    Set perfScope = Profiler_BeginScope("ComputeCurrentFloatAndCritical", "Analytics Float")
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -590,6 +600,7 @@ NextCurrentFreeFloatTask:
 
 End Sub
 
+
 Public Sub ComputeLongestPath( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -599,6 +610,8 @@ Public Sub ComputeLongestPath( _
     ByVal validIds As Object, _
     Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
     Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
+
+    Dim perfScope As clsPerfScope
 
     Dim dataArr As Variant
     Dim outLP() As Variant
@@ -619,6 +632,8 @@ Public Sub ComputeLongestPath( _
     Dim linkKey As String
     Dim linkType As String
     Dim effectiveLag As Double
+
+    Set perfScope = Profiler_BeginScope("ComputeLongestPath", "Analytics Longest Path")
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -828,6 +843,9 @@ Public Sub ComputeCriticalPathREX( _
     Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
     Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
 
+    Dim perfScope As clsPerfScope
+
+
     Dim dataArr As Variant
     Dim rexStartById As Object
     Dim rexFinishById As Object
@@ -875,6 +893,8 @@ Public Sub ComputeCriticalPathREX( _
     Dim outTF() As Variant
     Dim outFF() As Variant
     Dim useMultiNetwork As Boolean
+
+    Set perfScope = Profiler_BeginScope("ComputeCriticalPathREX", "Analytics REX")
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -1414,7 +1434,10 @@ Private Sub RollupFloatToParents( _
 
 End Sub
 
+
 Public Sub Push_Analytics_Back_To_WBS()
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -1429,6 +1452,8 @@ Public Sub Push_Analytics_Back_To_WBS()
     Dim r As Long
     Dim calcRow As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("Push_Analytics_Back_To_WBS", "Excel Table Write")
 
     On Error GoTo ErrHandler
 

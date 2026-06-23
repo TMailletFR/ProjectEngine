@@ -587,6 +587,8 @@ Public Function ParsePredecessorsText( _
     ByRef linksOut As Collection, _
     ByRef errText As String) As Boolean
 
+    Dim perfScope As clsPerfScope
+
     Dim parts As Variant
     Dim i As Long
     Dim tokenText As String
@@ -598,6 +600,8 @@ Public Function ParsePredecessorsText( _
     Dim rawToken As String
 
     Dim linkRow As Object
+
+    Set perfScope = Profiler_BeginScope("ParsePredecessorsText", "Parsing")
 
     Set linksOut = New Collection
     errText = ""
@@ -658,11 +662,15 @@ Public Function BuildWbsToIdMapFromTable( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim d As Object
     Dim arr As Variant
     Dim r As Long
     Dim wbsVal As String
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("BuildWbsToIdMapFromTable", "Dictionary")
 
     Set d = CreateObject("Scripting.Dictionary")
 

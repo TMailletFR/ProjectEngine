@@ -93,9 +93,12 @@ End Sub
 
 
 
+
 Public Sub FillCalcParentAndSummaryFromWBS( _
     ByVal tblCalc As ListObject, _
     ByVal tblWBS As ListObject)
+
+    Dim perfScope As clsPerfScope
 
     Dim mapCalc As Object
     Dim mapWBS As Object
@@ -113,6 +116,8 @@ Public Sub FillCalcParentAndSummaryFromWBS( _
     Dim wbsVal As String
     Dim parentWbs As String
     Dim parentId As String
+
+    Set perfScope = Profiler_BeginScope("FillCalcParentAndSummaryFromWBS", "Excel Table Write")
 
     Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
     Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
@@ -187,8 +192,11 @@ Public Sub FillCalcParentAndSummaryFromWBS( _
 
 End Sub
 
+
 Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
     ByVal tblCalc As ListObject) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim tblLinks As ListObject
@@ -219,6 +227,8 @@ Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
     Dim summarySourceId As String
 
     Dim key As String
+
+    Set perfScope = Profiler_BeginScope("BuildCoreLinksBySucc_FromLogicLinksTable_Expanded", "Network Build")
 
     Set linksBySuccId = Core_CreateLinksBySucc()
     Set dedupe = CreateObject("Scripting.Dictionary")
@@ -309,6 +319,7 @@ Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
 
 End Function
 
+
 Private Function GetLeafTargetsForNode( _
     ByVal nodeId As String, _
     ByRef arrCalc As Variant, _
@@ -317,8 +328,12 @@ Private Function GetLeafTargetsForNode( _
     ByVal directChildrenById As Object, _
     ByVal leafDescCache As Object) As Collection
 
+    Dim perfScope As clsPerfScope
+
     Dim result As Collection
     Dim rowIdx As Long
+
+    Set perfScope = Profiler_BeginScope("GetLeafTargetsForNode", "Network Build")
 
     Set result = New Collection
 
@@ -345,6 +360,7 @@ Private Function GetLeafTargetsForNode( _
 
 End Function
 
+
 Private Function CoreWrapper_GetLeafDescendantsFromCalc( _
     ByVal startId As String, _
     ByRef arrCalc As Variant, _
@@ -353,11 +369,15 @@ Private Function CoreWrapper_GetLeafDescendantsFromCalc( _
     ByVal directChildrenById As Object, _
     ByVal leafDescCache As Object) As Collection
 
+    Dim perfScope As clsPerfScope
+
     Dim result As Collection
     Dim q As Collection
     Dim currentId As Variant
     Dim childId As Variant
     Dim rowIdx As Long
+
+    Set perfScope = Profiler_BeginScope("CoreWrapper_GetLeafDescendantsFromCalc", "Network Scan")
 
     If leafDescCache.Exists(startId) Then
         Set CoreWrapper_GetLeafDescendantsFromCalc = CloneStringCollection(leafDescCache(startId))
@@ -407,10 +427,13 @@ Private Function CloneStringCollection(ByVal sourceCol As Collection) As Collect
 
 End Function
 
+
 Public Sub WriteCoreOutputsToCalc( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByRef dataArr As Variant)
+
+    Dim perfScope As clsPerfScope
 
     Dim rowCount As Long
     Dim outStart() As Variant
@@ -419,6 +442,8 @@ Public Sub WriteCoreOutputsToCalc( _
     Dim outErr() As Variant
     Dim outErrMsg() As Variant
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("WriteCoreOutputsToCalc", "Excel Table Write")
 
     rowCount = UBound(dataArr, 1)
 

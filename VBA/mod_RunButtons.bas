@@ -205,11 +205,16 @@ ErrHandler:
 
 End Sub
 
+
 Public Sub Run_Full_Update()
+
+    Dim perfScope As clsPerfScope
 
     Dim workflowStarted As Boolean
     Dim wsCaller As Worksheet
     Dim deferredConsoleShown As Boolean
+
+    Set perfScope = Profiler_BeginScope("Run_Full_Update", "Workflow")
 
     On Error GoTo SafeExit
 

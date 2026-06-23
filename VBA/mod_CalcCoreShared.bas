@@ -126,10 +126,15 @@ Public Function Core_IsSummaryRow( _
 
 End Function
 
+
 Public Function Core_CalcInclusiveDuration( _
     ByVal startVal As Variant, _
     ByVal finishVal As Variant, _
     Optional ByVal calendarType As String = "") As Variant
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("Core_CalcInclusiveDuration", "Calendar Calculation")
 
     If Not HasValue(startVal) Then
         Core_CalcInclusiveDuration = Empty
@@ -280,10 +285,15 @@ Public Function Core_GetSourceFinish( _
 
 End Function
 
+
 Public Function Core_BuildColumnMap_FromListObject(ByVal tbl As ListObject) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim mapCol As Object
     Dim i As Long
+
+    Set perfScope = Profiler_BeginScope("Core_BuildColumnMap_FromListObject", "Excel Metadata")
 
     Set mapCol = CreateObject("Scripting.Dictionary")
 

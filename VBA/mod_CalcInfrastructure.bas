@@ -8,7 +8,10 @@ Private Const LOGIC_TABLE_NAME As String = "tbl_LOGIC_LINKS"
 Private Const CALC_TABLE_TOP_LEFT As String = "A1"
 Private Const TABLE_GAP_COLS As Long = 3
 
+
 Public Sub Ensure_Calc_Infrastructure(Optional ByVal consoleMessages As Collection)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim tblCalc As ListObject
@@ -18,6 +21,8 @@ Public Sub Ensure_Calc_Infrastructure(Optional ByVal consoleMessages As Collecti
     Dim calcSheetWasCreated As Boolean
     Dim calcTableWasCreated As Boolean
     Dim logicTableWasCreated As Boolean
+
+    Set perfScope = Profiler_BeginScope("Ensure_Calc_Infrastructure", "Excel Infrastructure")
 
     On Error GoTo ErrHandler
 

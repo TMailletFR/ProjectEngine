@@ -10,12 +10,14 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Dim cell As Range
     Dim isValidArea As Boolean
     Dim consoleMessages As Collection
+    Dim oldEvents As Boolean
 
     Const COL_TEST_START As Long = 5
     Const COL_TEST_FINISH As Long = 6
     Const COL_TEST_PROGRESS As Long = 9
-    Const FIRST_TASK_ROW As Long = 4
+    Const FIRST_TASK_ROW As Long = 5
 
+    oldEvents = Application.EnableEvents
     On Error GoTo SafeExit
 
     Set consoleMessages = New Collection
@@ -102,7 +104,7 @@ NextCell:
     Next cell
 
 SafeExit:
-    Application.EnableEvents = True
+    Application.EnableEvents = oldEvents
 
     If Err.Number <> 0 Then
 

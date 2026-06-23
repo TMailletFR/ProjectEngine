@@ -12,8 +12,13 @@ Private Const WBS_TABLE As String = "tbl_WBS"
 
 Private Const SCURVE_CHART_SIGNATURE_NAME As String = "_SCURVE_CHART_SOURCE_SIGNATURE"
 
+Private gSCurveLanguage As String
+
+
 
 Public Sub Run_SCurve_Engine()
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -53,6 +58,8 @@ Public Sub Run_SCurve_Engine()
     Dim totalRawWeight As Double
     Dim consoleMessages As Collection
     Dim ackTokens As String
+
+    Set perfScope = Profiler_BeginScope("Run_SCurve_Engine", "Workflow")
 
     On Error GoTo SafeExit
 
@@ -574,10 +581,15 @@ Private Sub ValidateCalcSCurveColumns(ByVal mapCalcSCurve As Object)
 
 End Sub
 
+
 Private Function BuildColumnMapGeneric(ByVal tbl As ListObject) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim d As Object
     Dim i As Long
+
+    Set perfScope = Profiler_BeginScope("BuildColumnMapGeneric", "Excel Metadata")
 
     Set d = CreateObject("Scripting.Dictionary")
 
@@ -589,17 +601,22 @@ Private Function BuildColumnMapGeneric(ByVal tbl As ListObject) As Object
 
 End Function
 
+
 Private Sub BuildWBSParentMaps( _
     ByRef dataWBS As Variant, _
     ByVal mapWBS As Object, _
     ByVal hasChildren As Object, _
     ByVal idToWbs As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim r As Long
     Dim rowCount As Long
     Dim currentWBS As String
     Dim parentWbs As String
     Dim taskId As String
+
+    Set perfScope = Profiler_BeginScope("BuildWBSParentMaps", "Dictionary")
 
     rowCount = UBound(dataWBS, 1)
 
@@ -621,10 +638,15 @@ Private Sub BuildWBSParentMaps( _
 
 End Sub
 
+
 Private Sub ResizeTableToRowCount(ByVal tbl As ListObject, ByVal targetRows As Long)
+
+    Dim perfScope As clsPerfScope
 
     Dim currentRows As Long
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("ResizeTableToRowCount", "Excel Table Resize")
 
     If tbl.DataBodyRange Is Nothing Then
         currentRows = 0
@@ -651,7 +673,12 @@ Private Sub ResizeTableToRowCount(ByVal tbl As ListObject, ByVal targetRows As L
 
 End Sub
 
+
 Private Sub AddValueByDate(ByVal dict As Object, ByVal dayKey As Long, ByVal valueToAdd As Double)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("AddValueByDate", "Dictionary")
 
     If dict.Exists(CStr(dayKey)) Then
         dict(CStr(dayKey)) = CDbl(dict(CStr(dayKey))) + valueToAdd
@@ -661,6 +688,7 @@ Private Sub AddValueByDate(ByVal dict As Object, ByVal dayKey As Long, ByVal val
 
 End Sub
 
+
 Private Sub WriteSCurveDailyTable( _
     ByVal tblSCurve As ListObject, _
     ByVal mapSCurve As Object, _
@@ -668,6 +696,8 @@ Private Sub WriteSCurveDailyTable( _
     ByVal baselineDailyByDate As Object, _
     ByVal actualizedDailyByDate As Object, _
     ByVal remainingDailyByDate As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim sortedDates() As Long
     Dim idx As Long
@@ -685,6 +715,8 @@ Private Sub WriteSCurveDailyTable( _
 
     Dim todaySerial As Long
     Dim currentDate As Long
+
+    Set perfScope = Profiler_BeginScope("WriteSCurveDailyTable", "Excel Table Write")
 
     ReDim sortedDates(1 To allDates.Count)
 
@@ -807,9 +839,14 @@ Public Sub SCurve_SafeEmptyState()
 End Sub
 Private Sub SortLongArray(ByRef arr() As Long)
 
+    Dim perfScope As clsPerfScope
+
+
     Dim i As Long
     Dim j As Long
     Dim tempVal As Long
+
+    Set perfScope = Profiler_BeginScope("SortLongArray", "Sort")
 
     For i = LBound(arr) To UBound(arr) - 1
         For j = i + 1 To UBound(arr)
@@ -987,11 +1024,16 @@ Private Function BuildInlineWBSListLocal(ByVal idsDict As Object, ByVal idToWbs 
 
 End Function
 
+
 Private Sub Ensure_SCurve_Chart()
+
+    Dim perfScope As clsPerfScope
 
     Dim ws As Worksheet
     Dim chartObj As ChartObject
 
+
+    Set perfScope = Profiler_BeginScope("Ensure_SCurve_Chart", "Chart")
 
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
 
@@ -1007,7 +1049,101 @@ Private Sub Ensure_SCurve_Chart()
 
 End Sub
 
+Public Sub SCurve_ApplyLanguage(Optional ByVal languageCode As String = "")
+
+    Dim ws As Worksheet
+    Dim chartObj As ChartObject
+    Dim ch As Chart
+
+    On Error GoTo ErrHandler
+
+    If Trim$(languageCode) <> "" Then
+        SCurve_SetLanguage languageCode
+    Else
+        EnsureSCurveLanguageInitialized
+    End If
+
+    Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
+
+    On Error Resume Next
+    Set chartObj = ws.ChartObjects("cht_SCurve")
+    On Error GoTo ErrHandler
+
+    If chartObj Is Nothing Then Exit Sub
+    Set ch = chartObj.Chart
+
+    ch.HasTitle = True
+    ch.ChartTitle.Text = SCurve_L("S-Curve", "S-Curve")
+
+    If ch.SeriesCollection.Count >= 1 Then ch.SeriesCollection(1).Name = SCurve_L("Réel journalier", "Daily Actualized")
+    If ch.SeriesCollection.Count >= 2 Then ch.SeriesCollection(2).Name = SCurve_L("Prévu restant journalier", "Daily Remaining Forecast")
+    If ch.SeriesCollection.Count >= 3 Then ch.SeriesCollection(3).Name = SCurve_L("Référence", "Baseline")
+    If ch.SeriesCollection.Count >= 4 Then ch.SeriesCollection(4).Name = SCurve_L("Calculé", "Calculated")
+    If ch.SeriesCollection.Count >= 5 Then ch.SeriesCollection(5).Name = SCurve_L("Prévu", "Forecast")
+    If ch.SeriesCollection.Count >= 6 Then ch.SeriesCollection(6).Name = SCurve_L("Réel", "Actual")
+
+    On Error Resume Next
+    ch.Axes(xlCategory).TickLabels.NumberFormat = SCurve_DateAxisNumberFormat()
+    On Error GoTo ErrHandler
+
+    Exit Sub
+
+ErrHandler:
+    CalcBridge_ShowSingleConsoleMessage _
+        "STOP", _
+        "Erreur dans SCurve_ApplyLanguage : " & Err.Description, _
+        "Error in SCurve_ApplyLanguage: " & Err.Description
+
+End Sub
+
+Public Sub SCurve_SetLanguage(ByVal languageCode As String)
+
+    Select Case UCase$(Trim$(languageCode))
+        Case "FR"
+            gSCurveLanguage = "FR"
+        Case "EN"
+            gSCurveLanguage = "EN"
+        Case Else
+            gSCurveLanguage = "EN"
+    End Select
+
+End Sub
+
+Public Function SCurve_CurrentLanguage() As String
+
+    EnsureSCurveLanguageInitialized
+    SCurve_CurrentLanguage = gSCurveLanguage
+
+End Function
+
+Private Sub EnsureSCurveLanguageInitialized()
+
+    If UCase$(Trim$(gSCurveLanguage)) <> "FR" And UCase$(Trim$(gSCurveLanguage)) <> "EN" Then
+        gSCurveLanguage = "EN"
+    End If
+
+End Sub
+
+Private Function SCurve_L(ByVal frText As String, ByVal enText As String) As String
+
+    If SCurve_CurrentLanguage() = "FR" Then
+        SCurve_L = frText
+    Else
+        SCurve_L = enText
+    End If
+
+End Function
+
+Private Function SCurve_DateAxisNumberFormat() As String
+
+    SCurve_DateAxisNumberFormat = "dd/mm/yyyy"
+
+End Function
+
+
 Private Sub Create_SCurve_Chart()
+
+    Dim perfScope As clsPerfScope
 
     Dim ws As Worksheet
     Dim tbl As ListObject
@@ -1015,6 +1151,8 @@ Private Sub Create_SCurve_Chart()
     Dim ch As Chart
     Dim s As Series
 
+
+    Set perfScope = Profiler_BeginScope("Create_SCurve_Chart", "Chart")
 
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
     Set tbl = ws.ListObjects(SCURVE_TABLE)
@@ -1113,14 +1251,20 @@ Private Sub Create_SCurve_Chart()
 
     Format_SCurve_Chart ch
     DrawTodayVerticalLine ch
+    SCurve_ApplyLanguage
 
 End Sub
 
+
 Private Sub Update_SCurve_Chart(ByVal ch As Chart)
+
+    Dim perfScope As clsPerfScope
 
     Dim tbl As ListObject
     Dim rebuildNeeded As Boolean
     Dim sourceSignature As String
+
+    Set perfScope = Profiler_BeginScope("Update_SCurve_Chart", "Chart")
 
     Set tbl = ThisWorkbook.Worksheets(SCURVE_SHEET).ListObjects(SCURVE_TABLE)
 
@@ -1163,10 +1307,16 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
 
     Format_SCurve_Chart ch
     DrawTodayVerticalLine ch
+    SCurve_ApplyLanguage
 
 End Sub
 
+
 Private Sub SCurveAssignChartSeriesRanges(ByVal ch As Chart, ByVal tbl As ListObject)
+
+    Dim perfScope As clsPerfScope
+
+    Set perfScope = Profiler_BeginScope("SCurveAssignChartSeriesRanges", "Chart")
 
     ch.SeriesCollection(1).XValues = tbl.ListColumns("Date").DataBodyRange
     ch.SeriesCollection(1).Values = tbl.ListColumns("Daily Actualized").DataBodyRange
@@ -1310,7 +1460,7 @@ Private Sub Format_SCurve_Chart(ByVal ch As Chart)
     End With
 
     With ch.Axes(xlCategory)
-        .TickLabels.NumberFormat = "dd/mm/yyyy"
+        .TickLabels.NumberFormat = SCurve_DateAxisNumberFormat()
         .TickLabels.Orientation = 45
         .CategoryType = xlCategoryScale
     End With
@@ -1324,10 +1474,15 @@ Private Sub Format_SCurve_Chart(ByVal ch As Chart)
 
 End Sub
 
+
 Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
+
+    Dim perfScope As clsPerfScope
 
     Dim ws As Worksheet
     Dim tbl As ListObject
+
+    Set perfScope = Profiler_BeginScope("DrawTodayVerticalLine", "Chart")
 
     Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
     Set tbl = ws.ListObjects(SCURVE_TABLE)
@@ -1336,11 +1491,14 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
 End Sub
 
+
 Public Sub DrawSCurveTodayVerticalLine( _
     ByVal ch As Chart, _
     ByVal ws As Worksheet, _
     ByVal tbl As ListObject, _
     ByVal todayShapeName As String)
+
+    Dim perfScope As clsPerfScope
 
     Dim shp As Shape
     Dim todaySerial As Double
@@ -1360,6 +1518,8 @@ Public Sub DrawSCurveTodayVerticalLine( _
     Dim currentDate As Double
     Dim nextDate As Double
     Dim axisBetweenCategories As Boolean
+
+    Set perfScope = Profiler_BeginScope("DrawSCurveTodayVerticalLine", "Shape Create")
 
     If ch Is Nothing Then Exit Sub
     If ws Is Nothing Then Exit Sub

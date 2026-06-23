@@ -6,7 +6,10 @@ Private Const CALC_TABLE_NAME_INC As String = "tbl_CALC"
 Private Const CALC_STATE_SHEET_NAME_INC As String = "CALC_STATE"
 Private Const CALC_STATE_TABLE_NAME_INC As String = "tbl_CALC_STATE"
 
+
 Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim wsState As Worksheet
@@ -26,6 +29,8 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
     Dim r As Long
     Dim idVal As String
     Dim currentSig As String
+
+    Set perfScope = Profiler_BeginScope("Get_Changed_TaskIds", "Incremental")
 
     Set changedIds = CreateObject("Scripting.Dictionary")
     forceFullRecalc = False
@@ -317,15 +322,20 @@ End Function
 ' - inclut tous les parents (rollup)
 '=====================================================
 
+
 Public Function Build_Impacted_TaskIds( _
     ByVal changedIds As Object, _
     ByVal childrenByPred As Object, _
     ByVal parentById As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim impactedIds As Object
     Dim idVal As Variant
     Dim snapshotKeys As Variant
     Dim i As Long
+
+    Set perfScope = Profiler_BeginScope("Build_Impacted_TaskIds", "Network Scan")
 
     Set impactedIds = CreateObject("Scripting.Dictionary")
 

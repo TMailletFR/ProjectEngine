@@ -98,13 +98,18 @@ SafeExit:
 
 End Function
 
+
 Public Function Core_BuildRowById( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim rowById As Object
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("Core_BuildRowById", "Dictionary")
 
     Set rowById = CreateObject("Scripting.Dictionary")
 
@@ -119,14 +124,19 @@ Public Function Core_BuildRowById( _
 
 End Function
 
+
 Public Function Core_BuildParentIds( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal rowById As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim parentIds As Object
     Dim r As Long
     Dim idVal As String
+
+    Set perfScope = Profiler_BeginScope("Core_BuildParentIds", "Dictionary")
 
     Set parentIds = CreateObject("Scripting.Dictionary")
 
@@ -143,16 +153,21 @@ Public Function Core_BuildParentIds( _
 
 End Function
 
+
 Public Function Core_BuildDirectChildrenById( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal rowById As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim directChildrenById As Object
     Dim r As Long
     Dim idVal As String
     Dim parentId As String
     Dim key As Variant
+
+    Set perfScope = Profiler_BeginScope("Core_BuildDirectChildrenById", "Dictionary")
 
     Set directChildrenById = CreateObject("Scripting.Dictionary")
 
@@ -175,15 +190,20 @@ Public Function Core_BuildDirectChildrenById( _
 
 End Function
 
+
 Public Function Core_BuildChildrenByPred( _
     ByVal rowById As Object, _
     ByVal linksBySuccId As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim childrenByPred As Object
     Dim anyId As Variant
     Dim succId As Variant
     Dim oneLink As Variant
     Dim predId As String
+
+    Set perfScope = Profiler_BeginScope("Core_BuildChildrenByPred", "Dictionary")
 
     Set childrenByPred = CreateObject("Scripting.Dictionary")
 
@@ -211,12 +231,17 @@ Public Function Core_BuildChildrenByPred( _
 
 End Function
 
+
 Public Function Core_BuildValidLeafIds( _
     ByVal rowById As Object, _
     ByVal parentIds As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim validIds As Object
     Dim idVal As Variant
+
+    Set perfScope = Profiler_BeginScope("Core_BuildValidLeafIds", "Dictionary")
 
     Set validIds = CreateObject("Scripting.Dictionary")
 
@@ -232,15 +257,20 @@ Public Function Core_BuildValidLeafIds( _
 
 End Function
 
+
 Public Function Core_BuildIndegree( _
     ByVal validIds As Object, _
     ByVal linksBySuccId As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim indegree As Object
     Dim idVal As Variant
     Dim succId As Variant
     Dim oneLink As Variant
     Dim predId As String
+
+    Set perfScope = Profiler_BeginScope("Core_BuildIndegree", "Dictionary")
 
     Set indegree = CreateObject("Scripting.Dictionary")
 
@@ -270,16 +300,21 @@ Public Function Core_BuildIndegree( _
 
 End Function
 
+
 Public Function Core_TopoSortLeafNetwork( _
     ByVal validIds As Object, _
     ByVal childrenByPred As Object, _
     ByVal indegree As Object) As Collection
+
+    Dim perfScope As clsPerfScope
 
     Dim q As Collection
     Dim topoOrder As Collection
     Dim currentId As Variant
     Dim childId As Variant
     Dim key As Variant
+
+    Set perfScope = Profiler_BeginScope("Core_TopoSortLeafNetwork", "Network Sort")
 
     Set q = New Collection
     Set topoOrder = New Collection
@@ -356,12 +391,15 @@ Public Sub Core_PropagateErrorToChildren( _
 
 End Sub
 
+
 Public Sub Core_RollupSummaryDates( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal rowById As Object, _
     ByVal directChildrenById As Object, _
     ByVal parentIds As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim changed As Boolean
     Dim passCount As Long
@@ -377,6 +415,8 @@ Public Sub Core_RollupSummaryDates( _
     Dim childStart As Variant
     Dim childFinish As Variant
     Dim hasChildData As Boolean
+
+    Set perfScope = Profiler_BeginScope("Core_RollupSummaryDates", "Core Rollup")
 
     maxPass = rowById.Count
     passCount = 0

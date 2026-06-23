@@ -64,9 +64,12 @@ Public Sub Write_CalcState_Snapshot(ByVal runStatus As String)
 
 End Sub
 
+
 Public Sub Write_CalcState_Snapshot_Console( _
     ByVal runStatus As String, _
     ByVal consoleMessages As Collection)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim wsState As Worksheet
@@ -81,6 +84,8 @@ Public Sub Write_CalcState_Snapshot_Console( _
 
     Dim rowCount As Long
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("Write_CalcState_Snapshot_Console", "Excel Table Write")
 
     On Error GoTo SafeExit
 

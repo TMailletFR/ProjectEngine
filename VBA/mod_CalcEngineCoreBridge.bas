@@ -2,6 +2,9 @@ Attribute VB_Name = "mod_CalcEngineCoreBridge"
 Option Explicit
 Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As Boolean = False)
 
+    Dim perfScope As clsPerfScope
+
+
     Const PARTIAL_RECALC_MAX_IMPACT_RATIO As Double = 0.3
 
     Dim wsCalc As Worksheet
@@ -28,6 +31,8 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
     Dim runAnalytics As Boolean
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Run_Calc_Engine_CoreBridge", "Planning")
 
     On Error GoTo ErrHandler
 
@@ -2173,15 +2178,20 @@ Private Sub CalcBridge_ShowParentDateWarnings( _
 SafeExit:
 End Sub
 
+
 Private Function BuildParentByIdMap_FromCalc( _
     ByRef dataArr As Variant, _
     ByVal mapCalc As Object, _
     ByVal rowById As Object) As Object
 
+    Dim perfScope As clsPerfScope
+
     Dim parentById As Object
     Dim idKey As Variant
     Dim rowIdx As Long
     Dim parentId As String
+
+    Set perfScope = Profiler_BeginScope("BuildParentByIdMap_FromCalc", "Network Build")
 
     Set parentById = CreateObject("Scripting.Dictionary")
 
@@ -2203,12 +2213,17 @@ Private Function BuildParentByIdMap_FromCalc( _
 
 End Function
 
+
 Public Function Build_Successor_Map(ByVal linksBySuccId As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim succByPred As Object
     Dim succId As Variant
     Dim oneLink As Variant
     Dim predId As String
+
+    Set perfScope = Profiler_BeginScope("Build_Successor_Map", "Network Build")
 
     Set succByPred = CreateObject("Scripting.Dictionary")
 
@@ -2288,15 +2303,20 @@ Public Function Get_Impacted_Descendants( _
 
 End Function
 
+
 Private Sub WriteCoreOutputsToCalc_Partial( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByRef dataArr As Variant, _
     ByVal impactedIds As Object)
 
+    Dim perfScope As clsPerfScope
+
     Dim rowById As Object
     Dim idVal As Variant
     Dim rowIdx As Long
+
+    Set perfScope = Profiler_BeginScope("WriteCoreOutputsToCalc_Partial", "Excel Cell Write")
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -2339,11 +2359,14 @@ Private Sub WriteCoreOutputsToCalc_Partial( _
 
 End Sub
 
+
 Private Sub WriteCoreDrivingLogicToCalc_Partial( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByRef dataArr As Variant, _
     ByVal impactedIds As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim rowById As Object
     Dim parentIds As Object
@@ -2357,6 +2380,8 @@ Private Sub WriteCoreDrivingLogicToCalc_Partial( _
     Dim forecastFinish As Variant
     Dim calcStart As Variant
     Dim drivingLogic As String
+
+    Set perfScope = Profiler_BeginScope("WriteCoreDrivingLogicToCalc_Partial", "Excel Cell Write")
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -2425,11 +2450,14 @@ Private Sub WriteCoreDrivingLogicToCalc_Partial( _
 
 End Sub
 
+
 Public Sub CalcBridge_RunAnalyticsAndPush( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByVal linksBySuccId As Object, _
     Optional ByVal consoleMessages As Collection)
+
+    Dim perfScope As clsPerfScope
 
     Dim dataArr As Variant
     Dim rowById As Object
@@ -2444,6 +2472,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
     Dim errMissingBaselineForREX As Object
     Dim analyticsPredLagBySuccPred As Object
     Dim analyticsPredTypeBySuccPred As Object
+
+    Set perfScope = Profiler_BeginScope("CalcBridge_RunAnalyticsAndPush", "Analytics")
 
     On Error GoTo ErrHandler
 
@@ -2731,7 +2761,10 @@ Private Function CalcBridge_BuildIdToWbsFromData( _
 
 End Function
 
+
 Public Sub Push_Calculated_Back_To_WBS_Partial(ByVal impactedIds As Object)
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsCalc As Worksheet
@@ -2747,6 +2780,8 @@ Public Sub Push_Calculated_Back_To_WBS_Partial(ByVal impactedIds As Object)
     Dim i As Long
     Dim id As String
     Dim calcRow As Long
+
+    Set perfScope = Profiler_BeginScope("Push_Calculated_Back_To_WBS_Partial", "Excel Cell Write")
 
     On Error GoTo SafeExit
 
@@ -3540,6 +3575,8 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
 
         CalcBridge_AddConsoleMessage historyMessages, "STOP", historyErrorMessage, True
     End If
+
+    If Profiler_ShouldSuppressUserInterface() Then Exit Sub
 
     If ShouldDeferCurrentWorkflowDisplayToRoot("CalcBridge_ShowPlanningConsole") Then
         DeferPlanningWorkflowDisplayMessages historyMessages

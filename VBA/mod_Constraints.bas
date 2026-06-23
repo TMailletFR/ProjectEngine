@@ -5,7 +5,7 @@ Option Explicit
 
 Private Const CONSTRAINTS_SHEET_NAME As String = "CONSTRAINTS"
 Private Const CONSTRAINTS_TABLE_NAME As String = "tbl_CONSTRAINTS"
-Private Const CONSTRAINTS_TOP_LEFT As String = "A1"
+Private Const CONSTRAINTS_TOP_LEFT As String = "A2"
 
 Private Const WBS_SHEET_NAME As String = "WBS"
 Private Const WBS_TABLE_NAME As String = "tbl_WBS"
@@ -49,7 +49,10 @@ SafeExit:
 
 End Sub
 
+
 Public Sub Import_WBS_To_Constraints()
+
+    Dim perfScope As clsPerfScope
 
     Dim wsWBS As Worksheet
     Dim wsConstraints As Worksheet
@@ -68,6 +71,8 @@ Public Sub Import_WBS_To_Constraints()
     Dim outRow As Long
     Dim r As Long
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Import_WBS_To_Constraints", "Excel Table Sync")
 
     On Error GoTo ErrHandler
 
@@ -160,9 +165,12 @@ Public Function Sync_Constraints_To_CALC_ForWorkflow( _
 
 End Function
 
+
 Private Function Sync_Constraints_To_CALC_Impl( _
     ByVal showConsole As Boolean, _
     Optional ByVal externalConsoleMessages As Collection) As Boolean
+
+    Dim perfScope As clsPerfScope
 
     Dim wsCalc As Worksheet
     Dim wsConstraints As Worksheet
@@ -181,6 +189,8 @@ Private Function Sync_Constraints_To_CALC_Impl( _
     Dim idVal As String
     Dim activeVal As String
     Dim consoleMessages As Collection
+
+    Set perfScope = Profiler_BeginScope("Sync_Constraints_To_CALC_Impl", "Excel Table Sync")
 
     On Error GoTo ErrHandler
 
@@ -394,7 +404,6 @@ Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
     Set EnsureConstraintsTable = tbl
 
 End Function
-
 Private Function ConstraintsHeaders() As Variant
 
     ConstraintsHeaders = Array( _
@@ -882,9 +891,12 @@ Private Function GetConstraintColumnArray( _
 
 End Function
 
+
 Private Function BuildExistingConstraintRows( _
     ByVal tbl As ListObject, _
     ByVal mapConstraints As Object) As Object
+
+    Dim perfScope As clsPerfScope
 
     Dim d As Object
     Dim rowData As Object
@@ -893,6 +905,8 @@ Private Function BuildExistingConstraintRows( _
     Dim c As Variant
     Dim idVal As String
     Dim headers As Variant
+
+    Set perfScope = Profiler_BeginScope("BuildExistingConstraintRows", "Dictionary")
 
     Set d = CreateObject("Scripting.Dictionary")
     headers = ConstraintsHeaders()
@@ -1086,12 +1100,17 @@ Private Sub CopyPreservedConstraintFields( _
 
 End Sub
 
+
 Private Sub ResizeTableToRowCount_Constraints( _
     ByVal tbl As ListObject, _
     ByVal targetRows As Long)
 
+    Dim perfScope As clsPerfScope
+
     Dim currentRows As Long
     Dim r As Long
+
+    Set perfScope = Profiler_BeginScope("ResizeTableToRowCount_Constraints", "Excel Table Resize")
 
     If tbl.DataBodyRange Is Nothing Then
         currentRows = 0
