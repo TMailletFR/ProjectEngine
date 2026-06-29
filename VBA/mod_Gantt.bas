@@ -16,6 +16,8 @@ Attribute VB_Name = "mod_Gantt"
 
 Option Explicit
 Private gExpandedLinks As Object
+Private gPendingGanttGeometryRepair As Boolean
+Private gPendingGanttGeometrySnapshot As Object
 
 Private Const GANTT_SHEET As String = "GANTT"
 Private Const WBS_SHEET As String = "WBS"
@@ -387,13 +389,13 @@ Private Function BuildGanttTestInputMap(ByVal ws As Worksheet) As Object
 
     For r = FIRST_TASK_ROW To lastRow
 
-        wbsVal = NormalizeWBS(CStr(ws.Cells(r, COL_WBS).value))
+        wbsVal = NormalizeWBS(CStr(ws.cells(r, COL_WBS).value))
 
         If wbsVal <> "" Then
             d(wbsVal) = Array( _
-                GetCellValue(ws.Cells(r, COL_TEST_START).value), _
-                GetCellValue(ws.Cells(r, COL_TEST_FINISH).value), _
-                GetCellValue(ws.Cells(r, COL_TEST_PROGRESS).value))
+                GetCellValue(ws.cells(r, COL_TEST_START).value), _
+                GetCellValue(ws.cells(r, COL_TEST_FINISH).value), _
+                GetCellValue(ws.cells(r, COL_TEST_PROGRESS).value))
         End If
 
     Next r
@@ -420,19 +422,19 @@ Private Sub RestoreGanttTestInputs(ByVal ws As Worksheet, ByVal testInputMap As 
 
     For r = FIRST_TASK_ROW To lastRow
 
-        wbsVal = NormalizeWBS(CStr(ws.Cells(r, COL_WBS).value))
+        wbsVal = NormalizeWBS(CStr(ws.cells(r, COL_WBS).value))
 
         If wbsVal <> "" Then
             If testInputMap.Exists(wbsVal) Then
                 savedVals = testInputMap(wbsVal)
 
-                ws.Cells(r, COL_TEST_START).value = savedVals(0)
-                ws.Cells(r, COL_TEST_FINISH).value = savedVals(1)
-                ws.Cells(r, COL_TEST_PROGRESS).value = savedVals(2)
+                ws.cells(r, COL_TEST_START).value = savedVals(0)
+                ws.cells(r, COL_TEST_FINISH).value = savedVals(1)
+                ws.cells(r, COL_TEST_PROGRESS).value = savedVals(2)
 
-                ws.Cells(r, COL_TEST_START).NumberFormat = "dd/mm/yyyy"
-                ws.Cells(r, COL_TEST_FINISH).NumberFormat = "dd/mm/yyyy"
-                ws.Cells(r, COL_TEST_PROGRESS).NumberFormat = "0%"
+                ws.cells(r, COL_TEST_START).NumberFormat = "dd/mm/yyyy"
+                ws.cells(r, COL_TEST_FINISH).NumberFormat = "dd/mm/yyyy"
+                ws.cells(r, COL_TEST_PROGRESS).NumberFormat = "0%"
             End If
         End If
 
@@ -497,12 +499,23 @@ Private Sub RunGanttRefreshCore( _
     Dim wasGanttSheetCreated As Boolean
     Dim needsVisualLayoutStabilization As Boolean
     Dim consoleMessages As Collection
+    Dim wsActiveBeforeRefresh As Worksheet
+    Dim selectionAddressBeforeRefresh As String
+    Dim shouldRestoreActiveContext As Boolean
 
     Set perfScope = Profiler_BeginScope("RunGanttRefreshCore", "Gantt")
 
     On Error GoTo SafeExit
 
     Set consoleMessages = New Collection
+    shouldRestoreActiveContext = Not activateGantt
+    If shouldRestoreActiveContext Then
+        On Error Resume Next
+        Set wsActiveBeforeRefresh = Application.ActiveSheet
+        selectionAddressBeforeRefresh = CStr(Application.Selection.Address(False, False))
+        On Error GoTo SafeExit
+    End If
+
     Set gExpandedLinks = Nothing
 
     EnsureGanttViewInitialized
@@ -591,7 +604,7 @@ Private Sub RunGanttRefreshCore( _
     End If
 
     If Not displayOnly Then
-        EnsureGanttVisualLayoutReadyBeforeDrawing wsGantt
+        EnsureGanttVisualLayoutReadyBeforeDrawing wsGantt, activateGantt, activateGantt
     End If
 
     DrawGanttShapes wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, baseById, testById, isTestMode
@@ -600,7 +613,19 @@ Private Sub RunGanttRefreshCore( _
     ApplyGanttUiState wsGantt
     If renderConstraintMarkers Or renderDeadlineMarkers Then DrawConstraintMarkers_Gantt wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, constraintById, renderConstraintMarkers, renderDeadlineMarkers
 
+    If Not displayOnly Then
+        If activateGantt Then
+            Gantt_ClearPendingGeometryRepair
+        Else
+            Gantt_CapturePendingGeometryRepair wsGantt
+        End If
+    End If
+
 SafeExit:
+    If shouldRestoreActiveContext Then
+        RestoreGanttCallerVisualContext wsActiveBeforeRefresh, selectionAddressBeforeRefresh
+    End If
+
     Application.EnableEvents = True
     Application.ScreenUpdating = True
     SetGanttInternalWrite False
@@ -785,6 +810,110 @@ Private Sub ResolveDisplayedProjectRange( _
 
 End Sub
 
+Public Function Gantt_HasPendingGeometryRepair() As Boolean
+
+    Gantt_HasPendingGeometryRepair = gPendingGanttGeometryRepair
+
+End Function
+
+Public Function Gantt_PendingGeometryRepairCount() As Long
+
+    If gPendingGanttGeometrySnapshot Is Nothing Then Exit Function
+    Gantt_PendingGeometryRepairCount = gPendingGanttGeometrySnapshot.Count
+
+End Function
+
+Public Sub Gantt_RepairPendingGeometryIfNeeded()
+
+    Dim ws As Worksheet
+    Dim shapeName As Variant
+    Dim geom As Variant
+    Dim shp As Shape
+    Dim oldScreenUpdating As Boolean
+    Dim oldInternalWrite As Boolean
+
+    If Not gPendingGanttGeometryRepair Then Exit Sub
+    If gPendingGanttGeometrySnapshot Is Nothing Then
+        gPendingGanttGeometryRepair = False
+        Exit Sub
+    End If
+
+    On Error GoTo SafeExit
+
+    Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
+    oldScreenUpdating = Application.ScreenUpdating
+    oldInternalWrite = GetGanttInternalWrite()
+
+    Application.ScreenUpdating = False
+    SetGanttInternalWrite True
+
+    For Each shapeName In gPendingGanttGeometrySnapshot.Keys
+        Set shp = Nothing
+        On Error Resume Next
+        Set shp = ws.Shapes(CStr(shapeName))
+        On Error GoTo SafeExit
+
+        If Not shp Is Nothing Then
+            geom = gPendingGanttGeometrySnapshot(CStr(shapeName))
+            shp.Left = CDbl(geom(0))
+            shp.Top = CDbl(geom(1))
+            shp.Width = CDbl(geom(2))
+            shp.Height = CDbl(geom(3))
+            shp.Visible = CLng(geom(4))
+        End If
+    Next shapeName
+
+SafeExit:
+    SetGanttInternalWrite oldInternalWrite
+    Application.ScreenUpdating = oldScreenUpdating
+    Gantt_ClearPendingGeometryRepair
+
+End Sub
+
+Private Sub Gantt_CapturePendingGeometryRepair(ByVal ws As Worksheet)
+
+    Dim shp As Shape
+    Dim shapeName As String
+    Dim snapshot As Object
+
+    If ws Is Nothing Then Exit Sub
+
+    Set snapshot = CreateObject("Scripting.Dictionary")
+
+    For Each shp In ws.Shapes
+        shapeName = CStr(shp.Name)
+        If IsGanttGeometryRepairShape(shapeName) Then
+            snapshot(shapeName) = Array(CDbl(shp.Left), CDbl(shp.Top), CDbl(shp.Width), CDbl(shp.Height), CLng(shp.Visible))
+        End If
+    Next shp
+
+    If snapshot.Count > 0 Then
+        Set gPendingGanttGeometrySnapshot = snapshot
+        gPendingGanttGeometryRepair = True
+    Else
+        Gantt_ClearPendingGeometryRepair
+    End If
+
+End Sub
+
+Private Sub Gantt_ClearPendingGeometryRepair()
+
+    gPendingGanttGeometryRepair = False
+    Set gPendingGanttGeometrySnapshot = Nothing
+
+End Sub
+
+Private Function IsGanttGeometryRepairShape(ByVal shapeName As String) As Boolean
+
+    IsGanttGeometryRepairShape = _
+           shapeName = "TODAY_LINE" _
+        Or Left$(shapeName, 5) = "TASK_" _
+        Or Left$(shapeName, 3) = "MS_" _
+        Or Left$(shapeName, 4) = "SUM_" _
+        Or Left$(shapeName, 4) = "DEP_" _
+        Or Left$(shapeName, 5) = "CSTR_"
+
+End Function
 Private Function IsManagedGanttShape(ByVal shapeName As String) As Boolean
 
     IsManagedGanttShape = _
@@ -832,35 +961,34 @@ Private Sub ClearGanttRightPaneOnly(ByVal wsGantt As Worksheet)
 
     Set perfScope = Profiler_BeginScope("ClearGanttRightPaneOnly", "Excel Clear")
 
-    lastCol = wsGantt.Cells(HEADER_ROW_2, wsGantt.Columns.Count).End(xlToLeft).Column
+    lastCol = wsGantt.cells(HEADER_ROW_2, wsGantt.Columns.Count).End(xlToLeft).Column
     If lastCol < FIRST_TIMELINE_COL Then lastCol = FIRST_TIMELINE_COL
 
     On Error Resume Next
     wsGantt.Range( _
-        wsGantt.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
-        wsGantt.Cells(HEADER_ROW_2, lastCol) _
+        wsGantt.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
+        wsGantt.cells(HEADER_ROW_2, lastCol) _
     ).UnMerge
     On Error GoTo 0
 
     wsGantt.Range( _
-        wsGantt.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
-        wsGantt.Cells(wsGantt.rows.Count, lastCol) _
+        wsGantt.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
+        wsGantt.cells(wsGantt.rows.Count, lastCol) _
     ).ClearContents
 
     wsGantt.Range( _
-        wsGantt.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
-        wsGantt.Cells(wsGantt.rows.Count, lastCol) _
+        wsGantt.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
+        wsGantt.cells(wsGantt.rows.Count, lastCol) _
     ).Interior.Pattern = xlNone
 
     wsGantt.Range( _
-        wsGantt.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
-        wsGantt.Cells(wsGantt.rows.Count, lastCol) _
+        wsGantt.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), _
+        wsGantt.cells(wsGantt.rows.Count, lastCol) _
     ).Borders.LineStyle = xlNone
 
     DeleteManagedGanttShapes wsGantt
 
 End Sub
-
 
 Private Sub FinalizeGanttSheet(ByVal ws As Worksheet, ByVal totalDays As Long, ByVal rowCount As Long)
 
@@ -874,10 +1002,10 @@ Private Sub FinalizeGanttSheet(ByVal ws As Worksheet, ByVal totalDays As Long, B
     lastCol = FIRST_TIMELINE_COL + totalDays - 1
     lastRow = FIRST_TASK_ROW + rowCount - 1
 
-    ws.Range(ws.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.Cells(lastRow, lastCol)).Borders(xlInsideVertical).LineStyle = xlDot
-    ws.Range(ws.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.Cells(lastRow, lastCol)).Borders(xlInsideHorizontal).LineStyle = xlDot
+    ws.Range(ws.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.cells(lastRow, lastCol)).Borders(xlInsideVertical).LineStyle = xlDot
+    ws.Range(ws.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.cells(lastRow, lastCol)).Borders(xlInsideHorizontal).LineStyle = xlDot
 
-    ws.Range(ws.Cells(FIRST_TASK_ROW, 1), ws.Cells(lastRow, COL_LOGIC)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.cells(FIRST_TASK_ROW, 1), ws.cells(lastRow, COL_LOGIC)).Borders.LineStyle = xlContinuous
 
 End Sub
 
@@ -959,7 +1087,7 @@ Private Sub ClearGanttSheet(ByVal ws As Worksheet)
         shp.Delete
     Next shp
 
-    ws.Cells.Clear
+    ws.cells.Clear
 
 End Sub
 
@@ -987,7 +1115,7 @@ Public Sub Gantt_ApplyLanguage(Optional ByVal languageCode As String = "")
         EnsureGanttLanguageInitialized
     End If
 
-    ws.Cells(TITLE_ROW, COL_WBS).value = Gantt_L("VUE GANTT", "GANTT VIEW")
+    ws.cells(TITLE_ROW, COL_WBS).value = Gantt_L("VUE GANTT", "GANTT VIEW")
 
     ws.Range("A" & HEADER_ROW_2).value = "WBS"
     ws.Range("B" & HEADER_ROW_2).value = Gantt_L("Nom tâche", "Task Name")
@@ -1002,7 +1130,7 @@ Public Sub Gantt_ApplyLanguage(Optional ByVal languageCode As String = "")
 
     Gantt_SetShapeText ws, BTN_SCENARIO_NAME, Gantt_L("Scénario", "Scenario")
     Gantt_SetShapeText ws, BTN_TEST_NAME, Gantt_L("Test", "Test")
-    Gantt_SetShapeText ws, BTN_LOCK_NAME, Gantt_L("Verrou", "Lock")
+    Gantt_SetShapeText ws, BTN_LOCK_NAME, Gantt_L("Verrouiller", "Lock")
 
     Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, Gantt_L("Détail / Synthèse", "Detail / Summary")
     Gantt_SetShapeText ws, BTN_SCALE_LEFT_NAME, Gantt_L("Jour / Sem. / Mois", "Day / Week / Month")
@@ -1092,7 +1220,7 @@ Private Sub SetupStaticLayout(ByVal ws As Worksheet)
 
     Set perfScope = Profiler_BeginScope("SetupStaticLayout", "Gantt Layout")
 
-    ws.Cells(TITLE_ROW, COL_WBS).value = "GANTT VIEW"
+    ws.cells(TITLE_ROW, COL_WBS).value = "GANTT VIEW"
 
     ws.Range("A" & HEADER_ROW_2).value = "WBS"
     ws.Range("B" & HEADER_ROW_2).value = "Task Name"
@@ -1105,7 +1233,7 @@ Private Sub SetupStaticLayout(ByVal ws As Worksheet)
     ws.Range("I" & HEADER_ROW_2).value = TEST_PROGRESS_HEADER
     ws.Range("J" & HEADER_ROW_2).value = "Logic"
 
-    ws.Range(ws.Cells(TITLE_ROW, COL_WBS), ws.Cells(TITLE_ROW, COL_LOGIC)).Font.Bold = True
+    ws.Range(ws.cells(TITLE_ROW, COL_WBS), ws.cells(TITLE_ROW, COL_LOGIC)).Font.Bold = True
     ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Font.Bold = True
 
     'Pixel-stable heights.
@@ -1421,23 +1549,49 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
     Dim currentDate As Date
     Dim currentMonth As Long
     Dim monthStartCol As Long
+    Dim lastTimelineCol As Long
+    Dim dateValues As Variant
+    Dim dateRange As Range
+    Dim weekendEndIndex As Long
+    Dim timelineValueWrites As Long
+    Dim timelineFormatWrites As Long
+    Dim timelineWidthWrites As Long
+    Dim weekendFormatWrites As Long
+    Dim monthHeaderWrites As Long
 
     Set perfScope = Profiler_BeginScope("BuildTimeline_Day", "Timeline")
 
+    If totalDays < 1 Then Exit Sub
+
     currentMonth = 0
     monthStartCol = FIRST_TIMELINE_COL
+    lastTimelineCol = FIRST_TIMELINE_COL + totalDays - 1
+
+    ReDim dateValues(1 To 1, 1 To totalDays)
+
+    For i = 0 To totalDays - 1
+        dateValues(1, i + 1) = CDate(CDbl(projectStart) + i)
+    Next i
+
+    Set dateRange = ws.Range(ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL), ws.cells(HEADER_ROW_2, lastTimelineCol))
+    dateRange.value = dateValues
+    timelineValueWrites = timelineValueWrites + 1
+
+    With dateRange
+        .NumberFormat = "dd"
+        .HorizontalAlignment = xlCenter
+    End With
+    timelineFormatWrites = timelineFormatWrites + 2
+
+    dateRange.EntireColumn.ColumnWidth = 4
+    timelineWidthWrites = timelineWidthWrites + 1
 
     For i = 0 To totalDays - 1
         currentDate = CDate(CDbl(projectStart) + i)
 
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = currentDate
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "dd"
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 4
-
         If Month(currentDate) <> currentMonth Then
             If i > 0 Then
-                With ws.Range(ws.Cells(HEADER_ROW_1, monthStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
+                With ws.Range(ws.cells(HEADER_ROW_1, monthStartCol), ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
                     .Merge
                     .HorizontalAlignment = xlCenter
                     .VerticalAlignment = xlCenter
@@ -1445,18 +1599,22 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
                     .value = Gantt_FormatMonthYear(DateSerial(Year(CDate(CDbl(projectStart) + i - 1)), Month(CDate(CDbl(projectStart) + i - 1)), 1))
                     .Interior.Color = RGB(191, 191, 191)
                 End With
+                monthHeaderWrites = monthHeaderWrites + 1
             End If
 
             currentMonth = Month(currentDate)
             monthStartCol = FIRST_TIMELINE_COL + i
         End If
 
-        If Weekday(currentDate, vbMonday) >= 6 Then
-            ws.Range(ws.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL + i), ws.Cells(FIRST_TASK_ROW + 500, FIRST_TIMELINE_COL + i)).Interior.Color = RGB(242, 242, 242)
+        If Weekday(currentDate, vbMonday) = 6 Then
+            weekendEndIndex = i
+            If i + 1 <= totalDays - 1 Then weekendEndIndex = i + 1
+            ws.Range(ws.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL + i), ws.cells(FIRST_TASK_ROW + 500, FIRST_TIMELINE_COL + weekendEndIndex)).Interior.Color = RGB(242, 242, 242)
+            weekendFormatWrites = weekendFormatWrites + 1
         End If
     Next i
 
-    With ws.Range(ws.Cells(HEADER_ROW_1, monthStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + totalDays - 1))
+    With ws.Range(ws.cells(HEADER_ROW_1, monthStartCol), ws.cells(HEADER_ROW_1, lastTimelineCol))
         .Merge
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
@@ -1464,11 +1622,18 @@ Private Sub BuildTimeline_Day(ByVal ws As Worksheet, ByVal projectStart As Varia
         .value = Gantt_FormatMonthYear(DateSerial(Year(CDate(CDbl(projectStart) + totalDays - 1)), Month(CDate(CDbl(projectStart) + totalDays - 1)), 1))
         .Interior.Color = RGB(191, 191, 191)
     End With
+    monthHeaderWrites = monthHeaderWrites + 1
 
-    ws.Range(ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.cells(HEADER_ROW_2, lastTimelineCol)).Borders.LineStyle = xlContinuous
+    timelineFormatWrites = timelineFormatWrites + 1
+
+    Profiler_RecordOperation "BuildTimelineDayValueBlockWrites", timelineValueWrites, 0#
+    Profiler_RecordOperation "BuildTimelineDayFormatWrites", timelineFormatWrites, 0#
+    Profiler_RecordOperation "BuildTimelineDayWidthWrites", timelineWidthWrites, 0#
+    Profiler_RecordOperation "BuildTimelineDayWeekendFormatWrites", weekendFormatWrites, 0#
+    Profiler_RecordOperation "BuildTimelineDayMonthHeaderWrites", monthHeaderWrites, 0#
 
 End Sub
-
 
 Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
 
@@ -1490,15 +1655,15 @@ Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Vari
         weekStart = CDate(projectStart) + (i * 7)
         isoYear = GetIsoWeekYear(weekStart)
 
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = GetIsoWeekLabel(weekStart)
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 6
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = GetIsoWeekLabel(weekStart)
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 6
 
         If isoYear <> currentYear Then
             If i > 0 Then
-                With ws.Range(ws.Cells(HEADER_ROW_1, yearStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
+                With ws.Range(ws.cells(HEADER_ROW_1, yearStartCol), ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
                     .Merge
                     .HorizontalAlignment = xlCenter
                     .VerticalAlignment = xlCenter
@@ -1512,7 +1677,7 @@ Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Vari
         End If
     Next i
 
-    With ws.Range(ws.Cells(HEADER_ROW_1, yearStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + slotCount - 1))
+    With ws.Range(ws.cells(HEADER_ROW_1, yearStartCol), ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL + slotCount - 1))
         .Merge
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
@@ -1520,7 +1685,7 @@ Private Sub BuildTimeline_Week(ByVal ws As Worksheet, ByVal projectStart As Vari
         .Interior.Color = RGB(191, 191, 191)
     End With
 
-    ws.Range(ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + slotCount - 1)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + slotCount - 1)).Borders.LineStyle = xlContinuous
 
 End Sub
 
@@ -1543,15 +1708,15 @@ Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Var
 
         monthStart = DateAdd("m", i, CDate(projectStart))
 
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = Gantt_FormatMonthShort(monthStart)
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
-        ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 8
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).NumberFormat = "@"
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).value = Gantt_FormatMonthShort(monthStart)
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).HorizontalAlignment = xlCenter
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).VerticalAlignment = xlCenter
+        ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + i).ColumnWidth = 8
 
         If Year(monthStart) <> currentYear Then
             If i > 0 Then
-                With ws.Range(ws.Cells(HEADER_ROW_1, yearStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
+                With ws.Range(ws.cells(HEADER_ROW_1, yearStartCol), ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL + i - 1))
                     .Merge
                     .HorizontalAlignment = xlCenter
                     .VerticalAlignment = xlCenter
@@ -1565,7 +1730,7 @@ Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Var
         End If
     Next i
 
-    With ws.Range(ws.Cells(HEADER_ROW_1, yearStartCol), ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL + slotCount - 1))
+    With ws.Range(ws.cells(HEADER_ROW_1, yearStartCol), ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL + slotCount - 1))
         .Merge
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
@@ -1573,16 +1738,26 @@ Private Sub BuildTimeline_Month(ByVal ws As Worksheet, ByVal projectStart As Var
         .Interior.Color = RGB(191, 191, 191)
     End With
 
-    ws.Range(ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + slotCount - 1)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL), ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + slotCount - 1)).Borders.LineStyle = xlContinuous
 
 End Sub
+
 Private Sub WriteLeftPanelRow(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef dataArr As Variant, ByVal dataRow As Long, ByVal mapWBS As Object)
 
     Dim perfScope As clsPerfScope
 
-
     Dim logicVal As String
     Dim isLoE As Boolean
+    Dim preserveTestInputs As Boolean
+    Dim progressVal As Variant
+    Dim rowValues As Variant
+    Dim coreValues As Variant
+    Dim durationProgressValues As Variant
+    Dim formulaText As String
+    Dim startRef As String
+    Dim finishRef As String
+    Dim batchWriteCount As Long
+    Dim formatWriteCount As Long
 
     Set perfScope = Profiler_BeginScope("WriteLeftPanelRow", "Excel Cell Write")
 
@@ -1594,20 +1769,54 @@ Private Sub WriteLeftPanelRow(ByVal ws As Worksheet, ByVal ganttRow As Long, ByR
     End If
 
     isLoE = IsLevelOfEffortTaskType(dataArr, mapWBS, dataRow)
+    preserveTestInputs = GetGanttPreserveTestInputs()
 
-    ws.Cells(ganttRow, COL_WBS).NumberFormat = "@"
-    ws.Cells(ganttRow, COL_WBS).value = NormalizeWBS(CStr(dataArr(dataRow, mapWBS("WBS"))))
-    ws.Cells(ganttRow, COL_TASK).value = dataArr(dataRow, mapWBS("Task Name"))
-    ws.Cells(ganttRow, COL_START).value = dataArr(dataRow, mapWBS("Calculated Start"))
-    ws.Cells(ganttRow, COL_FINISH).value = dataArr(dataRow, mapWBS("Calculated Finish"))
+    ws.cells(ganttRow, COL_WBS).NumberFormat = "@"
+    formatWriteCount = formatWriteCount + 1
 
-    If Not GetGanttPreserveTestInputs() Then
-        ws.Cells(ganttRow, COL_TEST_START).ClearContents
-        ws.Cells(ganttRow, COL_TEST_FINISH).ClearContents
-        ws.Cells(ganttRow, COL_TEST_PROGRESS).ClearContents
+    If HasValue(dataArr(dataRow, mapWBS("% Progress"))) Then
+        progressVal = dataArr(dataRow, mapWBS("% Progress"))
+    Else
+        progressVal = 0
     End If
 
-    ws.Cells(ganttRow, COL_DURATION).value = dataArr(dataRow, mapWBS("Calculated Duration"))
+    If isLoE Then
+        progressVal = Empty
+    End If
+
+    If preserveTestInputs Then
+        ReDim coreValues(1 To 1, 1 To 4)
+        coreValues(1, 1) = NormalizeWBS(CStr(dataArr(dataRow, mapWBS("WBS"))))
+        coreValues(1, 2) = dataArr(dataRow, mapWBS("Task Name"))
+        coreValues(1, 3) = dataArr(dataRow, mapWBS("Calculated Start"))
+        coreValues(1, 4) = dataArr(dataRow, mapWBS("Calculated Finish"))
+        ws.Range(ws.cells(ganttRow, COL_WBS), ws.cells(ganttRow, COL_FINISH)).Value2 = coreValues
+        batchWriteCount = batchWriteCount + 1
+
+        ReDim durationProgressValues(1 To 1, 1 To 2)
+        durationProgressValues(1, 1) = dataArr(dataRow, mapWBS("Calculated Duration"))
+        durationProgressValues(1, 2) = progressVal
+        ws.Range(ws.cells(ganttRow, COL_DURATION), ws.cells(ganttRow, COL_PROGRESS)).Value2 = durationProgressValues
+        batchWriteCount = batchWriteCount + 1
+
+        ws.cells(ganttRow, COL_LOGIC).Value2 = logicVal
+        batchWriteCount = batchWriteCount + 1
+    Else
+        ReDim rowValues(1 To 1, 1 To COL_LOGIC)
+        rowValues(1, COL_WBS) = NormalizeWBS(CStr(dataArr(dataRow, mapWBS("WBS"))))
+        rowValues(1, COL_TASK) = dataArr(dataRow, mapWBS("Task Name"))
+        rowValues(1, COL_START) = dataArr(dataRow, mapWBS("Calculated Start"))
+        rowValues(1, COL_FINISH) = dataArr(dataRow, mapWBS("Calculated Finish"))
+        rowValues(1, COL_TEST_START) = Empty
+        rowValues(1, COL_TEST_FINISH) = Empty
+        rowValues(1, COL_DURATION) = dataArr(dataRow, mapWBS("Calculated Duration"))
+        rowValues(1, COL_PROGRESS) = progressVal
+        rowValues(1, COL_TEST_PROGRESS) = Empty
+        rowValues(1, COL_LOGIC) = logicVal
+
+        ws.Range(ws.cells(ganttRow, COL_WBS), ws.cells(ganttRow, COL_LOGIC)).Value2 = rowValues
+        batchWriteCount = batchWriteCount + 1
+    End If
 
     If isLoE Then
 
@@ -1616,35 +1825,29 @@ Private Sub WriteLeftPanelRow(ByVal ws As Worksheet, ByVal ganttRow As Long, ByR
         '- Based on displayed Calculated Start / Calculated Finish in columns C / D
         '- Clamped between 0% and 100%
         '- Formula is written in English/Formula syntax so Excel stores it robustly.
-        ws.Cells(ganttRow, COL_PROGRESS).Formula = _
+        startRef = "C" & CStr(ganttRow)
+        finishRef = "D" & CStr(ganttRow)
+        formulaText = _
             "=IF(OR(" & _
-                ws.Cells(ganttRow, COL_START).Address(False, False) & "=""""," & _
-                ws.Cells(ganttRow, COL_FINISH).Address(False, False) & "=""""),0," & _
-              "MAX(0,MIN(1,(TODAY()-" & ws.Cells(ganttRow, COL_START).Address(False, False) & "+1)/(" & _
-                               ws.Cells(ganttRow, COL_FINISH).Address(False, False) & "-" & _
-                               ws.Cells(ganttRow, COL_START).Address(False, False) & "+1))))"
+                startRef & "=""""," & _
+                finishRef & "=""""),0," & _
+              "MAX(0,MIN(1,(TODAY()-" & startRef & "+1)/(" & _
+                               finishRef & "-" & _
+                               startRef & "+1))))"
 
-    Else
-
-        If HasValue(dataArr(dataRow, mapWBS("% Progress"))) Then
-            ws.Cells(ganttRow, COL_PROGRESS).value = dataArr(dataRow, mapWBS("% Progress"))
-        Else
-            ws.Cells(ganttRow, COL_PROGRESS).value = 0
-        End If
+        ws.cells(ganttRow, COL_PROGRESS).Formula = formulaText
+        batchWriteCount = batchWriteCount + 1
 
     End If
 
-    ws.Cells(ganttRow, COL_LOGIC).value = logicVal
+    ws.Range(ws.cells(ganttRow, COL_START), ws.cells(ganttRow, COL_TEST_FINISH)).NumberFormat = "dd/mm/yyyy"
+    ws.Range(ws.cells(ganttRow, COL_PROGRESS), ws.cells(ganttRow, COL_TEST_PROGRESS)).NumberFormat = "0%"
+    formatWriteCount = formatWriteCount + 2
 
-    ws.Cells(ganttRow, COL_START).NumberFormat = "dd/mm/yyyy"
-    ws.Cells(ganttRow, COL_FINISH).NumberFormat = "dd/mm/yyyy"
-    ws.Cells(ganttRow, COL_TEST_START).NumberFormat = "dd/mm/yyyy"
-    ws.Cells(ganttRow, COL_TEST_FINISH).NumberFormat = "dd/mm/yyyy"
-    ws.Cells(ganttRow, COL_PROGRESS).NumberFormat = "0%"
-    ws.Cells(ganttRow, COL_TEST_PROGRESS).NumberFormat = "0%"
+    Profiler_RecordOperation "WriteLeftPanelRowBatchWrites", batchWriteCount, 0#
+    Profiler_RecordOperation "WriteLeftPanelRowFormatWrites", formatWriteCount, 0#
 
 End Sub
-
 
 Private Sub ApplyRowStyle(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef dataArr As Variant, ByVal dataRow As Long, ByVal mapWBS As Object, ByVal hasChildren As Object, ByVal calcDrivingMap As Object)
 
@@ -1680,17 +1883,16 @@ Private Sub ApplyRowStyle(ByVal ws As Worksheet, ByVal ganttRow As Long, ByRef d
         If HasValue(dataArr(dataRow, mapWBS("Actual Finish"))) Then hasActual = True
     End If
 
-    ws.Cells(ganttRow, COL_TASK).IndentLevel = WorksheetFunction.Min(levelCount - 1, 15)
+    ws.cells(ganttRow, COL_TASK).IndentLevel = WorksheetFunction.Min(levelCount - 1, 15)
 
     If hasChildren.Exists(wbs) Then
-        ws.Range(ws.Cells(ganttRow, 1), ws.Cells(ganttRow, COL_LOGIC)).Font.Bold = True
-        ws.Range(ws.Cells(ganttRow, 1), ws.Cells(ganttRow, COL_LOGIC)).Interior.Color = RGB(248, 248, 248)
+        ws.Range(ws.cells(ganttRow, 1), ws.cells(ganttRow, COL_LOGIC)).Font.Bold = True
+        ws.Range(ws.cells(ganttRow, 1), ws.cells(ganttRow, COL_LOGIC)).Interior.Color = RGB(248, 248, 248)
     End If
 
     ApplyTestCellColoring ws, ganttRow, isLeaf, hasActual, isLoE
 
-    ws.Range(ws.Cells(ganttRow, 1), ws.Cells(ganttRow, COL_LOGIC)).Borders(xlEdgeBottom).LineStyle = xlContinuous
-    ws.Range(ws.Cells(ganttRow, FIRST_TIMELINE_COL), ws.Cells(ganttRow, FIRST_TIMELINE_COL + 500)).Borders(xlEdgeBottom).LineStyle = xlDot
+
 
 End Sub
 
@@ -2033,8 +2235,8 @@ Private Function TimelineDateX( _
     targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, taskDate)
     If targetCol < FIRST_TIMELINE_COL Then Exit Function
 
-    cellLeft = ws.Cells(HEADER_ROW_2, targetCol).Left
-    cellWidth = ws.Cells(HEADER_ROW_2, targetCol).Width
+    cellLeft = ws.cells(HEADER_ROW_2, targetCol).Left
+    cellWidth = ws.cells(HEADER_ROW_2, targetCol).Width
 
     If Not IsAggregatedScaleMode() Then
         If isFinishSide Then
@@ -2372,7 +2574,7 @@ Private Function GetConstraintTargetCell_Gantt( _
     targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, renderDate)
     If targetCol < FIRST_TIMELINE_COL Then Exit Function
 
-    Set GetConstraintTargetCell_Gantt = ws.Cells(ganttRow, targetCol)
+    Set GetConstraintTargetCell_Gantt = ws.cells(ganttRow, targetCol)
 
 End Function
 
@@ -2558,7 +2760,7 @@ Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, 
 
     x = GetTaskMidX(ws, projectStart, todayVal)
 
-    yTop = ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL).Top
+    yTop = ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL).Top
     yBottom = GetGanttRowTop(ws, FIRST_TASK_ROW + rowCount - 1) + _
               GetGanttRowHeight(ws, FIRST_TASK_ROW + rowCount - 1)
 
@@ -2578,7 +2780,6 @@ Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, 
     shp.ZOrder msoBringToFront
 
 End Sub
-
 Private Sub FinalizeGanttSheet_DisplayOnly(ByVal wsGantt As Worksheet, ByVal totalDays As Long, ByVal rowCount As Long)
 
     Dim lastCol As Long
@@ -2590,8 +2791,8 @@ Private Sub FinalizeGanttSheet_DisplayOnly(ByVal wsGantt As Worksheet, ByVal tot
     If lastCol < FIRST_TIMELINE_COL Then lastCol = FIRST_TIMELINE_COL
     If lastRow < FIRST_TASK_ROW Then lastRow = FIRST_TASK_ROW
 
-    wsGantt.Range(wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL), wsGantt.Cells(lastRow, lastCol)).Borders(xlInsideVertical).LineStyle = xlDot
-    wsGantt.Range(wsGantt.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), wsGantt.Cells(lastRow, lastCol)).Borders(xlInsideHorizontal).LineStyle = xlDot
+    wsGantt.Range(wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL), wsGantt.cells(lastRow, lastCol)).Borders(xlInsideVertical).LineStyle = xlDot
+    wsGantt.Range(wsGantt.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), wsGantt.cells(lastRow, lastCol)).Borders(xlInsideHorizontal).LineStyle = xlDot
 
 End Sub
 
@@ -2677,6 +2878,7 @@ Private Sub DrawDependencyLinks( _
     Dim predId As String
     Dim shapePrefix As String
     Dim linkIndex As Long
+    Dim anchorCache As Object
 
     Set perfScope = Profiler_BeginScope("DrawDependencyLinks", "Dependency Render")
 
@@ -2686,6 +2888,8 @@ Private Sub DrawDependencyLinks( _
 
     EnsureExpandedLinksCacheFromCalc
     If Not HasExpandedLinksAvailable() Then Exit Sub
+
+    Set anchorCache = CreateObject("Scripting.Dictionary")
 
     For Each succId In gExpandedLinks.Keys
 
@@ -2711,7 +2915,7 @@ Private Sub DrawDependencyLinks( _
                         projectStart, totalDays, _
                         predId, CStr(succId), _
                         baseById, testById, isTestMode, _
-                        shapePrefix, _
+                        anchorCache, shapePrefix, _
                         GetLinkTypeFromItem(linkItem), _
                         GetLinkLagFromItem(linkItem)
 
@@ -2775,6 +2979,7 @@ Private Sub DrawSingleDependencyLink( _
     ByVal baseById As Object, _
     ByVal testById As Object, _
     ByVal isTestMode As Boolean, _
+    ByVal anchorCache As Object, _
     ByVal shapePrefix As String, _
     ByVal linkType As String, _
     ByVal linkLag As Double)
@@ -2828,20 +3033,20 @@ Private Sub DrawSingleDependencyLink( _
     If Not HasValue(predDate) Then Exit Sub
     If Not HasValue(succDate) Then Exit Sub
 
-    GetTaskAnchorPointByType wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, predDataRow, _
+    GetCachedTaskAnchorPointByType anchorCache, wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, predDataRow, _
         predAnchorType, predX, predY, baseById, testById, isTestMode
 
     Select Case linkType
 
         Case "SS"
-            GetTaskAnchorPointByType wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
+            GetCachedTaskAnchorPointByType anchorCache, wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
                 succAnchorType, succX, succY, baseById, testById, isTestMode
 
             gapDays = CLng(CDbl(succDate) - CDbl(predDate) - linkLag)
             RouteDependencyLink_SS wsGantt, shapePrefix, predX, predY, succX, succY, gapDays
 
         Case "FF"
-            GetTaskAnchorPointByType wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
+            GetCachedTaskAnchorPointByType anchorCache, wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
                 succAnchorType, succX, succY, baseById, testById, isTestMode
 
             gapDays = CLng(CDbl(succDate) - CDbl(predDate) - linkLag)
@@ -2851,16 +3056,16 @@ Private Sub DrawSingleDependencyLink( _
             gapDays = CLng(CDbl(succDate) - CDbl(predDate) - 1 - linkLag)
 
             ' On calcule les 2 points candidats côté successeur
-            GetTaskTopEntryPoint wsGantt, mapWBS, dataArr, projectStart, totalDays, succDataRow, _
+            GetCachedTaskTopEntryPoint anchorCache, wsGantt, mapWBS, dataArr, projectStart, totalDays, succDataRow, _
                 succTopX, succTopY, baseById, testById, isTestMode
 
-            GetTaskStartMidEntryPoint wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
+            GetCachedTaskStartMidEntryPoint anchorCache, wsGantt, mapWBS, dataArr, hasChildren, projectStart, totalDays, succDataRow, _
                 succMidLeftX, succMidLeftY, baseById, testById, isTestMode
 
             ' Règle corrigée :
             ' on ne décide PAS avec gapDays=0/1
             ' on décide avec la place horizontale réelle entre pred et l'entrée gauche du successeur
-            useMidLeftEntry = HasRoomForFsMidLeftEntry(predX, succMidLeftX, wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width)
+            useMidLeftEntry = HasRoomForFsMidLeftEntry(predX, succMidLeftX, wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width)
 
             If gapDays < 0 Then
                 succX = succMidLeftX
@@ -2879,6 +3084,114 @@ Private Sub DrawSingleDependencyLink( _
             End If
 
     End Select
+
+End Sub
+
+Private Sub GetCachedTaskAnchorPointByType( _
+    ByVal anchorCache As Object, _
+    ByVal ws As Worksheet, _
+    ByVal mapWBS As Object, _
+    ByRef dataArr As Variant, _
+    ByVal hasChildren As Object, _
+    ByVal projectStart As Variant, _
+    ByVal totalDays As Long, _
+    ByVal dataRow As Long, _
+    ByVal anchorType As String, _
+    ByRef xOut As Double, _
+    ByRef yOut As Double, _
+    ByVal baseById As Object, _
+    ByVal testById As Object, _
+    ByVal isTestMode As Boolean)
+
+    Dim cacheKey As String
+    Dim cachedValue As Variant
+
+    cacheKey = "TYPE|" & CStr(dataRow) & "|" & UCase$(Trim$(anchorType))
+
+    If Not anchorCache Is Nothing Then
+        If anchorCache.Exists(cacheKey) Then
+            cachedValue = anchorCache(cacheKey)
+            xOut = CDbl(cachedValue(0))
+            yOut = CDbl(cachedValue(1))
+            Exit Sub
+        End If
+    End If
+
+    GetTaskAnchorPointByType ws, mapWBS, dataArr, hasChildren, projectStart, totalDays, dataRow, _
+        anchorType, xOut, yOut, baseById, testById, isTestMode
+
+    If Not anchorCache Is Nothing Then anchorCache(cacheKey) = Array(xOut, yOut)
+
+End Sub
+
+Private Sub GetCachedTaskTopEntryPoint( _
+    ByVal anchorCache As Object, _
+    ByVal ws As Worksheet, _
+    ByVal mapWBS As Object, _
+    ByRef dataArr As Variant, _
+    ByVal projectStart As Variant, _
+    ByVal totalDays As Long, _
+    ByVal dataRow As Long, _
+    ByRef xOut As Double, _
+    ByRef yOut As Double, _
+    ByVal baseById As Object, _
+    ByVal testById As Object, _
+    ByVal isTestMode As Boolean)
+
+    Dim cacheKey As String
+    Dim cachedValue As Variant
+
+    cacheKey = "TOP|" & CStr(dataRow)
+
+    If Not anchorCache Is Nothing Then
+        If anchorCache.Exists(cacheKey) Then
+            cachedValue = anchorCache(cacheKey)
+            xOut = CDbl(cachedValue(0))
+            yOut = CDbl(cachedValue(1))
+            Exit Sub
+        End If
+    End If
+
+    GetTaskTopEntryPoint ws, mapWBS, dataArr, projectStart, totalDays, dataRow, _
+        xOut, yOut, baseById, testById, isTestMode
+
+    If Not anchorCache Is Nothing Then anchorCache(cacheKey) = Array(xOut, yOut)
+
+End Sub
+
+Private Sub GetCachedTaskStartMidEntryPoint( _
+    ByVal anchorCache As Object, _
+    ByVal ws As Worksheet, _
+    ByVal mapWBS As Object, _
+    ByRef dataArr As Variant, _
+    ByVal hasChildren As Object, _
+    ByVal projectStart As Variant, _
+    ByVal totalDays As Long, _
+    ByVal dataRow As Long, _
+    ByRef xOut As Double, _
+    ByRef yOut As Double, _
+    ByVal baseById As Object, _
+    ByVal testById As Object, _
+    ByVal isTestMode As Boolean)
+
+    Dim cacheKey As String
+    Dim cachedValue As Variant
+
+    cacheKey = "MIDLEFT|" & CStr(dataRow)
+
+    If Not anchorCache Is Nothing Then
+        If anchorCache.Exists(cacheKey) Then
+            cachedValue = anchorCache(cacheKey)
+            xOut = CDbl(cachedValue(0))
+            yOut = CDbl(cachedValue(1))
+            Exit Sub
+        End If
+    End If
+
+    GetTaskStartMidEntryPoint ws, mapWBS, dataArr, hasChildren, projectStart, totalDays, dataRow, _
+        xOut, yOut, baseById, testById, isTestMode
+
+    If Not anchorCache Is Nothing Then anchorCache(cacheKey) = Array(xOut, yOut)
 
 End Sub
 
@@ -2948,7 +3261,7 @@ Private Sub RouteDependencyLink_FS_Normal( _
     Dim finalX As Double
     Dim cellWidth As Double
 
-    cellWidth = wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
+    cellWidth = wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
 
     ' IMPORTANT : plus aucun cas spécial ici basé sur gapDays = 0.
     ' Le choix top / milieu-gauche a déjà été fait en amont.
@@ -3041,7 +3354,7 @@ Private Sub RouteDependencyLink_FS_Negative( _
     Dim laneY As Double
     Dim leftX As Double
 
-    cellWidth = wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
+    cellWidth = wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
 
     If succY <= predY Then
         laneY = WorksheetFunction.Min(predY, succY) - LINK_MIN_CHANNEL_GAP
@@ -3071,7 +3384,7 @@ Private Sub RouteDependencyLink_SS( _
     Dim cellWidth As Double
     Dim busX As Double
 
-    cellWidth = wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
+    cellWidth = wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
 
     busX = WorksheetFunction.Min(predX, succX) - WorksheetFunction.Max(8, cellWidth / 2)
 
@@ -3097,7 +3410,7 @@ Private Sub RouteDependencyLink_FF( _
     Dim cellWidth As Double
     Dim busX As Double
 
-    cellWidth = wsGantt.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
+    cellWidth = wsGantt.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width
 
     busX = WorksheetFunction.Min(predX, succX) - WorksheetFunction.Max(8, cellWidth / 2)
 
@@ -3143,9 +3456,9 @@ Private Sub GetTaskTopEntryPoint( _
 
     durationVal = CDbl(finishVal) - CDbl(startVal) + 1
 
-    timelineLeftBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
-    timelineRightBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
-                         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
+    timelineLeftBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
+    timelineRightBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
+                         ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
 
     If durationVal <= 1 Then
         xOut = GetTaskMidX(ws, projectStart, startVal)
@@ -3155,7 +3468,7 @@ Private Sub GetTaskTopEntryPoint( _
         yOut = GetGanttBarTop(ws, ganttRow)
     End If
 
-    topEntryOffset = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width * 0.15
+    topEntryOffset = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Width * 0.15
     xOut = xOut + topEntryOffset
 
     If xOut < timelineLeftBound Then xOut = timelineLeftBound
@@ -3259,7 +3572,7 @@ Private Sub FreezeGanttAfterFinish(ByVal ws As Worksheet, ByVal rowCount As Long
 
     ws.Activate
     ActiveWindow.FreezePanes = False
-    ws.Cells(FIRST_TASK_ROW, COL_TEST_START).Select
+    ws.cells(FIRST_TASK_ROW, COL_TEST_START).Select
     ActiveWindow.FreezePanes = True
 
 End Sub
@@ -3269,15 +3582,27 @@ Private Function IsGanttSheetLayoutEmpty(ByVal ws As Worksheet) As Boolean
     If ws Is Nothing Then
         IsGanttSheetLayoutEmpty = True
     Else
-        IsGanttSheetLayoutEmpty = (Trim$(CStr(ws.Cells(TITLE_ROW, COL_WBS).value)) = "" And _
-                                   Trim$(CStr(ws.Cells(HEADER_ROW_2, COL_WBS).value)) = "" And _
-                                   Trim$(CStr(ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).value)) = "")
+        IsGanttSheetLayoutEmpty = (Trim$(CStr(ws.cells(TITLE_ROW, COL_WBS).value)) = "" And _
+                                   Trim$(CStr(ws.cells(HEADER_ROW_2, COL_WBS).value)) = "" And _
+                                   Trim$(CStr(ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).value)) = "")
     End If
 
 End Function
 
 
-Private Sub EnsureGanttVisualLayoutReadyBeforeDrawing(ByVal ws As Worksheet)
+Private Sub RestoreGanttCallerVisualContext(ByVal ws As Worksheet, ByVal selectionAddress As String)
+
+    If ws Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    ws.Activate
+    If Len(selectionAddress) > 0 Then
+        ws.Range(selectionAddress).Select
+    End If
+    On Error GoTo 0
+
+End Sub
+Private Sub EnsureGanttVisualLayoutReadyBeforeDrawing(ByVal ws As Worksheet, Optional ByVal allowActivation As Boolean = True, Optional ByVal allowDoEvents As Boolean = True)
 
     Dim perfScope As clsPerfScope
 
@@ -3285,8 +3610,10 @@ Private Sub EnsureGanttVisualLayoutReadyBeforeDrawing(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
 
+    If Not allowActivation Then Exit Sub
+
     ws.Activate
-    DoEvents
+    If allowDoEvents Then DoEvents
 
 End Sub
 
@@ -3296,7 +3623,7 @@ Private Function GetLastGanttRow(ByVal ws As Worksheet) As Long
 
     Set lastCell = ws.Columns(COL_WBS).Find( _
         What:="*", _
-        After:=ws.Cells(1, COL_WBS), _
+        After:=ws.cells(1, COL_WBS), _
         LookIn:=xlValues, _
         LookAt:=xlPart, _
         SearchOrder:=xlByRows, _
@@ -3377,7 +3704,7 @@ Public Function IsEditableTestCell(ByVal ws As Worksheet, ByVal targetCell As Ra
     If rowNum < FIRST_TASK_ROW Or rowNum > lastRow Then Exit Function
     If Not IsAllowedTestColumn(colNum) Then Exit Function
 
-    wbsVal = NormalizeWBS(CStr(ws.Cells(rowNum, COL_WBS).value))
+    wbsVal = NormalizeWBS(CStr(ws.cells(rowNum, COL_WBS).value))
     If wbsVal = "" Then Exit Function
 
     Set wbsToId = BuildWbsToIdMapFromWBS()
@@ -3487,8 +3814,8 @@ Public Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
     Dim trackH As Double
     Dim knobSize As Double
 
-    x = ws.Cells(TOGGLE_ROW_TOP, COL_WBS).Left + 5
-    y = ws.Cells(TOGGLE_ROW_TOP, COL_WBS).Top + 3
+    x = ws.cells(TOGGLE_ROW_TOP, COL_WBS).Left + 5
+    y = ws.cells(TOGGLE_ROW_TOP, COL_WBS).Top + 3
 
     trackGap = 7
     groupGap = 25
@@ -3535,8 +3862,8 @@ Public Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         x + labelW5 + trackGap, y + 2, trackW, trackH, knobSize, _
         gShowConstraints, "Toggle_Gantt_Constraints"
 
-    x = ws.Cells(TOGGLE_ROW_BOTTOM, COL_WBS).Left + 5
-    y = ws.Cells(TOGGLE_ROW_BOTTOM, COL_WBS).Top + 3
+    x = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Left + 5
+    y = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Top + 3
 
     CreateFixedHeaderTriToggle ws, _
         BTN_CP_LEFT_NAME, BTN_CP_BG_NAME, BTN_CP_KNOB_NAME, _
@@ -3601,7 +3928,7 @@ Private Sub CreateFixedHeaderToggle( _
         .TextFrame2.TextRange.Font.Size = 9.5
         .TextFrame2.TextRange.Font.Bold = msoTrue
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
@@ -3703,7 +4030,7 @@ Private Sub CreateFixedHeaderTriToggle( _
         .TextFrame2.TextRange.Font.Size = 9
         .TextFrame2.TextRange.Font.Bold = msoTrue
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
@@ -3946,7 +4273,7 @@ Private Sub CreateOrUpdateGanttButton( _
         .MarginRight = 0
         .MarginTop = 0
         .MarginBottom = 0
-        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextRange.ParagraphFormat.alignment = msoAlignCenter
     End With
 
     Select Case shpName
@@ -3979,10 +4306,10 @@ Public Sub ApplyTestCellColoring( _
     colProgress = 9
 
     Set rngDates = Union( _
-        ws.Cells(rowIndex, colStart), _
-        ws.Cells(rowIndex, colFinish))
+        ws.cells(rowIndex, colStart), _
+        ws.cells(rowIndex, colFinish))
 
-    Set rngProgress = ws.Cells(rowIndex, colProgress)
+    Set rngProgress = ws.cells(rowIndex, colProgress)
 
     If Not isLeaf Then
         rngDates.Interior.Pattern = xlNone
@@ -4281,17 +4608,17 @@ Private Sub ReconcileGanttViewGridAfterFiltering(ByVal ws As Worksheet, ByVal la
     If ws Is Nothing Then Exit Sub
     If lastRow < FIRST_TASK_ROW Then Exit Sub
 
-    lastCol = ws.Cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
+    lastCol = ws.cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
     If lastCol < FIRST_TIMELINE_COL Then lastCol = FIRST_TIMELINE_COL
 
-    ws.Range(ws.Cells(FIRST_TASK_ROW, 1), ws.Cells(lastRow, COL_LOGIC)).Borders.LineStyle = xlNone
-    ws.Range(ws.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.Cells(lastRow, lastCol)).Borders.LineStyle = xlNone
+    ws.Range(ws.cells(FIRST_TASK_ROW, 1), ws.cells(lastRow, COL_LOGIC)).Borders.LineStyle = xlNone
+    ws.Range(ws.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.cells(lastRow, lastCol)).Borders.LineStyle = xlNone
 
     For r = FIRST_TASK_ROW To lastRow
         If Not ws.rows(r).Hidden Then
             ws.rows(r).rowHeight = GANTT_ROW_HEIGHT_TASK
-            Set leftRange = ws.Range(ws.Cells(r, 1), ws.Cells(r, COL_LOGIC))
-            Set timelineRange = ws.Range(ws.Cells(r, FIRST_TIMELINE_COL), ws.Cells(r, lastCol))
+            Set leftRange = ws.Range(ws.cells(r, 1), ws.cells(r, COL_LOGIC))
+            Set timelineRange = ws.Range(ws.cells(r, FIRST_TIMELINE_COL), ws.cells(r, lastCol))
 
             leftRange.Borders.LineStyle = xlContinuous
             timelineRange.Borders(xlInsideVertical).LineStyle = xlDot
@@ -4317,7 +4644,7 @@ Private Function ShouldShowGanttRow(ByVal ws As Worksheet, ByVal rowNum As Long)
     If tblWBS.DataBodyRange Is Nothing Then Exit Function
     If dataRow > tblWBS.ListRows.Count Then Exit Function
 
-    summaryDisplayVal = UCase$(Trim$(CStr(tblWBS.DataBodyRange.Cells(dataRow, tblWBS.ListColumns("S").Index).value)))
+    summaryDisplayVal = UCase$(Trim$(CStr(tblWBS.DataBodyRange.cells(dataRow, tblWBS.ListColumns("S").Index).value)))
     ShouldShowGanttRow = (summaryDisplayVal = "Y")
 
 SafeExit:
@@ -4443,7 +4770,7 @@ Private Sub EnsureOrUpdateCompactToggleSwitch( _
         .TextFrame2.TextRange.Text = leftText
         .TextFrame2.TextRange.Font.Size = 8.5
         .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     If isOn Then
@@ -4832,7 +5159,7 @@ Public Sub FormatToggleLabel( _
         .TextFrame2.TextRange.Text = labelText
         .TextFrame2.TextRange.Font.Size = 9.5
         .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
     End With
 
 End Sub
@@ -4916,7 +5243,7 @@ Private Sub DrawSingleWeekTask( _
     targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, startVal)
     If targetCol < FIRST_TIMELINE_COL Then Exit Sub
 
-    cellWidth = ws.Cells(HEADER_ROW_2, targetCol).Width
+    cellWidth = ws.cells(HEADER_ROW_2, targetCol).Width
 
     sizeVal = GetGanttCompactTaskMarkerSize(ws, ganttRow, cellWidth)
     If sizeVal < 2 Then sizeVal = 2
@@ -4925,7 +5252,7 @@ Private Sub DrawSingleWeekTask( _
     If markerCenterX <= 0 Then Exit Sub
 
     leftPos = markerCenterX - (sizeVal / 2)
-    topPos = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + ((ws.rows(ganttRow).Height - sizeVal) / 2)
+    topPos = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top + ((ws.rows(ganttRow).Height - sizeVal) / 2)
 
     If progressVal >= 1 Then
         fillColor = COLOR_PROGRESS_GREEN
@@ -5028,7 +5355,7 @@ End Sub
 
 Private Function GetGanttRowTop(ByVal ws As Worksheet, ByVal ganttRow As Long) As Double
 
-    GetGanttRowTop = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top
+    GetGanttRowTop = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top
 
 End Function
 
@@ -5427,11 +5754,11 @@ Private Sub GetTaskAnchorPoint( _
 
     durationVal = CDbl(finishVal) - CDbl(startVal) + 1
 
-    timelineLeftBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
-    timelineRightBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
-                         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
+    timelineLeftBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
+    timelineRightBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
+                         ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
 
-    yOut = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
+    yOut = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
 
     If hasChildren.Exists(wbs) Then
         If isFinishSide Then
@@ -5515,11 +5842,11 @@ Public Sub GetTaskFinishEntryPoint( _
 
     durationVal = CDbl(finishVal) - CDbl(startVal) + 1
 
-    timelineLeftBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
-    timelineRightBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
-                         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
+    timelineLeftBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
+    timelineRightBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
+                         ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
 
-    yOut = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
+    yOut = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
 
     If durationVal <= 1 Then
         sizeVal = ws.rows(ganttRow).Height - 6
@@ -5596,11 +5923,11 @@ Private Sub GetTaskAnchorPointBySide( _
 
     durationVal = CDbl(finishVal) - CDbl(startVal) + 1
 
-    timelineLeftBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
-    timelineRightBound = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
-                         ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
+    timelineLeftBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Left + LINK_EDGE_PADDING
+    timelineRightBound = ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Left + _
+                         ws.cells(HEADER_ROW_2, FIRST_TIMELINE_COL + totalDays - 1).Width - LINK_EDGE_PADDING
 
-    yOut = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
+    yOut = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top + (ws.rows(ganttRow).Height / 2)
 
     If hasChildren.Exists(wbs) Then
         Select Case UCase$(Trim$(anchorSide))
@@ -5667,17 +5994,17 @@ Public Sub Gantt_Clear_Test_State()
     lastRow = GetLastGanttRow(ws)
     If lastRow < FIRST_TASK_ROW Then GoTo SafeExit
 
-    With ws.Range(ws.Cells(FIRST_TASK_ROW, COL_TEST_START), ws.Cells(lastRow, COL_TEST_START))
+    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_START), ws.cells(lastRow, COL_TEST_START))
         .ClearContents
         .NumberFormat = "dd/mm/yyyy"
     End With
 
-    With ws.Range(ws.Cells(FIRST_TASK_ROW, COL_TEST_FINISH), ws.Cells(lastRow, COL_TEST_FINISH))
+    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_FINISH), ws.cells(lastRow, COL_TEST_FINISH))
         .ClearContents
         .NumberFormat = "dd/mm/yyyy"
     End With
 
-    With ws.Range(ws.Cells(FIRST_TASK_ROW, COL_TEST_PROGRESS), ws.Cells(lastRow, COL_TEST_PROGRESS))
+    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_PROGRESS), ws.cells(lastRow, COL_TEST_PROGRESS))
         .ClearContents
         .NumberFormat = "0%"
     End With
@@ -5817,12 +6144,12 @@ Private Function TimelineColumnFromDate( _
 
     targetDate = CDate(anyDate)
 
-    lastCol = ws.Cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
+    lastCol = ws.cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
     If lastCol < FIRST_TIMELINE_COL Then Exit Function
 
     For c = FIRST_TIMELINE_COL To lastCol
 
-        headerVal = ws.Cells(HEADER_ROW_2, c).value
+        headerVal = ws.cells(HEADER_ROW_2, c).value
 
         If IsAggregatedScaleMode() Then
             TimelineColumnFromDate = FIRST_TIMELINE_COL + GetTimelineSlotIndex(GetScalePeriodStart(CDate(anyDate)), CDate(anyDate))

@@ -43,6 +43,48 @@ SafeExit:
 
 End Sub
 
+Public Sub Settings_HydrateRuntimeState()
+
+    Dim ws As Worksheet
+    Dim oldEvents As Boolean
+    Dim oldScreenUpdating As Boolean
+    Dim globalLanguage As String
+
+    On Error GoTo SafeExit
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    On Error GoTo SafeExit
+
+    If ws Is Nothing Then
+        Settings_Initialize
+        Exit Sub
+    End If
+
+    oldEvents = Application.EnableEvents
+    oldScreenUpdating = Application.ScreenUpdating
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+
+    Settings_InitializeStorage ws
+
+    globalLanguage = Settings_NormalizeLanguage(CStr(ws.Range(CELL_GLOBAL_LANGUAGE).value), "EN")
+    If Settings_GlobalIsActivated(ws) Then
+        Settings_WriteAllModuleLanguages ws, globalLanguage
+    End If
+
+    EventHistory_SetShowInfo Settings_InfoIsEnabled(ws)
+    EventHistory_SetLanguage Settings_ModuleLanguage(ws, MODULE_EVENT)
+    WBS_SetLanguage Settings_ModuleLanguage(ws, MODULE_WBS)
+    Gantt_SetLanguage Settings_ModuleLanguage(ws, MODULE_GANTT)
+    SCurve_SetLanguage Settings_ModuleLanguage(ws, MODULE_SCURVE)
+    Dashboard_SetLanguage Settings_ModuleLanguage(ws, MODULE_DASHBOARD)
+
+SafeExit:
+    Application.ScreenUpdating = oldScreenUpdating
+    Application.EnableEvents = oldEvents
+
+End Sub
 Public Sub Settings_ApplyLanguages()
 
     Dim ws As Worksheet

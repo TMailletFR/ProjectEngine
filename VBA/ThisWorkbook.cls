@@ -1,10 +1,10 @@
-﻿Option Explicit
+Option Explicit
 
 Dim gAppEvents As clsAppEvents
 
 Private Sub Workbook_Open()
     Init_AppEvents
-    Settings_Initialize
+    Settings_HydrateRuntimeState
     Ensure_WBS_Main_Buttons
     StartGanttDragWatchIfActive
 End Sub
@@ -17,7 +17,10 @@ End Sub
 Private Sub Workbook_SheetActivate(ByVal Sh As Object)
     Init_AppEvents
     If Not Sh Is Nothing Then
-        If CStr(Sh.Name) = "GANTT" Then GanttDrag_StartWatch
+        If CStr(Sh.Name) = "GANTT" Then
+            Gantt_RepairPendingGeometryIfNeeded
+            GanttDrag_StartWatch
+        End If
     End If
 End Sub
 
@@ -42,6 +45,7 @@ Private Sub StartGanttDragWatchIfActive()
     If Not (Application.ActiveSheet.Parent Is Me) Then Exit Sub
     If CStr(Application.ActiveSheet.Name) <> "GANTT" Then Exit Sub
 
+    Gantt_RepairPendingGeometryIfNeeded
     GanttDrag_StartWatch
 
 SafeExit:

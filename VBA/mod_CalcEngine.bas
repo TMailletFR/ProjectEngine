@@ -1447,11 +1447,21 @@ Public Sub Push_Analytics_Back_To_WBS()
     Dim mapWBS As Object
     Dim mapCalc As Object
     Dim arrCalc As Variant
+    Dim arrWBS As Variant
     Dim calcRowById As Object
+    Dim blockPath As Variant
+    Dim blockFloat As Variant
 
     Dim r As Long
     Dim calcRow As Long
     Dim idVal As String
+    Dim rowCount As Long
+    Dim fieldName As String
+    Dim fieldIndex As Long
+    Dim calcCol As Long
+    Dim pathStartCol As Long
+    Dim floatStartCol As Long
+    Dim analyticsBlockWrites As Long
 
     Set perfScope = Profiler_BeginScope("Push_Analytics_Back_To_WBS", "Excel Table Write")
 
@@ -1473,6 +1483,8 @@ Public Sub Push_Analytics_Back_To_WBS()
     If Not mapCalc.Exists("ID") Then Err.Raise vbObjectError + 1302, "Push_Analytics_Back_To_WBS", "Missing column in tbl_CALC: ID"
 
     arrCalc = tblCalc.DataBodyRange.value
+    arrWBS = tblWBS.DataBodyRange.value
+    rowCount = tblWBS.ListRows.Count
 
     Set calcRowById = CreateObject("Scripting.Dictionary")
 
@@ -1495,39 +1507,73 @@ Public Sub Push_Analytics_Back_To_WBS()
         "Free Float REX", _
         "Deadline Float")
 
-    For r = 1 To tblWBS.ListRows.Count
+    If mapWBS.Exists("Critical Path") And mapWBS.Exists("Critical Path REX") And mapWBS.Exists("Longest Path") Then
+        pathStartCol = CLng(mapWBS("Critical Path"))
+        blockPath = tblWBS.DataBodyRange.Cells(1, pathStartCol).Resize(rowCount, 3).Value2
+    End If
 
-        idVal = Trim$(CStr(tblWBS.DataBodyRange.Cells(r, mapWBS("ID")).value))
+    If mapWBS.Exists("Total Float") And mapWBS.Exists("Free Float") And _
+       mapWBS.Exists("Total Float REX") And mapWBS.Exists("Free Float REX") And _
+       mapWBS.Exists("Deadline Float") Then
+        floatStartCol = CLng(mapWBS("Total Float"))
+        blockFloat = tblWBS.DataBodyRange.Cells(1, floatStartCol).Resize(rowCount, 5).Value2
+    End If
+
+    For r = 1 To rowCount
+
+        idVal = Trim$(CStr(arrWBS(r, mapWBS("ID"))))
 
         If idVal <> "" Then
             If calcRowById.Exists(idVal) Then
 
                 calcRow = CLng(calcRowById(idVal))
 
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Critical Path"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Longest Path"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Critical Path REX"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Total Float"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Free Float"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Total Float REX"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Free Float REX"
-                PushOneAnalyticsCellIfExists tblWBS, arrCalc, r, calcRow, mapWBS, mapCalc, "Deadline Float"
+                If IsArray(blockPath) Then
+                    If mapCalc.Exists("Critical Path") Then blockPath(r, 1) = arrCalc(calcRow, mapCalc("Critical Path"))
+                    If mapCalc.Exists("Critical Path REX") Then blockPath(r, 2) = arrCalc(calcRow, mapCalc("Critical Path REX"))
+                    If mapCalc.Exists("Longest Path") Then blockPath(r, 3) = arrCalc(calcRow, mapCalc("Longest Path"))
+                End If
+
+                If IsArray(blockFloat) Then
+                    If mapCalc.Exists("Total Float") Then blockFloat(r, 1) = arrCalc(calcRow, mapCalc("Total Float"))
+                    If mapCalc.Exists("Free Float") Then blockFloat(r, 2) = arrCalc(calcRow, mapCalc("Free Float"))
+                    If mapCalc.Exists("Total Float REX") Then blockFloat(r, 3) = arrCalc(calcRow, mapCalc("Total Float REX"))
+                    If mapCalc.Exists("Free Float REX") Then blockFloat(r, 4) = arrCalc(calcRow, mapCalc("Free Float REX"))
+                    If mapCalc.Exists("Deadline Float") Then blockFloat(r, 5) = arrCalc(calcRow, mapCalc("Deadline Float"))
+                End If
 
             Else
 
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Critical Path"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Longest Path"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Critical Path REX"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Total Float"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Free Float"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Total Float REX"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Free Float REX"
-                ClearOneAnalyticsCellIfExists tblWBS, r, mapWBS, "Deadline Float"
+                If IsArray(blockPath) Then
+                    blockPath(r, 1) = Empty
+                    blockPath(r, 2) = Empty
+                    blockPath(r, 3) = Empty
+                End If
+
+                If IsArray(blockFloat) Then
+                    blockFloat(r, 1) = Empty
+                    blockFloat(r, 2) = Empty
+                    blockFloat(r, 3) = Empty
+                    blockFloat(r, 4) = Empty
+                    blockFloat(r, 5) = Empty
+                End If
 
             End If
         End If
 
     Next r
+
+    If IsArray(blockPath) Then
+        tblWBS.DataBodyRange.Cells(1, pathStartCol).Resize(rowCount, 3).Value2 = blockPath
+        analyticsBlockWrites = analyticsBlockWrites + 1
+    End If
+
+    If IsArray(blockFloat) Then
+        tblWBS.DataBodyRange.Cells(1, floatStartCol).Resize(rowCount, 5).Value2 = blockFloat
+        analyticsBlockWrites = analyticsBlockWrites + 1
+    End If
+
+    Profiler_RecordOperation "PushAnalyticsWBSBlockWrite", analyticsBlockWrites, 0#
 
     EndAuthorizedWBSWrite
 
@@ -1543,7 +1589,6 @@ ErrHandler:
     Err.Raise Err.Number, "Push_Analytics_Back_To_WBS", Err.Description
 
 End Sub
-
 Private Sub PushOneAnalyticsCellIfExists( _
     ByVal tblWBS As ListObject, _
     ByRef arrCalc As Variant, _
