@@ -11,6 +11,8 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
     Dim isValidArea As Boolean
     Dim consoleMessages As Collection
     Dim oldEvents As Boolean
+    Dim shouldReconcileWatch As Boolean
+    Dim errNumber As Long
 
     Const COL_TEST_START As Long = 5
     Const COL_TEST_FINISH As Long = 6
@@ -28,6 +30,7 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     If Target.Row < FIRST_TASK_ROW Then Exit Sub
 
+    shouldReconcileWatch = True
     Application.EnableEvents = False
 
     For Each cell In Target.Cells
@@ -104,9 +107,10 @@ NextCell:
     Next cell
 
 SafeExit:
+    errNumber = Err.Number
     Application.EnableEvents = oldEvents
 
-    If Err.Number <> 0 Then
+    If errNumber <> 0 Then
 
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
@@ -118,6 +122,12 @@ SafeExit:
 
         CalcBridge_ShowPlanningConsole consoleMessages
 
+    End If
+
+    If shouldReconcileWatch Then
+        On Error Resume Next
+        GanttDrag_ReconcileWatchState
+        On Error GoTo 0
     End If
 
 End Sub

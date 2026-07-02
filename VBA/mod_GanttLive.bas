@@ -292,6 +292,7 @@ Public Sub Run_Gantt_Test_Engine( _
     hasRenderableDelta = GanttLive_HasAnyRenderableTestDelta(tblTest)
 
     GanttLive_ApplyTestRender wsGantt
+    If Not hasAnyTestInput Then GanttLive_ClearActiveSimulationMode
     testSucceeded = True
     ganttRebuilt = True
 
@@ -329,7 +330,12 @@ CleanExit:
     If Not IsMissing(transactionGanttRebuilt) Then transactionGanttRebuilt = ganttRebuilt
     If Not IsMissing(transactionMessages) Then Set transactionMessages = consoleMessages
 
-    If workflowStarted Then EndPlanningWorkflow
+    If workflowStarted Then
+        EndPlanningWorkflow
+        On Error Resume Next
+        GanttDrag_ReconcileWatchState
+        On Error GoTo 0
+    End If
     Exit Sub
 
 SafeExit:
@@ -918,6 +924,9 @@ Private Function Run_Gantt_Test_Backend( _
     Dim idToWbs As Object
     Dim errorIds As Object
     Dim rootErrorIds As Object
+    Dim dependencyDiagnostics As Object
+    Dim constraintDiagnostics As Object
+    Dim cascadeDiagnostics As Object
     Dim warningActualIds As Object
     Dim constraintMessages As Collection
 
@@ -950,6 +959,9 @@ Private Function Run_Gantt_Test_Backend( _
     Set idToWbs = CreateObject("Scripting.Dictionary")
     Set errorIds = CreateObject("Scripting.Dictionary")
     Set rootErrorIds = CreateObject("Scripting.Dictionary")
+    Set dependencyDiagnostics = CreateObject("Scripting.Dictionary")
+    Set constraintDiagnostics = CreateObject("Scripting.Dictionary")
+    Set cascadeDiagnostics = CreateObject("Scripting.Dictionary")
     Set warningActualIds = CreateObject("Scripting.Dictionary")
 
     If GanttLive_HasConsoleCollection(consoleMessages) Then
@@ -967,7 +979,7 @@ Private Function Run_Gantt_Test_Backend( _
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
         ThisWorkbook.Worksheets(CALC_SHEET).ListObjects(CALC_TABLE))
 
-    Run_Calc_Core dataCore, mapCore, linksBySuccId
+    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
 
     For r = 1 To rowCount
 
@@ -1017,7 +1029,7 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "TEST"
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "TEST", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
                 "Erreur de calcul dans le moteur live", "corriger les valeurs test ou la logique amont", _
@@ -2621,9 +2633,12 @@ End Sub
 
 Private Sub GanttLive_ApplyTestRender(ByVal wsGantt As Worksheet)
 
+    Dim fastRenderApplied As Boolean
+
     SetGanttPreserveTestInputs True
     GanttLive_RequestTestRender
-    Refresh_Gantt
+    fastRenderApplied = Gantt_TryApplyTestDayPredictiveRegistry()
+    If Not fastRenderApplied Then Refresh_Gantt
     GanttLive_SetActiveSimulationMode "TEST"
     SetGanttPreserveTestInputs False
 
@@ -3314,7 +3329,12 @@ Private Function BuildRawWbsSourceById_Live() As Object
 
 End Function
 
-Public Sub Run_Gantt_Scenario_Engine()
+Public Sub Run_Gantt_Scenario_Engine( _
+    Optional ByVal silentMode As Boolean = False, _
+    Optional ByRef transactionSucceeded As Variant, _
+    Optional ByRef transactionMessages As Variant, _
+    Optional ByRef transactionGanttRebuilt As Variant, _
+    Optional ByVal recordSilentMessages As Boolean = True)
 
     Dim wsGantt As Worksheet
     Dim wsWBS As Worksheet
@@ -3367,6 +3387,8 @@ Public Sub Run_Gantt_Scenario_Engine()
     Dim hasActual As Boolean
     Dim anyTestValue As Boolean
     Dim consoleMessages As Collection
+    Dim scenarioSucceeded As Boolean
+    Dim ganttRebuilt As Boolean
 
     On Error GoTo SafeExit
 
@@ -3548,17 +3570,33 @@ Public Sub Run_Gantt_Scenario_Engine()
 
     If Not Run_Gantt_Scenario_Backend(tblTest, consoleMessages) Then
         GanttLive_AbortTestEngine wsGantt
-        CalcBridge_ShowPlanningConsole consoleMessages
-        Exit Sub
+        If silentMode Then
+            If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Scenario_Engine"
+        Else
+            CalcBridge_ShowPlanningConsole consoleMessages
+        End If
+        GoTo CleanExit
     End If
 
     GanttLive_ApplyScenarioRender wsGantt
+    scenarioSucceeded = True
+    ganttRebuilt = True
+
+    If silentMode Then
+        If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Scenario_Engine"
+        GoTo CleanExit
+    End If
 
     GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
         "Scénario mis à jour.", _
         "Scenario updated."
 
     CalcBridge_ShowPlanningConsole consoleMessages
+
+CleanExit:
+    If Not IsMissing(transactionSucceeded) Then transactionSucceeded = scenarioSucceeded
+    If Not IsMissing(transactionGanttRebuilt) Then transactionGanttRebuilt = ganttRebuilt
+    If Not IsMissing(transactionMessages) Then Set transactionMessages = consoleMessages
     Exit Sub
 
 SafeExit:
@@ -3569,10 +3607,48 @@ SafeExit:
 
         GanttLive_AddVbaOrStructuredError consoleMessages, "Run_Gantt_Scenario_Engine", Err.Description
 
-        CalcBridge_ShowPlanningConsole consoleMessages
+        If silentMode Then
+            If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Scenario_Engine"
+        Else
+            CalcBridge_ShowPlanningConsole consoleMessages
+        End If
     End If
 
+    Resume CleanExit
+
 End Sub
+
+Public Function GanttLive_RunScenarioTransaction( _
+    ByRef consoleMessages As Collection, _
+    ByRef ganttRebuilt As Boolean) As Boolean
+
+    Dim transactionSucceeded As Variant
+    Dim transactionMessages As Variant
+    Dim transactionGanttRebuilt As Variant
+
+    Set consoleMessages = New Collection
+    ganttRebuilt = False
+
+    Run_Gantt_Scenario_Engine _
+        True, _
+        transactionSucceeded, _
+        transactionMessages, _
+        transactionGanttRebuilt, _
+        False
+
+    If IsObject(transactionMessages) Then
+        Set consoleMessages = transactionMessages
+    End If
+
+    If Not IsEmpty(transactionGanttRebuilt) Then
+        ganttRebuilt = CBool(transactionGanttRebuilt)
+    End If
+
+    If Not IsEmpty(transactionSucceeded) Then
+        GanttLive_RunScenarioTransaction = CBool(transactionSucceeded)
+    End If
+
+End Function
 
 Private Function Run_Gantt_Scenario_Backend( _
     ByVal tblTest As ListObject, _
@@ -3594,6 +3670,9 @@ Private Function Run_Gantt_Scenario_Backend( _
     Dim idToWbs As Object
     Dim errorIds As Object
     Dim rootErrorIds As Object
+    Dim dependencyDiagnostics As Object
+    Dim constraintDiagnostics As Object
+    Dim cascadeDiagnostics As Object
 
     Dim rowCount As Long
     Dim r As Long
@@ -3624,13 +3703,16 @@ Private Function Run_Gantt_Scenario_Backend( _
     Set idToWbs = CreateObject("Scripting.Dictionary")
     Set errorIds = CreateObject("Scripting.Dictionary")
     Set rootErrorIds = CreateObject("Scripting.Dictionary")
+    Set dependencyDiagnostics = CreateObject("Scripting.Dictionary")
+    Set constraintDiagnostics = CreateObject("Scripting.Dictionary")
+    Set cascadeDiagnostics = CreateObject("Scripting.Dictionary")
 
     BuildGanttScenarioCoreDataset tblTest, dataCore, mapCore, idToRowTest, idToWbs
 
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
         ThisWorkbook.Worksheets(CALC_SHEET).ListObjects(CALC_TABLE))
 
-    Run_Calc_Core dataCore, mapCore, linksBySuccId
+    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
 
     For r = 1 To rowCount
 
@@ -3678,7 +3760,7 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "SCENARIO"
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "SCENARIO", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
                 "Erreur de calcul dans le scénario", "corriger les valeurs de test ou la logique amont", _

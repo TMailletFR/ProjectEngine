@@ -502,6 +502,8 @@ Private Sub RunGanttRefreshCore( _
     Dim wsActiveBeforeRefresh As Worksheet
     Dim selectionAddressBeforeRefresh As String
     Dim shouldRestoreActiveContext As Boolean
+    Dim refreshErrNumber As Long
+    Dim refreshErrDescription As String
 
     Set perfScope = Profiler_BeginScope("RunGanttRefreshCore", "Gantt")
 
@@ -622,6 +624,9 @@ Private Sub RunGanttRefreshCore( _
     End If
 
 SafeExit:
+    refreshErrNumber = Err.Number
+    refreshErrDescription = Err.Description
+
     If shouldRestoreActiveContext Then
         RestoreGanttCallerVisualContext wsActiveBeforeRefresh, selectionAddressBeforeRefresh
     End If
@@ -630,30 +635,36 @@ SafeExit:
     Application.ScreenUpdating = True
     SetGanttInternalWrite False
 
-    If GanttDrag_IsWatching() Then GanttDrag_RebuildWatchMaps
+    If IsPlanningWorkflowActive() Then
+        If GanttDrag_IsWatching() Then GanttDrag_RebuildWatchMaps
+    Else
+        On Error Resume Next
+        GanttDrag_ReconcileWatchState
+        On Error GoTo 0
+    End If
 
     If Not GetGanttPreserveTestInputs() Then
         GanttLive_ClearTestRenderRequest
     End If
 
-    If Err.Number <> 0 Then
+    If refreshErrNumber <> 0 Then
 
         If displayOnly Then
             Gantt_AddConsoleMessage consoleMessages, "STOP", _
                 "Erreur VBA dans Refresh_Gantt_DisplayOnly" & vbCrLf & _
                 "-> vérifier le dernier bloc modifié dans mod_Gantt" & vbCrLf & _
-                "-> " & Err.Description, _
+                "-> " & refreshErrDescription, _
                 "VBA error in Refresh_Gantt_DisplayOnly" & vbCrLf & _
                 "-> check the last edited block in mod_Gantt" & vbCrLf & _
-                "-> " & Err.Description
+                "-> " & refreshErrDescription
         Else
             Gantt_AddConsoleMessage consoleMessages, "STOP", _
                 "Erreur VBA dans Refresh_Gantt" & vbCrLf & _
                 "-> vérifier le dernier bloc modifié dans mod_Gantt" & vbCrLf & _
-                "-> " & Err.Description, _
+                "-> " & refreshErrDescription, _
                 "VBA error in Refresh_Gantt" & vbCrLf & _
                 "-> check the last edited block in mod_Gantt" & vbCrLf & _
-                "-> " & Err.Description
+                "-> " & refreshErrDescription
         End If
 
         CalcBridge_ShowPlanningConsole consoleMessages
@@ -2058,118 +2069,15 @@ Private Sub DrawTaskBar( _
     Optional ByVal isLoE As Boolean = False)
 
     Dim perfScope As clsPerfScope
-
-
-    Dim leftPos As Double
-    Dim rightPos As Double
-    Dim topPos As Double
-    Dim barWidth As Double
-    Dim barHeight As Double
-    Dim fullBarTop As Double
-    Dim fullBarHeight As Double
-    Dim shp As Shape
-    Dim shpProgress As Shape
-
-    Dim progressColor As Variant
-    Dim progressWidth As Double
-    Dim progressLeft As Double
-    Dim progressTop As Double
-    Dim progressHeight As Double
+    Dim expected As Object
 
     Set perfScope = Profiler_BeginScope("DrawTaskBar", "Shape Create")
+    Set expected = CreateObject("Scripting.Dictionary")
 
-    If Not HasValue(startVal) Then Exit Sub
-    If Not HasValue(finishVal) Then Exit Sub
-
-    'Strict date-column anchoring.
-    'The bar geometry must be derived from the full Excel range/cell anchors,
-    'not from accumulated pixel offsets.
-    leftPos = TimelineLeft(ws, projectStart, startVal)
-    rightPos = TimelineRightAfterFinish(ws, projectStart, finishVal)
-
-    If rightPos <= leftPos Then Exit Sub
-
-    fullBarTop = GetGanttBarTop(ws, ganttRow)
-    fullBarHeight = GetGanttBarHeight(ws, ganttRow)
-
-    If isLoE Then
-        barHeight = fullBarHeight / 2
-        If barHeight < 2 Then barHeight = 2
-        topPos = fullBarTop + ((fullBarHeight - barHeight) / 2)
-    Else
-        barHeight = fullBarHeight
-        topPos = fullBarTop
-    End If
-
-    barWidth = rightPos - leftPos
-
-    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, barWidth, barHeight)
-    shp.Name = shapeKey
-    ApplyGanttRenderShapePlacement shp
-
-    With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = barWidth
-        .Height = barHeight
-    End With
-
-    If progressVal >= 1 Then
-        shp.Fill.ForeColor.RGB = COLOR_PROGRESS_GREEN
-    Else
-        shp.Fill.ForeColor.RGB = GetTaskBaseColor(isCritical)
-    End If
-
-    If hasDelta Then
-        shp.Line.Visible = msoTrue
-        shp.Line.ForeColor.RGB = RGB(255, 192, 0)
-        shp.Line.Weight = 2.75
-    Else
-        shp.Line.Visible = msoFalse
-    End If
-
-    If progressVal > 0 And progressVal < 1 Then
-
-        progressColor = GetProgressFillColor(rawStartVal, rawFinishVal, progressVal)
-
-        If Not IsEmpty(progressColor) Then
-
-            progressWidth = barWidth * WorksheetFunction.Min(progressVal, 1)
-            If progressWidth < 2 Then progressWidth = 2
-
-            progressLeft = leftPos + 2
-            progressTop = topPos + 2
-            progressHeight = barHeight - 4
-
-            If progressWidth > barWidth - 4 Then progressWidth = barWidth - 4
-            If progressHeight < 2 Then progressHeight = 2
-
-            Set shpProgress = ws.Shapes.AddShape( _
-                msoShapeRoundedRectangle, _
-                progressLeft, _
-                progressTop, _
-                progressWidth, _
-                progressHeight)
-
-            shpProgress.Name = shapeKey & "_P"
-            ApplyGanttRenderShapePlacement shpProgress
-
-            With shpProgress
-                .Left = progressLeft
-                .Top = progressTop
-                .Width = progressWidth
-                .Height = progressHeight
-                .Line.Visible = msoFalse
-                .Fill.ForeColor.RGB = CLng(progressColor)
-                .Fill.Transparency = 0.25
-            End With
-
-        End If
-
-    End If
+    GanttShapeRegistry_AddTaskBarRecords expected, ws, ganttRow, projectStart, startVal, finishVal, progressVal, isCritical, shapeKey, hasDelta, isLoE
+    GanttShapeRegistry_CreateAllFromRecords ws, expected
 
 End Sub
-
 Private Function TimelineDateStartX( _
     ByVal ws As Worksheet, _
     ByVal projectStart As Variant, _
@@ -2300,52 +2208,15 @@ Private Sub DrawMilestone( _
     ByVal hasDelta As Boolean)
 
     Dim perfScope As clsPerfScope
-
-    Dim leftPos As Double
-    Dim topPos As Double
-    Dim sizeVal As Double
-    Dim cellMidX As Double
-    Dim shp As Shape
+    Dim expected As Object
 
     Set perfScope = Profiler_BeginScope("DrawMilestone", "Shape Create")
+    Set expected = CreateObject("Scripting.Dictionary")
 
-    If Not HasValue(startVal) Then Exit Sub
-
-    sizeVal = GetGanttMilestoneSize(ws, ganttRow)
-    cellMidX = GetTaskMidX(ws, projectStart, startVal)
-    If cellMidX <= 0 Then Exit Sub
-
-    leftPos = cellMidX - (sizeVal / 2)
-    topPos = GetGanttRowTop(ws, ganttRow) + ((GetGanttRowHeight(ws, ganttRow) - sizeVal) / 2)
-
-    Set shp = ws.Shapes.AddShape(msoShapeDiamond, leftPos, topPos, sizeVal, sizeVal)
-    shp.Name = shapeKey
-    ApplyGanttRenderShapePlacement shp
-
-    With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = sizeVal
-        .Height = sizeVal
-    End With
-
-    If progressVal >= 1 Then
-        shp.Fill.ForeColor.RGB = COLOR_PROGRESS_GREEN
-    Else
-        shp.Fill.ForeColor.RGB = GetTaskBaseColor(isCritical)
-    End If
-
-    If hasDelta Then
-        shp.Line.Visible = msoTrue
-        shp.Line.ForeColor.RGB = RGB(255, 192, 0)
-        shp.Line.Weight = 2.75
-    Else
-        shp.Line.Visible = msoFalse
-    End If
+    GanttShapeRegistry_AddMilestoneRecord expected, ws, ganttRow, projectStart, startVal, progressVal, isCritical, shapeKey, hasDelta
+    GanttShapeRegistry_CreateAllFromRecords ws, expected
 
 End Sub
-
-
 Private Function BuildGanttConstraintMapFromCalc(Optional ByVal includeDeadline As Boolean = False) As Object
 
     Dim perfScope As clsPerfScope
@@ -2737,49 +2608,728 @@ End Sub
 Private Sub DrawTodayLine(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal totalDays As Long, ByVal rowCount As Long)
 
     Dim perfScope As clsPerfScope
+    Dim expected As Object
+
+    Set perfScope = Profiler_BeginScope("DrawTodayLine", "Shape Create")
+    Set expected = CreateObject("Scripting.Dictionary")
+
+    GanttShapeRegistry_AddTodayLineRecord expected, ws, projectStart, totalDays, rowCount
+    GanttShapeRegistry_CreateAllFromRecords ws, expected
+
+End Sub
+'=====================================================
+' Predictive TEST Day registry - phase 1
+' Scope: TODAY_LINE, TASK_*, TASK_*_P, MS_* only.
+' Falls back to the classic Refresh_Gantt path whenever another visual family
+' could become stale.
+'=====================================================
+Public Function Gantt_TryApplyTestDayPredictiveRegistry() As Boolean
+
+    Dim perfScope As clsPerfScope
+    Dim wsWBS As Worksheet
+    Dim wsGantt As Worksheet
+    Dim tblWBS As ListObject
+    Dim dataArr As Variant
+    Dim mapWBS As Object
+    Dim hasChildren As Object
+    Dim baseById As Object
+    Dim testById As Object
+    Dim projectStart As Variant
+    Dim projectFinish As Variant
+    Dim totalDays As Long
+    Dim rowCount As Long
+    Dim expected As Object
+    Dim existing As Object
+    Dim diffCount As Long
+    Dim fallbackReason As String
+
+    Set perfScope = Profiler_BeginScope("GanttPredictiveRegistry_TryApplyTestDay", "Gantt Registry")
+
+    On Error GoTo Fallback
+
+    Gantt_TryApplyTestDayPredictiveRegistry = False
+
+    EnsureGanttViewInitialized
+
+    If gTimelineScaleMode <> GANTT_SCALE_DAY Then fallbackReason = "ScaleNotDay": GoTo Fallback
+    If gGanttViewMode <> GANTT_VIEW_DETAIL Then fallbackReason = "ViewNotDetail": GoTo Fallback
+    If Not GanttLive_IsTestRenderRequested() Then fallbackReason = "NoTestRenderRequest": GoTo Fallback
+
+    Set wsGantt = ThisWorkbook.Worksheets(GANTT_SHEET)
+    If wsGantt Is Nothing Then fallbackReason = "NoGanttSheet": GoTo Fallback
+    If IsGanttSheetLayoutEmpty(wsGantt) Then fallbackReason = "EmptyLayout": GoTo Fallback
+
+    Set wsWBS = ThisWorkbook.Worksheets(WBS_SHEET)
+    Set tblWBS = wsWBS.ListObjects(WBS_TABLE)
+    If tblWBS.DataBodyRange Is Nothing Then fallbackReason = "EmptyWBS": GoTo Fallback
+
+    Set mapWBS = BuildWBSColumnMap(tblWBS)
+    ValidateGanttSourceColumns mapWBS
+
+    dataArr = tblWBS.DataBodyRange.Value
+    rowCount = UBound(dataArr, 1)
+    If rowCount < 1 Then fallbackReason = "NoRows": GoTo Fallback
+    If GetLastRenderedGanttRow(wsGantt) <> FIRST_TASK_ROW + rowCount - 1 Then fallbackReason = "RowCountMismatch": GoTo Fallback
+
+    Set hasChildren = BuildHasChildrenMap(dataArr, mapWBS)
+    Set baseById = GanttLive_BuildBaseByIdMap()
+    Set testById = GanttLive_BuildTestByIdMap()
+
+    If GanttPredictive_HasUnsupportedSummaryDelta(dataArr, mapWBS, hasChildren, baseById, testById) Then fallbackReason = "SummaryDelta": GoTo Fallback
+
+    ResolveDisplayedProjectRange dataArr, mapWBS, hasChildren, baseById, testById, True, projectStart, projectFinish
+    If Not HasValue(projectStart) Or Not HasValue(projectFinish) Then fallbackReason = "NoProjectRange": GoTo Fallback
+
+    totalDays = GetTimelineSlotCount(projectStart, projectFinish)
+    If totalDays < 1 Then fallbackReason = "NoTimelineSlots": GoTo Fallback
+    If Not GanttPredictive_CurrentDayTimelineMatches(wsGantt, projectStart, projectFinish, totalDays) Then fallbackReason = "TimelineMismatch": GoTo Fallback
+
+    Set expected = GanttPredictive_BuildExpectedRegistry(wsGantt, dataArr, mapWBS, hasChildren, projectStart, totalDays, baseById, testById)
+    Set existing = GanttPredictive_BuildExistingRegistry(wsGantt)
+
+    diffCount = GanttPredictive_CountDiffs(expected, existing)
+    Profiler_RecordOperation "GanttPredictiveRegistryDiffs", diffCount, 0#
+
+    If diffCount > 0 Then
+        If GanttPredictive_HasExistingPrefix(existing, "DEP_") Then fallbackReason = "DependencyShapesPresent": GoTo Fallback
+        If GanttPredictive_HasExistingPrefix(existing, "CSTR_") Then fallbackReason = "ConstraintShapesPresent": GoTo Fallback
+        If gShowConstraints Then fallbackReason = "ConstraintsEnabled": GoTo Fallback
+    End If
+
+    GanttPredictive_ApplyDiff wsGantt, expected, existing
+    ApplyGanttUiState wsGantt, False
+    Gantt_CapturePendingGeometryRepair wsGantt
+
+    If IsPlanningWorkflowActive() Then
+        If GanttDrag_IsWatching() Then GanttDrag_RebuildWatchMaps
+    Else
+        On Error Resume Next
+        GanttDrag_ReconcileWatchState
+        On Error GoTo 0
+    End If
+
+    Gantt_TryApplyTestDayPredictiveRegistry = True
+    Exit Function
+
+Fallback:
+    If fallbackReason = "" Then fallbackReason = "ErrorOrUnsupported"
+    Profiler_RecordOperation "GanttPredictiveRegistryFallback_" & fallbackReason, 1, 0#
+    Gantt_TryApplyTestDayPredictiveRegistry = False
+
+End Function
+
+Private Function GanttPredictive_CurrentDayTimelineMatches( _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal projectFinish As Variant, _
+    ByVal totalDays As Long) As Boolean
+
+    Dim firstVal As Variant
+    Dim lastVal As Variant
+    Dim lastCol As Long
+
+    On Error GoTo SafeExit
+
+    lastCol = FIRST_TIMELINE_COL + totalDays - 1
+    firstVal = ws.Cells(HEADER_ROW_2, FIRST_TIMELINE_COL).Value
+    lastVal = ws.Cells(HEADER_ROW_2, lastCol).Value
+
+    If Not HasValue(firstVal) Then GoTo SafeExit
+    If Not HasValue(lastVal) Then GoTo SafeExit
+
+    GanttPredictive_CurrentDayTimelineMatches = _
+        (CLng(CDbl(firstVal)) = CLng(CDbl(projectStart))) And _
+        (CLng(CDbl(lastVal)) = CLng(CDbl(projectFinish)))
+
+SafeExit:
+End Function
+
+Private Function GanttPredictive_HasUnsupportedSummaryDelta( _
+    ByRef dataArr As Variant, _
+    ByVal mapWBS As Object, _
+    ByVal hasChildren As Object, _
+    ByVal baseById As Object, _
+    ByVal testById As Object) As Boolean
+
+    Dim r As Long
+    Dim wbsVal As String
+    Dim idVal As String
+
+    For r = 1 To UBound(dataArr, 1)
+        wbsVal = NormalizeWBS(CStr(dataArr(r, mapWBS("WBS"))))
+        If hasChildren.Exists(wbsVal) Then
+            idVal = Trim$(CStr(dataArr(r, mapWBS("ID"))))
+            If GanttLive_HasRenderableTestDelta(idVal, baseById, testById) Then
+                GanttPredictive_HasUnsupportedSummaryDelta = True
+                Exit Function
+            End If
+        End If
+    Next r
+
+End Function
+
+Private Function GanttPredictive_BuildExpectedRegistry( _
+    ByVal ws As Worksheet, _
+    ByRef dataArr As Variant, _
+    ByVal mapWBS As Object, _
+    ByVal hasChildren As Object, _
+    ByVal projectStart As Variant, _
+    ByVal totalDays As Long, _
+    ByVal baseById As Object, _
+    ByVal testById As Object) As Object
+
+    Dim perfScope As clsPerfScope
+    Dim expected As Object
+    Dim parentCompleteMap As Object
+    Dim r As Long
+    Dim rowCount As Long
+    Dim ganttRow As Long
+    Dim wbsVal As String
+    Dim idVal As String
+    Dim rawStartVal As Variant
+    Dim rawFinishVal As Variant
+    Dim renderStartVal As Variant
+    Dim renderFinishVal As Variant
+    Dim rawDurationDays As Long
+    Dim progressVal As Double
+    Dim isCritical As Boolean
+    Dim hasDelta As Boolean
+    Dim isParent As Boolean
+    Dim isLoE As Boolean
+    Dim isMilestone As Boolean
+
+    Set perfScope = Profiler_BeginScope("GanttPredictiveRegistry_BuildExpected", "Gantt Registry")
+    Set expected = CreateObject("Scripting.Dictionary")
+    Set parentCompleteMap = BuildParentCompleteMap(dataArr, mapWBS)
+
+    rowCount = UBound(dataArr, 1)
+
+    For r = 1 To rowCount
+        ganttRow = FIRST_TASK_ROW + r - 1
+        wbsVal = NormalizeWBS(CStr(dataArr(r, mapWBS("WBS"))))
+        idVal = Trim$(CStr(dataArr(r, mapWBS("ID"))))
+
+        rawStartVal = GanttLive_GetDisplayStart(idVal, baseById, testById, True)
+        rawFinishVal = GanttLive_GetDisplayFinish(idVal, baseById, testById, True)
+        renderStartVal = GetRenderStartForCurrentScale(rawStartVal)
+        renderFinishVal = GetRenderFinishForCurrentScale(rawFinishVal)
+
+        isParent = hasChildren.Exists(wbsVal)
+        isMilestone = IsMilestoneTaskType(dataArr, mapWBS, r)
+        isLoE = IsLevelOfEffortTaskType(dataArr, mapWBS, r)
+
+        If isParent Then GoTo NextShape
+        If Not ShouldRenderTaskInCurrentView(isParent, renderStartVal, renderFinishVal) Then GoTo NextShape
+        If Not HasValue(rawStartVal) Or Not HasValue(rawFinishVal) Then GoTo NextShape
+        If Not HasValue(renderStartVal) Or Not HasValue(renderFinishVal) Then GoTo NextShape
+
+        rawDurationDays = CLng(CDbl(rawFinishVal) - CDbl(rawStartVal) + 1)
+        progressVal = 0#
+
+        If isLoE Then
+            progressVal = GetLoEProgressFromToday(rawStartVal, rawFinishVal)
+        ElseIf HasValue(GanttLive_GetDisplayProgress(idVal, baseById, testById, True)) Then
+            progressVal = CDbl(GanttLive_GetDisplayProgress(idVal, baseById, testById, True))
+        End If
+
+        isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r)
+        hasDelta = GanttLive_HasRenderableTestDelta(idVal, baseById, testById)
+
+        If isMilestone Then
+            GanttShapeRegistry_AddMilestoneRecord expected, ws, ganttRow, projectStart, rawStartVal, progressVal, isCritical, "MS_" & CStr(r), hasDelta
+        ElseIf ShouldDrawCompactTaskMarker(ws, ganttRow, projectStart, rawStartVal, rawFinishVal, rawDurationDays, isLoE) Then
+            GanttShapeRegistry_AddCompactTaskRecords expected, ws, ganttRow, projectStart, rawStartVal, rawFinishVal, progressVal, isCritical, "TASK_" & CStr(r), hasDelta
+        Else
+            GanttShapeRegistry_AddTaskBarRecords expected, ws, ganttRow, projectStart, rawStartVal, rawFinishVal, progressVal, isCritical, "TASK_" & CStr(r), hasDelta, isLoE
+        End If
+
+NextShape:
+    Next r
+
+    GanttShapeRegistry_AddTodayLineRecord expected, ws, projectStart, totalDays, rowCount
+    Set GanttPredictive_BuildExpectedRegistry = expected
+
+End Function
+
+Private Function GanttPredictive_BuildExistingRegistry(ByVal ws As Worksheet) As Object
+
+    Dim perfScope As clsPerfScope
+    Dim d As Object
+    Dim shp As Shape
+
+    Set perfScope = Profiler_BeginScope("GanttPredictiveRegistry_BuildExisting", "Gantt Registry")
+    Set d = CreateObject("Scripting.Dictionary")
+
+    For Each shp In ws.Shapes
+        If IsGanttGeometryRepairShape(shp.Name) Then d.Add shp.Name, shp
+    Next shp
+
+    Set GanttPredictive_BuildExistingRegistry = d
+
+End Function
+
+Private Sub GanttShapeRegistry_AddTaskBarRecords( _
+    ByVal expected As Object, _
+    ByVal ws As Worksheet, _
+    ByVal ganttRow As Long, _
+    ByVal projectStart As Variant, _
+    ByVal startVal As Variant, _
+    ByVal finishVal As Variant, _
+    ByVal progressVal As Double, _
+    ByVal isCritical As Boolean, _
+    ByVal shapeName As String, _
+    ByVal hasDelta As Boolean, _
+    ByVal isLoE As Boolean)
+
+    Dim leftPos As Double
+    Dim rightPos As Double
+    Dim topPos As Double
+    Dim barWidth As Double
+    Dim barHeight As Double
+    Dim fullBarTop As Double
+    Dim fullBarHeight As Double
+    Dim progressColor As Variant
+    Dim progressWidth As Double
+    Dim progressLeft As Double
+    Dim progressTop As Double
+    Dim progressHeight As Double
+
+    If Not HasValue(startVal) Or Not HasValue(finishVal) Then Exit Sub
+
+    leftPos = TimelineLeft(ws, projectStart, startVal)
+    rightPos = TimelineRightAfterFinish(ws, projectStart, finishVal)
+    If rightPos <= leftPos Then Exit Sub
+
+    fullBarTop = GetGanttBarTop(ws, ganttRow)
+    fullBarHeight = GetGanttBarHeight(ws, ganttRow)
+
+    If isLoE Then
+        barHeight = fullBarHeight / 2
+        If barHeight < 2 Then barHeight = 2
+        topPos = fullBarTop + ((fullBarHeight - barHeight) / 2)
+    Else
+        barHeight = fullBarHeight
+        topPos = fullBarTop
+    End If
+
+    barWidth = rightPos - leftPos
+
+    GanttShapeRegistry_AddShapeRecord expected, shapeName, "TASK", "BAR", msoShapeRoundedRectangle, _
+        leftPos, topPos, barWidth, barHeight, True, GetTaskExpectedFillColor(startVal, finishVal, progressVal, isCritical), 0#, _
+        hasDelta, RGB(255, 192, 0), 2.75
+
+    If progressVal > 0 And progressVal < 1 Then
+        progressColor = GetProgressFillColor(startVal, finishVal, progressVal)
+        If Not IsEmpty(progressColor) Then
+            progressWidth = barWidth * WorksheetFunction.Min(progressVal, 1)
+            If progressWidth < 2 Then progressWidth = 2
+            progressLeft = leftPos + 2
+            progressTop = topPos + 2
+            progressHeight = barHeight - 4
+            If progressWidth > barWidth - 4 Then progressWidth = barWidth - 4
+            If progressHeight < 2 Then progressHeight = 2
+
+            GanttShapeRegistry_AddShapeRecord expected, shapeName & "_P", "TASK", "PROGRESS", msoShapeRoundedRectangle, _
+                progressLeft, progressTop, progressWidth, progressHeight, True, CLng(progressColor), 0.25, _
+                False, 0, 0#
+        End If
+    End If
+
+End Sub
+
+Private Sub GanttShapeRegistry_AddCompactTaskRecords( _
+    ByVal expected As Object, _
+    ByVal ws As Worksheet, _
+    ByVal ganttRow As Long, _
+    ByVal projectStart As Variant, _
+    ByVal startVal As Variant, _
+    ByVal finishVal As Variant, _
+    ByVal progressVal As Double, _
+    ByVal isCritical As Boolean, _
+    ByVal shapeName As String, _
+    ByVal hasDelta As Boolean)
+
+    Dim targetCol As Long
+    Dim cellWidth As Double
+    Dim markerCenterX As Double
+    Dim topPos As Double
+    Dim sizeVal As Double
+    Dim innerSize As Double
+    Dim progressColor As Variant
+
+    If Not HasValue(startVal) Then Exit Sub
+    If Not HasValue(finishVal) Then finishVal = startVal
+
+    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, startVal)
+    If targetCol < FIRST_TIMELINE_COL Then Exit Sub
+
+    cellWidth = ws.Cells(HEADER_ROW_2, targetCol).Width
+    sizeVal = GetGanttCompactTaskMarkerSize(ws, ganttRow, cellWidth)
+    If sizeVal < 2 Then sizeVal = 2
+
+    markerCenterX = TimelineDateRangeMidX(ws, projectStart, startVal, finishVal)
+    If markerCenterX <= 0 Then Exit Sub
+
+    topPos = ws.Cells(ganttRow, FIRST_TIMELINE_COL).Top + ((ws.Rows(ganttRow).Height - sizeVal) / 2)
+
+    GanttShapeRegistry_AddShapeRecord expected, shapeName, "TASK", "COMPACT", msoShapeOval, _
+        markerCenterX - (sizeVal / 2), topPos, sizeVal, sizeVal, True, GetTaskExpectedFillColor(startVal, finishVal, progressVal, isCritical), 0#, _
+        hasDelta, RGB(255, 192, 0), 2.75
+
+    If progressVal > 0 And progressVal < 1 Then
+        progressColor = GetProgressFillColor(startVal, finishVal, progressVal)
+        innerSize = sizeVal * 0.5
+        GanttShapeRegistry_AddShapeRecord expected, shapeName & "_P", "TASK", "COMPACT_PROGRESS", msoShapeOval, _
+            markerCenterX - (innerSize / 2), topPos + ((sizeVal - innerSize) / 2), innerSize, innerSize, True, CLng(progressColor), 0.15, _
+            False, 0, 0#
+    End If
+
+End Sub
+
+Private Sub GanttShapeRegistry_AddMilestoneRecord( _
+    ByVal expected As Object, _
+    ByVal ws As Worksheet, _
+    ByVal ganttRow As Long, _
+    ByVal projectStart As Variant, _
+    ByVal startVal As Variant, _
+    ByVal progressVal As Double, _
+    ByVal isCritical As Boolean, _
+    ByVal shapeName As String, _
+    ByVal hasDelta As Boolean)
+
+    Dim leftPos As Double
+    Dim topPos As Double
+    Dim sizeVal As Double
+    Dim cellMidX As Double
+
+    If Not HasValue(startVal) Then Exit Sub
+
+    sizeVal = GetGanttMilestoneSize(ws, ganttRow)
+    cellMidX = GetTaskMidX(ws, projectStart, startVal)
+    If cellMidX <= 0 Then Exit Sub
+
+    leftPos = cellMidX - (sizeVal / 2)
+    topPos = GetGanttRowTop(ws, ganttRow) + ((GetGanttRowHeight(ws, ganttRow) - sizeVal) / 2)
+
+    GanttShapeRegistry_AddShapeRecord expected, shapeName, "MS", "MILESTONE", msoShapeDiamond, _
+        leftPos, topPos, sizeVal, sizeVal, True, GetTaskExpectedFillColor(startVal, startVal, progressVal, isCritical), 0#, _
+        hasDelta, RGB(255, 192, 0), 2.75
+
+End Sub
+
+Private Sub GanttShapeRegistry_AddTodayLineRecord( _
+    ByVal expected As Object, _
+    ByVal ws As Worksheet, _
+    ByVal projectStart As Variant, _
+    ByVal totalDays As Long, _
+    ByVal rowCount As Long)
 
     Dim todayVal As Date
     Dim projectFinish As Date
-
     Dim x As Double
     Dim yTop As Double
     Dim yBottom As Double
-    Dim shp As Shape
-
-    Set perfScope = Profiler_BeginScope("DrawTodayLine", "Shape Create")
+    Dim rec As Object
 
     If ws Is Nothing Then Exit Sub
     If Not HasValue(projectStart) Then Exit Sub
-    If totalDays < 1 Then Exit Sub
-    If rowCount < 1 Then Exit Sub
+    If totalDays < 1 Or rowCount < 1 Then Exit Sub
 
     todayVal = Date
     projectFinish = GetScaleProjectFinishFromSlots(projectStart, totalDays)
-
     If todayVal < CDate(projectStart) Or todayVal > projectFinish Then Exit Sub
 
     x = GetTaskMidX(ws, projectStart, todayVal)
+    yTop = ws.Cells(HEADER_ROW_1, FIRST_TIMELINE_COL).Top
+    yBottom = GetGanttRowTop(ws, FIRST_TASK_ROW + rowCount - 1) + GetGanttRowHeight(ws, FIRST_TASK_ROW + rowCount - 1)
+    If x <= 0 Or yBottom <= yTop Then Exit Sub
 
-    yTop = ws.cells(HEADER_ROW_1, FIRST_TIMELINE_COL).Top
-    yBottom = GetGanttRowTop(ws, FIRST_TASK_ROW + rowCount - 1) + _
-              GetGanttRowHeight(ws, FIRST_TASK_ROW + rowCount - 1)
-
-    If x <= 0 Then Exit Sub
-    If yBottom <= yTop Then Exit Sub
-
-    Set shp = ws.Shapes.AddLine(x, yTop, x, yBottom)
-    shp.Name = "TODAY_LINE"
-    ApplyGanttRenderLinePlacement shp
-
-    With shp.Line
-        .ForeColor.RGB = RGB(255, 192, 0)
-        .Weight = 4.5 '3x thicker
-        .DashStyle = msoLineDash
-    End With
-
-    shp.ZOrder msoBringToFront
+    Set rec = CreateObject("Scripting.Dictionary")
+    rec("Name") = "TODAY_LINE"
+    rec("Family") = "TODAY"
+    rec("Subtype") = "LINE"
+    rec("IsLine") = True
+    rec("X1") = x
+    rec("Y1") = yTop
+    rec("X2") = x
+    rec("Y2") = yBottom
+    rec("Left") = x
+    rec("Top") = yTop
+    rec("Width") = 0#
+    rec("Height") = yBottom - yTop
+    rec("Visible") = True
+    rec("LineColor") = RGB(255, 192, 0)
+    rec("LineWeight") = 4.5
+    rec("DashStyle") = msoLineDash
+    rec("ZFront") = True
+    expected.Add "TODAY_LINE", rec
 
 End Sub
+
+Private Function GetTaskExpectedFillColor( _
+    ByVal startVal As Variant, _
+    ByVal finishVal As Variant, _
+    ByVal progressVal As Double, _
+    ByVal isCritical As Boolean) As Long
+
+    If progressVal >= 1 Then
+        GetTaskExpectedFillColor = COLOR_PROGRESS_GREEN
+    Else
+        GetTaskExpectedFillColor = GetTaskBaseColor(isCritical)
+    End If
+
+End Function
+
+Private Sub GanttShapeRegistry_AddShapeRecord( _
+    ByVal expected As Object, _
+    ByVal shapeName As String, _
+    ByVal familyName As String, _
+    ByVal subtypeName As String, _
+    ByVal autoShapeType As Long, _
+    ByVal leftPos As Double, _
+    ByVal topPos As Double, _
+    ByVal widthVal As Double, _
+    ByVal heightVal As Double, _
+    ByVal visibleVal As Boolean, _
+    ByVal fillColor As Long, _
+    ByVal fillTransparency As Double, _
+    ByVal lineVisible As Boolean, _
+    ByVal lineColor As Long, _
+    ByVal lineWeight As Double)
+
+    Dim rec As Object
+
+    Set rec = CreateObject("Scripting.Dictionary")
+    rec("Name") = shapeName
+    rec("Family") = familyName
+    rec("Subtype") = subtypeName
+    rec("IsLine") = False
+    rec("AutoShapeType") = autoShapeType
+    rec("Left") = leftPos
+    rec("Top") = topPos
+    rec("Width") = widthVal
+    rec("Height") = heightVal
+    rec("Visible") = visibleVal
+    rec("FillColor") = fillColor
+    rec("FillTransparency") = fillTransparency
+    rec("LineVisible") = lineVisible
+    rec("LineColor") = lineColor
+    rec("LineWeight") = lineWeight
+    rec("StyleKey") = familyName & "|" & subtypeName & "|" & CStr(autoShapeType) & "|" & CStr(fillColor) & "|" & CStr(lineVisible) & "|" & CStr(lineColor) & "|" & CStr(lineWeight)
+    expected.Add shapeName, rec
+
+End Sub
+
+Private Function GanttPredictive_CountDiffs(ByVal expected As Object, ByVal existing As Object) As Long
+
+    Dim key As Variant
+    Dim shp As Shape
+    Dim rec As Object
+    Dim countVal As Long
+
+    For Each key In expected.Keys
+        Set rec = expected(CStr(key))
+        If Not existing.Exists(CStr(key)) Then
+            countVal = countVal + 1
+        Else
+            Set shp = existing(CStr(key))
+            If GanttShapeRegistry_ShapeDiffers(shp, rec) Then countVal = countVal + 1
+        End If
+    Next key
+
+    For Each key In existing.Keys
+        If GanttPredictive_IsScopedShapeName(CStr(key)) Then
+            If Not expected.Exists(CStr(key)) Then countVal = countVal + 1
+        End If
+    Next key
+
+    GanttPredictive_CountDiffs = countVal
+
+End Function
+
+Private Sub GanttPredictive_ApplyDiff(ByVal ws As Worksheet, ByVal expected As Object, ByVal existing As Object)
+
+    Dim perfScope As clsPerfScope
+    Dim key As Variant
+    Dim rec As Object
+    Dim shp As Shape
+    Dim createdCount As Long
+    Dim updatedCount As Long
+    Dim deletedCount As Long
+
+    Set perfScope = Profiler_BeginScope("GanttPredictiveRegistry_ApplyDiff", "Gantt Registry")
+
+    For Each key In expected.Keys
+        Set rec = expected(CStr(key))
+        If existing.Exists(CStr(key)) Then
+            Set shp = existing(CStr(key))
+            If GanttShapeRegistry_ShapeDiffers(shp, rec) Then
+                If GanttShapeRegistry_TypeMismatch(shp, rec) Then
+                    shp.Delete
+                    GanttShapeRegistry_CreateShapeFromRecord ws, rec
+                    createdCount = createdCount + 1
+                Else
+                    GanttShapeRegistry_UpdateShapeFromRecord shp, rec
+                    updatedCount = updatedCount + 1
+                End If
+            End If
+        Else
+            GanttShapeRegistry_CreateShapeFromRecord ws, rec
+            createdCount = createdCount + 1
+        End If
+    Next key
+
+    For Each key In existing.Keys
+        If GanttPredictive_IsScopedShapeName(CStr(key)) Then
+            If Not expected.Exists(CStr(key)) Then
+                Set shp = existing(CStr(key))
+                shp.Delete
+                deletedCount = deletedCount + 1
+            End If
+        End If
+    Next key
+
+    Profiler_RecordOperation "GanttPredictiveRegistryCreates", createdCount, 0#
+    Profiler_RecordOperation "GanttPredictiveRegistryUpdates", updatedCount, 0#
+    Profiler_RecordOperation "GanttPredictiveRegistryDeletes", deletedCount, 0#
+
+End Sub
+
+Private Sub GanttShapeRegistry_CreateAllFromRecords(ByVal ws As Worksheet, ByVal records As Object)
+
+    Dim key As Variant
+
+    If records Is Nothing Then Exit Sub
+
+    For Each key In records.Keys
+        GanttShapeRegistry_CreateShapeFromRecord ws, records(CStr(key))
+    Next key
+
+End Sub
+Private Sub GanttShapeRegistry_CreateShapeFromRecord(ByVal ws As Worksheet, ByVal rec As Object)
+
+    Dim shp As Shape
+
+    If CBool(rec("IsLine")) Then
+        Set shp = ws.Shapes.AddLine(CDbl(rec("X1")), CDbl(rec("Y1")), CDbl(rec("X2")), CDbl(rec("Y2")))
+        shp.Name = CStr(rec("Name"))
+        ApplyGanttRenderLinePlacement shp
+    Else
+        Set shp = ws.Shapes.AddShape(CLng(rec("AutoShapeType")), CDbl(rec("Left")), CDbl(rec("Top")), CDbl(rec("Width")), CDbl(rec("Height")))
+        shp.Name = CStr(rec("Name"))
+        ApplyGanttRenderShapePlacement shp
+    End If
+
+    GanttShapeRegistry_UpdateShapeFromRecord shp, rec
+
+End Sub
+
+Private Sub GanttShapeRegistry_UpdateShapeFromRecord(ByVal shp As Shape, ByVal rec As Object)
+
+    If CBool(rec("IsLine")) Then
+        shp.Left = CDbl(rec("Left"))
+        shp.Top = CDbl(rec("Top"))
+        shp.Width = CDbl(rec("Width"))
+        shp.Height = CDbl(rec("Height"))
+        With shp.Line
+            .ForeColor.RGB = CLng(rec("LineColor"))
+            .Weight = CDbl(rec("LineWeight"))
+            .DashStyle = CLng(rec("DashStyle"))
+        End With
+        If CBool(rec("ZFront")) Then shp.ZOrder msoBringToFront
+    Else
+        shp.Left = CDbl(rec("Left"))
+        shp.Top = CDbl(rec("Top"))
+        shp.Width = CDbl(rec("Width"))
+        shp.Height = CDbl(rec("Height"))
+        shp.Fill.Visible = msoTrue
+        shp.Fill.ForeColor.RGB = CLng(rec("FillColor"))
+        shp.Fill.Transparency = CDbl(rec("FillTransparency"))
+        If CBool(rec("LineVisible")) Then
+            shp.Line.Visible = msoTrue
+            shp.Line.ForeColor.RGB = CLng(rec("LineColor"))
+            shp.Line.Weight = CDbl(rec("LineWeight"))
+        Else
+            shp.Line.Visible = msoFalse
+        End If
+    End If
+
+    shp.Visible = IIf(CBool(rec("Visible")), msoTrue, msoFalse)
+
+End Sub
+
+Private Function GanttShapeRegistry_ShapeDiffers(ByVal shp As Shape, ByVal rec As Object) As Boolean
+
+    On Error GoTo Differs
+
+    If GanttShapeRegistry_TypeMismatch(shp, rec) Then GoTo Differs
+    If Abs(shp.Left - CDbl(rec("Left"))) > 0.1 Then GoTo Differs
+    If Abs(shp.Top - CDbl(rec("Top"))) > 0.1 Then GoTo Differs
+    If Abs(shp.Width - CDbl(rec("Width"))) > 0.1 Then GoTo Differs
+    If Abs(shp.Height - CDbl(rec("Height"))) > 0.1 Then GoTo Differs
+    If (shp.Visible = msoTrue) <> CBool(rec("Visible")) Then GoTo Differs
+
+    If CBool(rec("IsLine")) Then
+        If shp.Line.ForeColor.RGB <> CLng(rec("LineColor")) Then GoTo Differs
+        If Abs(shp.Line.Weight - CDbl(rec("LineWeight"))) > 0.01 Then GoTo Differs
+        If shp.Line.DashStyle <> CLng(rec("DashStyle")) Then GoTo Differs
+    Else
+        If shp.Fill.ForeColor.RGB <> CLng(rec("FillColor")) Then GoTo Differs
+        If Abs(shp.Fill.Transparency - CDbl(rec("FillTransparency"))) > 0.01 Then GoTo Differs
+        If (shp.Line.Visible = msoTrue) <> CBool(rec("LineVisible")) Then GoTo Differs
+        If CBool(rec("LineVisible")) Then
+            If shp.Line.ForeColor.RGB <> CLng(rec("LineColor")) Then GoTo Differs
+            If Abs(shp.Line.Weight - CDbl(rec("LineWeight"))) > 0.01 Then GoTo Differs
+        End If
+    End If
+
+    GanttShapeRegistry_ShapeDiffers = False
+    Exit Function
+
+Differs:
+    GanttShapeRegistry_ShapeDiffers = True
+
+End Function
+
+Private Function GanttShapeRegistry_TypeMismatch(ByVal shp As Shape, ByVal rec As Object) As Boolean
+
+    On Error GoTo Mismatch
+
+    If CBool(rec("IsLine")) Then
+        GanttShapeRegistry_TypeMismatch = (shp.Type <> msoLine)
+    Else
+        If shp.Type = msoLine Then GoTo Mismatch
+        GanttShapeRegistry_TypeMismatch = (shp.AutoShapeType <> CLng(rec("AutoShapeType")))
+    End If
+    Exit Function
+
+Mismatch:
+    GanttShapeRegistry_TypeMismatch = True
+
+End Function
+
+Private Function GanttPredictive_IsScopedShapeName(ByVal shapeName As String) As Boolean
+
+    GanttPredictive_IsScopedShapeName = _
+        (shapeName = "TODAY_LINE") Or _
+        (Left$(shapeName, 5) = "TASK_") Or _
+        (Left$(shapeName, 3) = "MS_")
+
+End Function
+
+Private Function GanttPredictive_HasExistingPrefix(ByVal existing As Object, ByVal prefixText As String) As Boolean
+
+    Dim key As Variant
+
+    For Each key In existing.Keys
+        If Left$(CStr(key), Len(prefixText)) = prefixText Then
+            GanttPredictive_HasExistingPrefix = True
+            Exit Function
+        End If
+    Next key
+
+End Function
+
 Private Sub FinalizeGanttSheet_DisplayOnly(ByVal wsGantt As Worksheet, ByVal totalDays As Long, ByVal rowCount As Long)
 
     Dim lastCol As Long
@@ -5164,17 +5714,23 @@ Public Sub FormatToggleLabel( _
 
 End Sub
 
-Private Sub ApplyGanttUiState(ByVal ws As Worksheet)
+Private Sub ApplyGanttUiState( _
+    ByVal ws As Worksheet, _
+    Optional ByVal rebuildHeaderControls As Boolean = True)
 
     Dim perfScope As clsPerfScope
 
     Set perfScope = Profiler_BeginScope("ApplyGanttUiState", "Gantt UI")
 
-    Ensure_Gantt_Test_Buttons
+    If rebuildHeaderControls Then
+        Ensure_Gantt_Test_Buttons
+    Else
+        RefreshFixedHeaderToggleVisuals ws
+    End If
+
     ApplyCurrentGanttView ws
 
 End Sub
-
 Private Sub Refresh_Gantt_AfterScaleChange()
 
     Dim oldPreserve As Boolean
@@ -5220,94 +5776,19 @@ Private Sub DrawSingleWeekTask( _
     Optional ByVal finishVal As Variant)
 
     Dim perfScope As clsPerfScope
-
-    Dim leftPos As Double
-    Dim topPos As Double
-    Dim sizeVal As Double
-    Dim shp As Shape
-    Dim shpProgress As Shape
-    Dim targetCol As Long
-    Dim cellWidth As Double
-    Dim fillColor As Long
-    Dim innerSize As Double
-    Dim markerCenterX As Double
+    Dim expected As Object
     Dim markerFinishVal As Variant
 
     Set perfScope = Profiler_BeginScope("DrawSingleWeekTask", "Shape Create")
-
-    If Not HasValue(startVal) Then Exit Sub
+    Set expected = CreateObject("Scripting.Dictionary")
 
     markerFinishVal = finishVal
     If Not HasValue(markerFinishVal) Then markerFinishVal = startVal
 
-    targetCol = TimelineColumnFromHeaderDate_Exact(ws, projectStart, startVal)
-    If targetCol < FIRST_TIMELINE_COL Then Exit Sub
-
-    cellWidth = ws.cells(HEADER_ROW_2, targetCol).Width
-
-    sizeVal = GetGanttCompactTaskMarkerSize(ws, ganttRow, cellWidth)
-    If sizeVal < 2 Then sizeVal = 2
-
-    markerCenterX = TimelineDateRangeMidX(ws, projectStart, startVal, markerFinishVal)
-    If markerCenterX <= 0 Then Exit Sub
-
-    leftPos = markerCenterX - (sizeVal / 2)
-    topPos = ws.cells(ganttRow, FIRST_TIMELINE_COL).Top + ((ws.rows(ganttRow).Height - sizeVal) / 2)
-
-    If progressVal >= 1 Then
-        fillColor = COLOR_PROGRESS_GREEN
-    Else
-        fillColor = GetTaskBaseColor(isCritical)
-    End If
-
-    Set shp = ws.Shapes.AddShape(msoShapeOval, leftPos, topPos, sizeVal, sizeVal)
-    shp.Name = shapeKey
-    ApplyGanttRenderShapePlacement shp
-
-    With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = sizeVal
-        .Height = sizeVal
-        .Fill.ForeColor.RGB = fillColor
-    End With
-
-    If hasDelta Then
-        shp.Line.Visible = msoTrue
-        shp.Line.ForeColor.RGB = RGB(255, 192, 0)
-        shp.Line.Weight = 2.75
-    Else
-        shp.Line.Visible = msoFalse
-    End If
-
-    If progressVal > 0 And progressVal < 1 Then
-
-        innerSize = sizeVal * 0.5
-
-        Set shpProgress = ws.Shapes.AddShape( _
-            msoShapeOval, _
-            leftPos + ((sizeVal - innerSize) / 2), _
-            topPos + ((sizeVal - innerSize) / 2), _
-            innerSize, _
-            innerSize)
-
-        shpProgress.Name = shapeKey & "_P"
-        ApplyGanttRenderShapePlacement shpProgress
-
-        With shpProgress
-            .Left = leftPos + ((sizeVal - innerSize) / 2)
-            .Top = topPos + ((sizeVal - innerSize) / 2)
-            .Width = innerSize
-            .Height = innerSize
-            .Line.Visible = msoFalse
-            .Fill.ForeColor.RGB = GetProgressFillColor(startVal, markerFinishVal, progressVal)
-            .Fill.Transparency = 0.15
-        End With
-
-    End If
+    GanttShapeRegistry_AddCompactTaskRecords expected, ws, ganttRow, projectStart, startVal, markerFinishVal, progressVal, isCritical, shapeKey, hasDelta
+    GanttShapeRegistry_CreateAllFromRecords ws, expected
 
 End Sub
-
 Private Function IsTaskContainedInSingleIsoWeek(ByVal startVal As Variant, ByVal finishVal As Variant) As Boolean
 
     If Not HasValue(startVal) Then Exit Function
@@ -6010,6 +6491,7 @@ Public Sub Gantt_Clear_Test_State()
     End With
 
     GanttLive_ClearTestRenderRequest
+    GanttLive_ClearActiveSimulationMode
 
 SafeExit:
     Application.ScreenUpdating = oldScreenUpdating

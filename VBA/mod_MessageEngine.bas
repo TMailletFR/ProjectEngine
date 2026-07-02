@@ -36,24 +36,83 @@ End Function
 
 Public Function MessageEngine_PrepareDisplayMessages(ByVal messages As Collection) As Collection
 
-    Dim result As Collection
+    Dim included As Collection
     Dim item As Variant
 
-    Set result = New Collection
+    Set included = New Collection
 
     If messages Is Nothing Then
-        Set MessageEngine_PrepareDisplayMessages = result
+        Set MessageEngine_PrepareDisplayMessages = included
         Exit Function
     End If
 
     For Each item In messages
         If MessageEngine_ShouldIncludeInDisplay(item) Then
             MessageEngine_AnnotateAcknowledgement item
+            included.Add item
+        End If
+    Next item
+
+    Set MessageEngine_PrepareDisplayMessages = MessageEngine_GroupDisplayStops(included)
+
+End Function
+
+Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) As Collection
+
+    Dim result As Collection
+    Dim item As Variant
+    Dim consolidatedStop As Object
+    Dim stopCount As Long
+    Dim stopBlock As String
+    Dim stopInserted As Boolean
+    Dim severity As String
+
+    Set result = New Collection
+
+    If messages Is Nothing Then
+        Set MessageEngine_GroupDisplayStops = result
+        Exit Function
+    End If
+
+    For Each item In messages
+        If MessageEngine_NormalizeSeverity(CStr(item("Type"))) = "STOP" Then
+            stopCount = stopCount + 1
+        End If
+    Next item
+
+    If stopCount <= 1 Then
+        Set MessageEngine_GroupDisplayStops = messages
+        Exit Function
+    End If
+
+    For Each item In messages
+        severity = MessageEngine_NormalizeSeverity(CStr(item("Type")))
+
+        If severity = "STOP" Then
+            If stopBlock <> "" Then
+                stopBlock = stopBlock & vbCrLf & vbCrLf & String$(36, "-") & vbCrLf & vbCrLf
+            End If
+            stopBlock = stopBlock & FormatPlanningConsoleMessageForCurrentLanguage(CStr(item("Message")))
+
+            If Not stopInserted Then
+                Set consolidatedStop = CreateObject("Scripting.Dictionary")
+                consolidatedStop("Type") = "STOP"
+                consolidatedStop("Message") = ""
+                consolidatedStop("HistoryHandled") = True
+                consolidatedStop("Acknowledged") = False
+                result.Add consolidatedStop
+                stopInserted = True
+            End If
+        Else
             result.Add item
         End If
     Next item
 
-    Set MessageEngine_PrepareDisplayMessages = result
+    If Not consolidatedStop Is Nothing Then
+        consolidatedStop("Message") = stopBlock
+    End If
+
+    Set MessageEngine_GroupDisplayStops = result
 
 End Function
 

@@ -987,13 +987,17 @@ Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
     ByRef dataArr As Variant, _
     ByVal mapCore As Object, _
     Optional ByVal rootErrorIds As Object = Nothing, _
-    Optional ByVal contextMode As String = "PROD")
+    Optional ByVal contextMode As String = "PROD", _
+    Optional ByVal dependencyDiagnostics As Object = Nothing, _
+    Optional ByVal constraintDiagnostics As Object = Nothing, _
+    Optional ByVal cascadeDiagnostics As Object = Nothing)
 
     Dim mapCalc As Object
     Dim arr As Variant
     Dim r As Long
 
     Dim idToWbs As Object
+    Dim idToTaskName As Object
 
     Dim errMissingPred As Object
     Dim errCycle As Object
@@ -1046,6 +1050,7 @@ Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
     Set errOtherRoot = CreateObject("Scripting.Dictionary")
     Set errConstraintRootMessages = CreateObject("Scripting.Dictionary")
     Set idToWbs = CreateObject("Scripting.Dictionary")
+    Set idToTaskName = CreateObject("Scripting.Dictionary")
 
     If Not mapCalc.Exists("ID") Then GoTo FailSafe
     If Not mapCalc.Exists("Error flag") Then GoTo FailSafe
@@ -1064,6 +1069,12 @@ Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
             End If
 
             idToWbs(idVal) = wbsVal
+            If mapCalc.Exists("Task Name") Then
+                taskNameVal = Trim$(CStr(arr(r, mapCalc("Task Name"))))
+            Else
+                taskNameVal = ""
+            End If
+            idToTaskName(idVal) = taskNameVal
 
             If UCase$(Trim$(CStr(arr(r, mapCalc("Error flag"))))) = "ERROR" Then
 
@@ -1232,20 +1243,26 @@ NextRow:
     End If
 
     If errActualFinishConflict.Count > 0 Then
-        CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualFinishConflict, idToWbs, _
-            "Actual Finish incompatible avec les contraintes de fin amont", _
-            "corriger Actual Finish, la logique amont ou le lag", _
-            "Actual Finish is incompatible with upstream finish constraints", _
-            "fix Actual Finish, upstream logic, or lag"
+        If Not CalcBridge_TryAddConstraintDiagnosticStops(consoleMessages, errActualFinishConflict, idToWbs, idToTaskName, constraintDiagnostics, cascadeDiagnostics, contextKey) Then
+            CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualFinishConflict, idToWbs, _
+                "Actual Finish incompatible avec les contraintes de fin amont", _
+                "corriger Actual Finish, la logique amont ou le lag", _
+                "Actual Finish is incompatible with upstream finish constraints", _
+                "fix Actual Finish, upstream logic, or lag"
+        End If
     End If
 
     If errForecastConflict.Count > 0 Then
         If contextKey = "TEST" Or contextKey = "SCENARIO" Then
-            CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
-                "Test Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
-                "corriger Test Start ou la logique amont", _
-                "Test Start is incompatible with upstream dependencies", _
-                "fix Test Start or upstream logic"
+            If Not CalcBridge_TryAddForecastStartDependencyDiagnosticStops( _
+                consoleMessages, errForecastConflict, idToWbs, idToTaskName, dependencyDiagnostics, contextKey) Then
+
+                CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
+                    "Test Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
+                    "corriger Test Start ou la logique amont", _
+                    "Test Start is incompatible with upstream dependencies", _
+                    "fix Test Start or upstream logic"
+            End If
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
                 "Forecast Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
@@ -1255,7 +1272,9 @@ NextRow:
         End If
     End If
     If errForecastFinishConflict.Count > 0 Then
-        If contextKey = "TEST" Or contextKey = "SCENARIO" Then
+        If CalcBridge_TryAddConstraintDiagnosticStops(consoleMessages, errForecastFinishConflict, idToWbs, idToTaskName, constraintDiagnostics, cascadeDiagnostics, contextKey) Then
+            'Structured constraint diagnostic already rendered.
+        ElseIf contextKey = "TEST" Or contextKey = "SCENARIO" Then
             CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
                 "Test Finish incompatible avec les contraintes de fin amont", _
                 "corriger Test Finish ou la logique amont", _
@@ -1270,7 +1289,9 @@ NextRow:
         End If
     End If
     If errConstraintRootMessages.Count > 0 Then
-        CalcBridge_AddConstraintRootMessages consoleMessages, errConstraintRootMessages
+        If Not CalcBridge_TryAddConstraintDiagnosticStops(consoleMessages, errConstraintRootMessages, idToWbs, idToTaskName, constraintDiagnostics, cascadeDiagnostics, contextKey) Then
+            CalcBridge_AddConstraintRootMessages consoleMessages, errConstraintRootMessages
+        End If
     End If
 
     If errMissingDuration.Count > 0 Then
@@ -3654,6 +3675,313 @@ Public Function CalcBridge_RecordPlanningMessages( _
 
 End Function
 
+Private Function CalcBridge_TryAddConstraintDiagnosticStops( _
+    ByVal messages As Collection, _
+    ByVal constraintMessagesById As Object, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object, _
+    ByVal constraintDiagnostics As Object, _
+    ByVal cascadeDiagnostics As Object, _
+    ByVal contextKey As String) As Boolean
+
+    Dim key As Variant
+    Dim diag As Object
+    Dim detailMsg As String
+    Dim addedAny As Boolean
+
+    If messages Is Nothing Then Exit Function
+    If constraintMessagesById Is Nothing Then Exit Function
+    If constraintMessagesById.Count = 0 Then Exit Function
+
+    For Each key In constraintMessagesById.Keys
+        detailMsg = ""
+
+        If Not constraintDiagnostics Is Nothing Then
+            If constraintDiagnostics.Exists(CStr(key)) Then
+                If IsObject(constraintDiagnostics(CStr(key))) Then
+                    Set diag = constraintDiagnostics(CStr(key))
+                    detailMsg = CalcBridge_BuildConstraintDiagnosticMessage( _
+                        diag, idToWbs, idToTaskName, cascadeDiagnostics, contextKey)
+                End If
+            End If
+        End If
+
+        If Trim$(detailMsg) = "" Then
+            detailMsg = CalcBridge_ToPMConstraintMessage(CStr(constraintMessagesById(CStr(key))))
+        End If
+
+        If Trim$(detailMsg) <> "" Then
+            CalcBridge_AddConsoleMessage messages, "STOP", detailMsg
+            addedAny = True
+        End If
+    Next key
+
+    CalcBridge_TryAddConstraintDiagnosticStops = addedAny
+
+End Function
+
+
+Private Function CalcBridge_BuildConstraintDiagnosticMessage( _
+    ByVal diag As Object, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object, _
+    ByVal cascadeDiagnostics As Object, _
+    ByVal contextKey As String) As String
+
+    Dim taskId As String
+    Dim taskLabel As String
+    Dim constraintType As String
+    Dim checkedField As String
+    Dim relationText As String
+    Dim cascadeText As String
+
+    If diag Is Nothing Then Exit Function
+    If Not diag.Exists("TaskID") Then Exit Function
+
+    taskId = CStr(diag("TaskID"))
+    taskLabel = CalcBridge_DiagnosticTaskLabel(taskId, idToWbs, idToTaskName)
+    constraintType = CalcBridge_DiagString(diag, "ConstraintType")
+    checkedField = CalcBridge_DiagString(diag, "CheckedField")
+    relationText = CalcBridge_DiagString(diag, "ExpectedOperator")
+    cascadeText = CalcBridge_BuildCascadeRootCauseText(taskId, cascadeDiagnostics, idToWbs, idToTaskName)
+
+    If constraintType = "" Then constraintType = CalcBridge_DiagString(diag, "ConstraintSide") & " constraint"
+    If checkedField = "" Then checkedField = "Calculated date"
+    If relationText = "" Then relationText = "="
+
+    CalcBridge_BuildConstraintDiagnosticMessage = _
+        "FR:" & vbCrLf & _
+        "Contrainte impossible a respecter." & vbCrLf & vbCrLf & _
+        "Tache : " & taskLabel & vbCrLf & _
+        "Contrainte : " & constraintType & vbCrLf & _
+        "Date contrainte : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")) & vbCrLf & _
+        checkedField & " : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")) & vbCrLf & _
+        "Valeur attendue : " & relationText & " " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")) & vbCrLf & _
+        "Calculated Start : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")) & vbCrLf & _
+        "Calculated Finish : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish")) & _
+        cascadeText & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
+        "Constraint cannot be met." & vbCrLf & vbCrLf & _
+        "Task: " & taskLabel & vbCrLf & _
+        "Constraint: " & constraintType & vbCrLf & _
+        "Constraint date: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")) & vbCrLf & _
+        checkedField & ": " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")) & vbCrLf & _
+        "Expected value: " & relationText & " " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")) & vbCrLf & _
+        "Calculated Start: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")) & vbCrLf & _
+        "Calculated Finish: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish"))
+
+End Function
+
+
+Private Function CalcBridge_BuildCascadeRootCauseText( _
+    ByVal taskId As String, _
+    ByVal cascadeDiagnostics As Object, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object) As String
+
+    Dim cascadeDiag As Object
+    Dim parentId As String
+    Dim rootId As String
+
+    If cascadeDiagnostics Is Nothing Then Exit Function
+    If Not cascadeDiagnostics.Exists(CStr(taskId)) Then Exit Function
+    If Not IsObject(cascadeDiagnostics(CStr(taskId))) Then Exit Function
+
+    Set cascadeDiag = cascadeDiagnostics(CStr(taskId))
+    parentId = CalcBridge_DiagString(cascadeDiag, "ParentPropagatedFrom")
+    rootId = CalcBridge_DiagString(cascadeDiag, "RootErrorID")
+
+    If parentId = "" And rootId = "" Then Exit Function
+
+    CalcBridge_BuildCascadeRootCauseText = _
+        vbCrLf & vbCrLf & _
+        "Propagation :" & vbCrLf & _
+        "Bloque par : " & CalcBridge_DiagnosticTaskLabel(parentId, idToWbs, idToTaskName) & vbCrLf & _
+        "Cause racine : " & CalcBridge_DiagnosticTaskLabel(rootId, idToWbs, idToTaskName)
+
+End Function
+
+
+Private Function CalcBridge_DiagString(ByVal diag As Object, ByVal key As String) As String
+
+    If diag Is Nothing Then Exit Function
+    If diag.Exists(key) Then CalcBridge_DiagString = Trim$(CStr(diag(key)))
+
+End Function
+
+
+Private Function CalcBridge_DiagValue(ByVal diag As Object, ByVal key As String) As Variant
+
+    If diag Is Nothing Then Exit Function
+    If diag.Exists(key) Then CalcBridge_DiagValue = diag(key)
+
+End Function
+
+
+Private Function CalcBridge_DiagnosticAnyValueText(ByVal value As Variant) As String
+
+    If Not HasValue(value) Then
+        CalcBridge_DiagnosticAnyValueText = "-"
+    ElseIf IsDate(value) Then
+        CalcBridge_DiagnosticAnyValueText = Format$(CDate(value), "dd/mm/yyyy")
+    Else
+        CalcBridge_DiagnosticAnyValueText = CStr(value)
+    End If
+
+End Function
+
+Private Function CalcBridge_TryAddForecastStartDependencyDiagnosticStops( _
+    ByVal messages As Collection, _
+    ByVal idsDict As Object, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object, _
+    ByVal dependencyDiagnostics As Object, _
+    ByVal contextKey As String) As Boolean
+
+    Dim key As Variant
+    Dim diag As Object
+    Dim detailMsg As String
+    Dim addedAny As Boolean
+
+    If messages Is Nothing Then Exit Function
+    If idsDict Is Nothing Then Exit Function
+    If idsDict.Count = 0 Then Exit Function
+    If dependencyDiagnostics Is Nothing Then Exit Function
+
+    For Each key In idsDict.Keys
+        If dependencyDiagnostics.Exists(CStr(key)) Then
+            If IsObject(dependencyDiagnostics(CStr(key))) Then
+                Set diag = dependencyDiagnostics(CStr(key))
+                detailMsg = CalcBridge_BuildForecastStartDependencyDiagnosticMessage( _
+                    diag, idToWbs, idToTaskName, contextKey)
+
+                If Trim$(detailMsg) <> "" Then
+                    CalcBridge_AddConsoleMessage messages, "STOP", detailMsg
+                    addedAny = True
+                End If
+            End If
+        End If
+    Next key
+
+    CalcBridge_TryAddForecastStartDependencyDiagnosticStops = addedAny
+
+End Function
+
+Private Function CalcBridge_BuildForecastStartDependencyDiagnosticMessage( _
+    ByVal diag As Object, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object, _
+    ByVal contextKey As String) As String
+
+    Dim taskId As String
+    Dim predId As String
+    Dim taskLabel As String
+    Dim predLabel As String
+    Dim linkText As String
+    Dim predDateKindFr As String
+    Dim predDateKindEn As String
+    Dim requestedLabelFr As String
+    Dim requestedLabelEn As String
+
+    If diag Is Nothing Then Exit Function
+    If Not diag.Exists("TaskID") Then Exit Function
+    If Not diag.Exists("BlockingPredecessorID") Then Exit Function
+
+    taskId = CStr(diag("TaskID"))
+    predId = CStr(diag("BlockingPredecessorID"))
+    taskLabel = CalcBridge_DiagnosticTaskLabel(taskId, idToWbs, idToTaskName)
+    predLabel = CalcBridge_DiagnosticTaskLabel(predId, idToWbs, idToTaskName)
+    linkText = CStr(diag("BlockingLinkType")) & " " & CalcBridge_FormatDiagnosticLag(CDbl(diag("BlockingLag")))
+
+    If UCase$(Trim$(CStr(diag("BlockingPredecessorDateKind")))) = "START" Then
+        predDateKindFr = "Debut predecesseur"
+        predDateKindEn = "Predecessor start"
+    Else
+        predDateKindFr = "Fin predecesseur"
+        predDateKindEn = "Predecessor finish"
+    End If
+
+    If UCase$(Trim$(contextKey)) = "SCENARIO" Then
+        requestedLabelFr = "Scenario Start demande"
+        requestedLabelEn = "Requested Scenario Start"
+    Else
+        requestedLabelFr = "Test Start demande"
+        requestedLabelEn = "Requested Test Start"
+    End If
+
+    CalcBridge_BuildForecastStartDependencyDiagnosticMessage = _
+        "FR:" & vbCrLf & _
+        "Test Start impossible." & vbCrLf & vbCrLf & _
+        "Tache : " & taskLabel & vbCrLf & _
+        "Dependance bloquante : " & predLabel & " (" & linkText & ")" & vbCrLf & _
+        predDateKindFr & " : " & CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")) & vbCrLf & _
+        "Debut minimum autorise : " & CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & vbCrLf & _
+        requestedLabelFr & " : " & CalcBridge_DiagnosticDateText(diag("RequestedStart")) & vbCrLf & _
+        "-> avancer le predecesseur, modifier le lien/lag, ou choisir un Start >= " & _
+            CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & "." & vbCrLf & vbCrLf & _
+        "EN:" & vbCrLf & _
+        "Test Start impossible." & vbCrLf & vbCrLf & _
+        "Task: " & taskLabel & vbCrLf & _
+        "Blocking dependency: " & predLabel & " (" & linkText & ")" & vbCrLf & _
+        predDateKindEn & ": " & CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")) & vbCrLf & _
+        "Earliest allowed start: " & CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & vbCrLf & _
+        requestedLabelEn & ": " & CalcBridge_DiagnosticDateText(diag("RequestedStart")) & vbCrLf & _
+        "-> move the predecessor earlier, update the link/lag, or choose a Start >= " & _
+            CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & "."
+
+End Function
+
+Private Function CalcBridge_DiagnosticTaskLabel( _
+    ByVal taskId As String, _
+    ByVal idToWbs As Object, _
+    ByVal idToTaskName As Object) As String
+
+    Dim wbsVal As String
+    Dim nameVal As String
+
+    If Not idToWbs Is Nothing Then
+        If idToWbs.Exists(taskId) Then wbsVal = Trim$(CStr(idToWbs(taskId)))
+    End If
+
+    If Not idToTaskName Is Nothing Then
+        If idToTaskName.Exists(taskId) Then nameVal = Trim$(CStr(idToTaskName(taskId)))
+    End If
+
+    If wbsVal <> "" And nameVal <> "" Then
+        CalcBridge_DiagnosticTaskLabel = wbsVal & " " & nameVal
+    ElseIf wbsVal <> "" Then
+        CalcBridge_DiagnosticTaskLabel = wbsVal
+    ElseIf nameVal <> "" Then
+        CalcBridge_DiagnosticTaskLabel = nameVal
+    Else
+        CalcBridge_DiagnosticTaskLabel = "ID " & taskId
+    End If
+
+End Function
+
+Private Function CalcBridge_DiagnosticDateText(ByVal dateValue As Variant) As String
+
+    If HasValue(dateValue) Then
+        CalcBridge_DiagnosticDateText = Format$(CDate(dateValue), "dd/mm/yyyy")
+    Else
+        CalcBridge_DiagnosticDateText = "-"
+    End If
+
+End Function
+
+Private Function CalcBridge_FormatDiagnosticLag(ByVal lagValue As Double) As String
+
+    Dim lagText As String
+
+    lagText = Replace$(Format$(Abs(lagValue), "0.##"), ",", ".")
+
+    If lagValue >= 0# Then
+        CalcBridge_FormatDiagnosticLag = "+" & lagText
+    Else
+        CalcBridge_FormatDiagnosticLag = "-" & lagText
+    End If
+
+End Function
 Private Sub CalcBridge_AddGroupedStopToCollection( _
     ByVal messages As Collection, _
     ByVal idsDict As Object, _
@@ -3749,7 +4077,6 @@ Public Sub CalcBridge_AddOrShowConsoleMessage( _
         BiMsg(frText, enText)
 
 End Sub
-
 
 
 

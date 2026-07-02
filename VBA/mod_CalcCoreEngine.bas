@@ -34,7 +34,10 @@ Public Sub Run_Calc_Core( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
     ByVal linksBySuccId As Object, _
-    Optional ByVal recalcScope As Object)
+    Optional ByVal recalcScope As Object, _
+    Optional ByVal dependencyDiagnostics As Object, _
+    Optional ByVal constraintDiagnostics As Object, _
+    Optional ByVal cascadeDiagnostics As Object)
 
     Dim perfScope As clsPerfScope
 
@@ -136,7 +139,7 @@ Public Sub Run_Calc_Core( _
         If shouldCompute Then
             Core_ComputeOneLeafTask _
                 dataArr, mapCol, CStr(currentId), rowById, linksBySuccId, _
-                calcStartById, calcFinishById, blockingErrors
+                calcStartById, calcFinishById, blockingErrors, dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
         End If
 
     Next currentId
@@ -145,7 +148,7 @@ Public Sub Run_Calc_Core( _
                              calcStartById, calcFinishById, blockingErrors
 
     If blockingErrors.Count > 0 Then
-        Core_PropagateBlockingErrors dataArr, mapCol, blockingErrors, childrenByPred, rowById
+        Core_PropagateBlockingErrors dataArr, mapCol, blockingErrors, childrenByPred, rowById, constraintDiagnostics, dependencyDiagnostics, cascadeDiagnostics
     End If
 
     For Each currentId In calcStartById.Keys
@@ -208,7 +211,10 @@ Private Sub Core_ComputeOneLeafTask( _
     ByVal linksBySuccId As Object, _
     ByVal calcStartById As Object, _
     ByVal calcFinishById As Object, _
-    ByVal blockingErrors As Object)
+    ByVal blockingErrors As Object, _
+    Optional ByVal dependencyDiagnostics As Object, _
+    Optional ByVal constraintDiagnostics As Object, _
+    Optional ByVal cascadeDiagnostics As Object)
 
     Dim perfScope As clsPerfScope
 
@@ -241,6 +247,11 @@ Private Sub Core_ComputeOneLeafTask( _
     Dim normalAllowedStart As Variant
     Dim summaryAllowedStart As Variant
     Dim summaryStartBySource As Object
+    Dim summaryStartDiagBySource As Object
+    Dim normalAllowedStartDiag As Object
+    Dim summaryAllowedStartDiag As Object
+    Dim predAllowedStartDiag As Object
+    Dim candidateDiag As Object
 
     Dim sourceStart As Variant
     Dim sourceFinish As Variant
@@ -308,6 +319,7 @@ Private Sub Core_ComputeOneLeafTask( _
     normalAllowedStart = Empty
     summaryAllowedStart = Empty
     Set summaryStartBySource = CreateObject("Scripting.Dictionary")
+    Set summaryStartDiagBySource = CreateObject("Scripting.Dictionary")
 
     If Not linksBySuccId Is Nothing Then
         If linksBySuccId.Exists(taskId) Then
@@ -342,14 +354,23 @@ Private Sub Core_ComputeOneLeafTask( _
                         If calcStartById.Exists(predId) Then
                             candidateStart = ApplyLag(calcStartById(predId), lagVal, calType, "SS")
 
+                            Set candidateDiag = Core_CreateStartDependencyDiagnostic( _
+                                taskId, predId, linkType, lagVal, candidateStart, calcStartById(predId), "START", summarySourceId)
+
                             If summarySourceId <> "" Then
                                 If summaryStartBySource.Exists(summarySourceId) Then
-                                    summaryStartBySource(summarySourceId) = _
-                                        Core_MinDateIfBoth(summaryStartBySource(summarySourceId), candidateStart)
+                                    If CDbl(candidateStart) < CDbl(summaryStartBySource(summarySourceId)) Then
+                                        summaryStartBySource(summarySourceId) = candidateStart
+                                        Set summaryStartDiagBySource(summarySourceId) = candidateDiag
+                                    End If
                                 Else
                                     summaryStartBySource(summarySourceId) = candidateStart
+                                    Set summaryStartDiagBySource(summarySourceId) = candidateDiag
                                 End If
                             Else
+                                If Not HasValue(normalAllowedStart) Or CDbl(candidateStart) > CDbl(normalAllowedStart) Then
+                                    Set normalAllowedStartDiag = candidateDiag
+                                End If
                                 normalAllowedStart = Core_MaxDateIfBoth(normalAllowedStart, candidateStart)
                             End If
                         End If
@@ -363,6 +384,11 @@ Private Sub Core_ComputeOneLeafTask( _
                     Case "FS", ""
                         If calcFinishById.Exists(predId) Then
                             candidateStart = ApplyLag(calcFinishById(predId), lagVal, calType, "FS")
+                            Set candidateDiag = Core_CreateStartDependencyDiagnostic( _
+                                taskId, predId, IIf(linkType = "", "FS", linkType), lagVal, candidateStart, calcFinishById(predId), "FINISH", summarySourceId)
+                            If Not HasValue(normalAllowedStart) Or CDbl(candidateStart) > CDbl(normalAllowedStart) Then
+                                Set normalAllowedStartDiag = candidateDiag
+                            End If
                             normalAllowedStart = Core_MaxDateIfBoth(normalAllowedStart, candidateStart)
                         End If
 
@@ -378,10 +404,22 @@ Private Sub Core_ComputeOneLeafTask( _
     End If
 
     For Each parentKey In summaryStartBySource.Keys
+        If Not HasValue(summaryAllowedStart) Or CDbl(summaryStartBySource(CStr(parentKey))) > CDbl(summaryAllowedStart) Then
+            If summaryStartDiagBySource.Exists(CStr(parentKey)) Then
+                Set summaryAllowedStartDiag = summaryStartDiagBySource(CStr(parentKey))
+            End If
+        End If
         summaryAllowedStart = Core_MaxDateIfBoth(summaryAllowedStart, summaryStartBySource(CStr(parentKey)))
     Next parentKey
 
     predAllowedStart = Core_MaxDateIfBoth(normalAllowedStart, summaryAllowedStart)
+    If HasValue(predAllowedStart) Then
+        If HasValue(summaryAllowedStart) And CDbl(predAllowedStart) = CDbl(summaryAllowedStart) Then
+            Set predAllowedStartDiag = summaryAllowedStartDiag
+        Else
+            Set predAllowedStartDiag = normalAllowedStartDiag
+        End If
+    End If
 
     If constraintActive = "YES" Then
         If startConstraintType = "Start No Earlier Than" Then
@@ -392,7 +430,7 @@ Private Sub Core_ComputeOneLeafTask( _
             constraintMustStart = startConstraintDate
         ElseIf startConstraintType <> "" Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Type de contrainte debut non reconnu", _
                     "Unknown start constraint type")
             Exit Sub
@@ -406,7 +444,7 @@ Private Sub Core_ComputeOneLeafTask( _
             constraintMustFinish = finishConstraintDate
         ElseIf finishConstraintType <> "" Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Type de contrainte fin non reconnu", _
                     "Unknown finish constraint type")
             Exit Sub
@@ -428,7 +466,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualStart) And HasValue(constraintAllowedStart) Then
         If CDbl(actualStart) < CDbl(constraintAllowedStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Start avant contrainte debut", _
                     "Actual Start is before start constraint")
             Exit Sub
@@ -438,7 +476,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualStart) And HasValue(constraintLatestStart) Then
         If CDbl(actualStart) > CDbl(constraintLatestStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Start apres contrainte debut max", _
                     "Actual Start is after latest start constraint")
             Exit Sub
@@ -448,7 +486,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualStart) And HasValue(constraintMustStart) Then
         If CDbl(actualStart) <> CDbl(constraintMustStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Start different de contrainte Must Start On", _
                     "Actual Start differs from Must Start On constraint")
             Exit Sub
@@ -466,7 +504,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualFinish) And HasValue(constraintAllowedFinish) Then
         If CDbl(actualFinish) < CDbl(constraintAllowedFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Finish avant contrainte fin", _
                     "Actual Finish is before finish constraint")
             Exit Sub
@@ -476,7 +514,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualFinish) And HasValue(constraintLatestFinish) Then
         If CDbl(actualFinish) > CDbl(constraintLatestFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Finish apres contrainte fin max", _
                     "Actual Finish is after latest finish constraint")
             Exit Sub
@@ -486,7 +524,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(actualFinish) And HasValue(constraintMustFinish) Then
         If CDbl(actualFinish) <> CDbl(constraintMustFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Actual Finish different de contrainte Must Finish On", _
                     "Actual Finish differs from Must Finish On constraint")
             Exit Sub
@@ -495,6 +533,7 @@ Private Sub Core_ComputeOneLeafTask( _
 
     If HasValue(forecastStart) And HasValue(predAllowedStart) Then
         If CDbl(forecastStart) < CDbl(predAllowedStart) Then
+            Core_RecordForecastStartDependencyDiagnostic dependencyDiagnostics, taskId, forecastStart, predAllowedStart, predAllowedStartDiag
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
                 "Forecast Start violates dependencies"
             Exit Sub
@@ -504,7 +543,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastStart) And HasValue(constraintAllowedStart) Then
         If CDbl(forecastStart) < CDbl(constraintAllowedStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Start avant contrainte debut", _
                     "Forecast Start is before start constraint")
             Exit Sub
@@ -514,7 +553,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastStart) And HasValue(constraintLatestStart) Then
         If CDbl(forecastStart) > CDbl(constraintLatestStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Start apres contrainte debut max", _
                     "Forecast Start is after latest start constraint")
             Exit Sub
@@ -524,7 +563,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastStart) And HasValue(constraintMustStart) Then
         If CDbl(forecastStart) <> CDbl(constraintMustStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Start different de contrainte Must Start On", _
                     "Forecast Start differs from Must Start On constraint")
             Exit Sub
@@ -534,7 +573,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastFinish) And HasValue(predAllowedFinish) Then
         If CDbl(forecastFinish) < CDbl(predAllowedFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Finish avant contrainte fin amont", _
                     "Forecast Finish is before upstream finish constraint")
             Exit Sub
@@ -544,7 +583,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastFinish) And HasValue(constraintAllowedFinish) Then
         If CDbl(forecastFinish) < CDbl(constraintAllowedFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Finish avant contrainte fin", _
                     "Forecast Finish is before finish constraint")
             Exit Sub
@@ -554,7 +593,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastFinish) And HasValue(constraintLatestFinish) Then
         If CDbl(forecastFinish) > CDbl(constraintLatestFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Finish apres contrainte fin max", _
                     "Forecast Finish is after latest finish constraint")
             Exit Sub
@@ -564,7 +603,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(forecastFinish) And HasValue(constraintMustFinish) Then
         If CDbl(forecastFinish) <> CDbl(constraintMustFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Forecast Finish different de contrainte Must Finish On", _
                     "Forecast Finish differs from Must Finish On constraint")
             Exit Sub
@@ -583,7 +622,7 @@ Private Sub Core_ComputeOneLeafTask( _
         If HasValue(allowedFinish) Then
             If CDbl(allowedFinish) > CDbl(constraintMustFinish) Then
                 Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                    Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                    Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                         "Calculated Finish different de contrainte Must Finish On", _
                         "Calculated Finish differs from Must Finish On constraint")
                 Exit Sub
@@ -593,7 +632,7 @@ Private Sub Core_ComputeOneLeafTask( _
         If HasValue(allowedStart) Then
             If CDbl(allowedStart) > CDbl(mustFinishStart) Then
                 Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                    Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                    Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                         "Calculated Start avant reseau impose par contrainte Must Finish On", _
                         "Calculated Start is before network allowed start due to Must Finish On constraint")
                 Exit Sub
@@ -603,7 +642,7 @@ Private Sub Core_ComputeOneLeafTask( _
         If HasValue(constraintMustStart) Then
             If CDbl(constraintMustStart) <> CDbl(mustFinishStart) Then
                 Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                    Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                    Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                         "Duree incompatible avec contraintes Must Start On / Must Finish On", _
                         "Duration is incompatible with Must Start On / Must Finish On constraints")
                 Exit Sub
@@ -613,7 +652,7 @@ Private Sub Core_ComputeOneLeafTask( _
         If HasValue(actualStart) Then
             If CDbl(actualStart) <> CDbl(mustFinishStart) Then
                 Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                    Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                    Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                         "Actual Start different du debut impose par Must Finish On", _
                         "Actual Start differs from start implied by Must Finish On constraint")
                 Exit Sub
@@ -623,7 +662,7 @@ Private Sub Core_ComputeOneLeafTask( _
         If HasValue(forecastStart) Then
             If CDbl(forecastStart) <> CDbl(mustFinishStart) Then
                 Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                    Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                    Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                         "Forecast Start different du debut impose par Must Finish On", _
                         "Forecast Start differs from start implied by Must Finish On constraint")
                 Exit Sub
@@ -634,7 +673,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(constraintMustStart) And HasValue(allowedStart) Then
         If CDbl(allowedStart) > CDbl(constraintMustStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Calculated Start different de contrainte Must Start On", _
                     "Calculated Start differs from Must Start On constraint")
             Exit Sub
@@ -670,7 +709,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(constraintLatestStart) Then
         If CDbl(calcStart) > CDbl(constraintLatestStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Calculated Start apres contrainte debut max", _
                     "Calculated Start is after latest start constraint")
             Exit Sub
@@ -680,7 +719,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(constraintMustStart) Then
         If CDbl(calcStart) <> CDbl(constraintMustStart) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Calculated Start different de contrainte Must Start On", _
                     "Calculated Start differs from Must Start On constraint")
             Exit Sub
@@ -722,7 +761,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(constraintLatestFinish) Then
         If CDbl(calcFinish) > CDbl(constraintLatestFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Calculated Finish apres contrainte fin max", _
                     "Calculated Finish is after latest finish constraint")
             Exit Sub
@@ -732,7 +771,7 @@ Private Sub Core_ComputeOneLeafTask( _
     If HasValue(constraintMustFinish) Then
         If CDbl(calcFinish) <> CDbl(constraintMustFinish) Then
             Core_AddBlockingError dataArr, rowIdx, mapCol, blockingErrors, taskId, _
-                Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, _
+                Core_BuildConstraintDiagnosticMessage(dataArr, rowIdx, mapCol, constraintDiagnostics, taskId, startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, mustFinishStart, _
                     "Calculated Finish different de contrainte Must Finish On", _
                     "Calculated Finish differs from Must Finish On constraint")
             Exit Sub
@@ -749,6 +788,207 @@ Private Sub Core_ComputeOneLeafTask( _
     calcFinishById(taskId) = calcFinish
 
 End Sub
+
+Private Function Core_BuildConstraintDiagnosticMessage( _
+    ByRef dataArr As Variant, _
+    ByVal rowIdx As Long, _
+    ByVal mapCol As Object, _
+    ByVal constraintDiagnostics As Object, _
+    ByVal taskId As String, _
+    ByVal startConstraintType As String, _
+    ByVal startConstraintDate As Variant, _
+    ByVal finishConstraintType As String, _
+    ByVal finishConstraintDate As Variant, _
+    ByVal actualStart As Variant, _
+    ByVal actualFinish As Variant, _
+    ByVal forecastStart As Variant, _
+    ByVal forecastFinish As Variant, _
+    ByVal calcStart As Variant, _
+    ByVal calcFinish As Variant, _
+    ByVal predAllowedStart As Variant, _
+    ByVal predAllowedFinish As Variant, _
+    ByVal allowedStart As Variant, _
+    ByVal allowedFinish As Variant, _
+    ByVal effectiveDuration As Variant, _
+    ByVal mustFinishStart As Variant, _
+    ByVal frText As String, _
+    ByVal enText As String) As String
+
+    Core_RecordConstraintDiagnostic constraintDiagnostics, dataArr, rowIdx, mapCol, taskId, _
+        startConstraintType, startConstraintDate, finishConstraintType, finishConstraintDate, _
+        actualStart, actualFinish, forecastStart, forecastFinish, calcStart, calcFinish, _
+        predAllowedStart, predAllowedFinish, allowedStart, allowedFinish, effectiveDuration, _
+        mustFinishStart, frText, enText
+
+    Core_BuildConstraintDiagnosticMessage = Core_BuildConstraintCoreMessage(dataArr, rowIdx, mapCol, frText, enText)
+
+End Function
+
+
+Private Sub Core_RecordConstraintDiagnostic( _
+    ByVal constraintDiagnostics As Object, _
+    ByRef dataArr As Variant, _
+    ByVal rowIdx As Long, _
+    ByVal mapCol As Object, _
+    ByVal taskId As String, _
+    ByVal startConstraintType As String, _
+    ByVal startConstraintDate As Variant, _
+    ByVal finishConstraintType As String, _
+    ByVal finishConstraintDate As Variant, _
+    ByVal actualStart As Variant, _
+    ByVal actualFinish As Variant, _
+    ByVal forecastStart As Variant, _
+    ByVal forecastFinish As Variant, _
+    ByVal calcStart As Variant, _
+    ByVal calcFinish As Variant, _
+    ByVal predAllowedStart As Variant, _
+    ByVal predAllowedFinish As Variant, _
+    ByVal allowedStart As Variant, _
+    ByVal allowedFinish As Variant, _
+    ByVal effectiveDuration As Variant, _
+    ByVal mustFinishStart As Variant, _
+    ByVal frText As String, _
+    ByVal enText As String)
+
+    Dim diag As Object
+    Dim txt As String
+    Dim sideVal As String
+    Dim typeVal As String
+    Dim dateVal As Variant
+    Dim checkedField As String
+    Dim checkedValue As Variant
+    Dim relationVal As String
+    Dim allowedValue As Variant
+
+    If constraintDiagnostics Is Nothing Then Exit Sub
+
+    txt = UCase$(frText & " " & enText)
+
+    If InStr(1, txt, "FINISH", vbTextCompare) > 0 Or _
+       InStr(1, txt, "FIN", vbTextCompare) > 0 Then
+        sideVal = "FINISH"
+        typeVal = Trim$(finishConstraintType)
+        dateVal = finishConstraintDate
+    Else
+        sideVal = "START"
+        typeVal = Trim$(startConstraintType)
+        dateVal = startConstraintDate
+    End If
+
+    If InStr(1, txt, "MUST FINISH ON", vbTextCompare) > 0 Then
+        sideVal = "FINISH"
+        typeVal = "Must Finish On"
+        dateVal = finishConstraintDate
+    ElseIf InStr(1, txt, "MUST START ON", vbTextCompare) > 0 Then
+        sideVal = "START"
+        typeVal = "Must Start On"
+        dateVal = startConstraintDate
+    ElseIf InStr(1, txt, "UPSTREAM FINISH", vbTextCompare) > 0 Or _
+           InStr(1, txt, "FIN AMONT", vbTextCompare) > 0 Then
+        sideVal = "FINISH"
+        typeVal = "Upstream finish constraint"
+        dateVal = predAllowedFinish
+    End If
+
+    If InStr(1, txt, "ACTUAL START", vbTextCompare) > 0 Then
+        checkedField = "Actual Start"
+        checkedValue = actualStart
+    ElseIf InStr(1, txt, "ACTUAL FINISH", vbTextCompare) > 0 Then
+        checkedField = "Actual Finish"
+        checkedValue = actualFinish
+    ElseIf InStr(1, txt, "FORECAST START", vbTextCompare) > 0 Then
+        checkedField = "Forecast Start"
+        checkedValue = forecastStart
+    ElseIf InStr(1, txt, "FORECAST FINISH", vbTextCompare) > 0 Then
+        checkedField = "Forecast Finish"
+        checkedValue = forecastFinish
+    ElseIf InStr(1, txt, "CALCULATED START", vbTextCompare) > 0 Then
+        checkedField = "Calculated Start"
+        checkedValue = calcStart
+    ElseIf InStr(1, txt, "CALCULATED FINISH", vbTextCompare) > 0 Then
+        checkedField = "Calculated Finish"
+        checkedValue = calcFinish
+    ElseIf InStr(1, txt, "DUREE", vbTextCompare) > 0 Or _
+           InStr(1, txt, "DURATION", vbTextCompare) > 0 Then
+        checkedField = "Effective Duration"
+        checkedValue = effectiveDuration
+    Else
+        checkedField = sideVal
+        If sideVal = "FINISH" Then checkedValue = calcFinish Else checkedValue = calcStart
+    End If
+
+    If InStr(1, txt, "BEFORE", vbTextCompare) > 0 Or _
+       InStr(1, txt, "AVANT", vbTextCompare) > 0 Then
+        relationVal = ">="
+    ElseIf InStr(1, txt, "AFTER", vbTextCompare) > 0 Or _
+           InStr(1, txt, "APRES", vbTextCompare) > 0 Then
+        relationVal = "<="
+    Else
+        relationVal = "="
+    End If
+
+    If typeVal = "Upstream finish constraint" Then
+        allowedValue = predAllowedFinish
+    ElseIf sideVal = "FINISH" Then
+        If InStr(1, txt, "NO EARLIER", vbTextCompare) > 0 Or InStr(1, txt, "BEFORE", vbTextCompare) > 0 Or InStr(1, txt, "AVANT", vbTextCompare) > 0 Then
+            allowedValue = Core_FirstValue(allowedFinish, finishConstraintDate)
+        ElseIf InStr(1, txt, "NO LATER", vbTextCompare) > 0 Or InStr(1, txt, "LATEST", vbTextCompare) > 0 Or InStr(1, txt, "MAX", vbTextCompare) > 0 Or InStr(1, txt, "AFTER", vbTextCompare) > 0 Or InStr(1, txt, "APRES", vbTextCompare) > 0 Then
+            allowedValue = finishConstraintDate
+        Else
+            allowedValue = finishConstraintDate
+        End If
+    Else
+        If InStr(1, txt, "NO EARLIER", vbTextCompare) > 0 Or InStr(1, txt, "BEFORE", vbTextCompare) > 0 Or InStr(1, txt, "AVANT", vbTextCompare) > 0 Then
+            allowedValue = Core_FirstValue(allowedStart, startConstraintDate)
+        ElseIf InStr(1, txt, "NO LATER", vbTextCompare) > 0 Or InStr(1, txt, "LATEST", vbTextCompare) > 0 Or InStr(1, txt, "MAX", vbTextCompare) > 0 Or InStr(1, txt, "AFTER", vbTextCompare) > 0 Or InStr(1, txt, "APRES", vbTextCompare) > 0 Then
+            allowedValue = startConstraintDate
+        ElseIf InStr(1, txt, "MUST FINISH", vbTextCompare) > 0 Then
+            allowedValue = mustFinishStart
+        Else
+            allowedValue = startConstraintDate
+        End If
+    End If
+
+    Set diag = CreateObject("Scripting.Dictionary")
+    diag("TaskID") = CStr(taskId)
+    diag("WBS") = Trim$(CStr(Core_GetVal(dataArr, rowIdx, mapCol, "WBS")))
+    diag("TaskName") = Trim$(CStr(Core_GetVal(dataArr, rowIdx, mapCol, "Task Name")))
+    diag("ConstraintSide") = sideVal
+    diag("ConstraintType") = typeVal
+    diag("ConstraintDate") = dateVal
+    diag("CheckedField") = checkedField
+    diag("CheckedValue") = checkedValue
+    diag("ExpectedOperator") = relationVal
+    diag("AllowedValue") = allowedValue
+    diag("ActualStart") = actualStart
+    diag("ActualFinish") = actualFinish
+    diag("ForecastStart") = forecastStart
+    diag("ForecastFinish") = forecastFinish
+    diag("CalculatedStart") = calcStart
+    diag("CalculatedFinish") = calcFinish
+    diag("PredAllowedStart") = predAllowedStart
+    diag("PredAllowedFinish") = predAllowedFinish
+    diag("AllowedStart") = allowedStart
+    diag("AllowedFinish") = allowedFinish
+    diag("EffectiveDuration") = effectiveDuration
+    diag("MustFinishImpliedStart") = mustFinishStart
+    diag("RawFR") = frText
+    diag("RawEN") = enText
+
+    Set constraintDiagnostics.Item(CStr(taskId)) = diag
+
+End Sub
+
+
+Private Function Core_FirstValue(ByVal primaryValue As Variant, ByVal fallbackValue As Variant) As Variant
+
+    If HasValue(primaryValue) Then
+        Core_FirstValue = primaryValue
+    Else
+        Core_FirstValue = fallbackValue
+    End If
+
+End Function
 
 Private Function Core_BuildConstraintCoreMessage( _
     ByRef dataArr As Variant, _
@@ -1008,6 +1248,64 @@ Private Function Core_FormatTopoCycleEdges( _
 
 End Function
 
+Private Function Core_CreateStartDependencyDiagnostic( _
+    ByVal taskId As String, _
+    ByVal predId As String, _
+    ByVal linkType As String, _
+    ByVal lagVal As Double, _
+    ByVal candidateStart As Variant, _
+    ByVal predecessorDate As Variant, _
+    ByVal predecessorDateKind As String, _
+    Optional ByVal summarySourceId As String = "") As Object
+
+    Dim diag As Object
+
+    Set diag = CreateObject("Scripting.Dictionary")
+
+    diag("TaskID") = CStr(taskId)
+    diag("BlockingPredecessorID") = CStr(predId)
+    diag("BlockingLinkType") = UCase$(Trim$(linkType))
+    diag("BlockingLag") = CDbl(lagVal)
+    diag("BlockingCandidateDate") = candidateStart
+    diag("BlockingPredecessorDate") = predecessorDate
+    diag("BlockingPredecessorDateKind") = UCase$(Trim$(predecessorDateKind))
+    diag("ExpandedFrom") = CStr(summarySourceId)
+
+    Set Core_CreateStartDependencyDiagnostic = diag
+
+End Function
+
+
+Private Sub Core_RecordForecastStartDependencyDiagnostic( _
+    ByVal dependencyDiagnostics As Object, _
+    ByVal taskId As String, _
+    ByVal requestedStart As Variant, _
+    ByVal minimumAllowedStart As Variant, _
+    ByVal sourceDiagnostic As Object)
+
+    Dim diag As Object
+
+    If dependencyDiagnostics Is Nothing Then Exit Sub
+    If sourceDiagnostic Is Nothing Then Exit Sub
+
+    Set diag = CreateObject("Scripting.Dictionary")
+
+    diag("TaskID") = CStr(taskId)
+    diag("RequestedStart") = requestedStart
+    diag("MinimumAllowedStart") = minimumAllowedStart
+
+    If sourceDiagnostic.Exists("BlockingPredecessorID") Then diag("BlockingPredecessorID") = sourceDiagnostic("BlockingPredecessorID")
+    If sourceDiagnostic.Exists("BlockingLinkType") Then diag("BlockingLinkType") = sourceDiagnostic("BlockingLinkType")
+    If sourceDiagnostic.Exists("BlockingLag") Then diag("BlockingLag") = sourceDiagnostic("BlockingLag")
+    If sourceDiagnostic.Exists("BlockingCandidateDate") Then diag("BlockingCandidateDate") = sourceDiagnostic("BlockingCandidateDate")
+    If sourceDiagnostic.Exists("BlockingPredecessorDate") Then diag("BlockingPredecessorDate") = sourceDiagnostic("BlockingPredecessorDate")
+    If sourceDiagnostic.Exists("BlockingPredecessorDateKind") Then diag("BlockingPredecessorDateKind") = sourceDiagnostic("BlockingPredecessorDateKind")
+    If sourceDiagnostic.Exists("ExpandedFrom") Then diag("ExpandedFrom") = sourceDiagnostic("ExpandedFrom")
+
+    Set dependencyDiagnostics.Item(CStr(taskId)) = diag
+
+End Sub
+
 Private Function Core_CycleTaskLabel( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1065,7 +1363,10 @@ Private Sub Core_PropagateBlockingErrors( _
     ByVal mapCol As Object, _
     ByVal blockingErrors As Object, _
     ByVal childrenByPred As Object, _
-    ByVal rowById As Object)
+    ByVal rowById As Object, _
+    Optional ByVal constraintDiagnostics As Object, _
+    Optional ByVal dependencyDiagnostics As Object, _
+    Optional ByVal cascadeDiagnostics As Object)
 
     Dim allErrorIds As Object
     Dim taskId As Variant
@@ -1079,6 +1380,7 @@ Private Sub Core_PropagateBlockingErrors( _
 
     For Each taskId In blockingErrors.Keys
         Core_PropagateErrorToChildren CStr(taskId), childrenByPred, allErrorIds
+        Core_RecordCascadeDiagnosticsForRoot CStr(taskId), childrenByPred, constraintDiagnostics, dependencyDiagnostics, cascadeDiagnostics
     Next taskId
 
     For Each taskId In allErrorIds.Keys
@@ -1095,6 +1397,74 @@ Private Sub Core_PropagateBlockingErrors( _
 
 End Sub
 
+
+Private Sub Core_RecordCascadeDiagnosticsForRoot( _
+    ByVal rootId As String, _
+    ByVal childrenByPred As Object, _
+    ByVal constraintDiagnostics As Object, _
+    ByVal dependencyDiagnostics As Object, _
+    ByVal cascadeDiagnostics As Object)
+
+    Dim q As Collection
+    Dim currentId As Variant
+    Dim childId As Variant
+    Dim parentById As Object
+    Dim diag As Object
+    Dim rootType As String
+
+    If cascadeDiagnostics Is Nothing Then Exit Sub
+    If childrenByPred Is Nothing Then Exit Sub
+
+    If Not constraintDiagnostics Is Nothing Then
+        If constraintDiagnostics.Exists(CStr(rootId)) Then rootType = "CONSTRAINT"
+    End If
+
+    If rootType = "" Then
+        If Not dependencyDiagnostics Is Nothing Then
+            If dependencyDiagnostics.Exists(CStr(rootId)) Then rootType = "DEPENDENCY"
+        End If
+    End If
+
+    If rootType = "" Then rootType = "CORE"
+
+    Set q = New Collection
+    Set parentById = CreateObject("Scripting.Dictionary")
+    q.Add CStr(rootId)
+    parentById(CStr(rootId)) = ""
+
+    Do While q.Count > 0
+        currentId = q(1)
+        q.Remove 1
+
+        If childrenByPred.Exists(CStr(currentId)) Then
+            For Each childId In childrenByPred(CStr(currentId))
+                If Not parentById.Exists(CStr(childId)) Then
+                    parentById(CStr(childId)) = CStr(currentId)
+                    q.Add CStr(childId)
+
+                    Set diag = CreateObject("Scripting.Dictionary")
+                    diag("TaskID") = CStr(childId)
+                    diag("RootErrorID") = CStr(rootId)
+                    diag("RootErrorType") = rootType
+                    diag("ParentPropagatedFrom") = CStr(currentId)
+
+                    If rootType = "CONSTRAINT" Then
+                        If Not constraintDiagnostics Is Nothing Then
+                            If constraintDiagnostics.Exists(CStr(rootId)) Then Set diag("RootConstraintDiagnostic") = constraintDiagnostics(CStr(rootId))
+                        End If
+                    ElseIf rootType = "DEPENDENCY" Then
+                        If Not dependencyDiagnostics Is Nothing Then
+                            If dependencyDiagnostics.Exists(CStr(rootId)) Then Set diag("RootDependencyDiagnostic") = dependencyDiagnostics(CStr(rootId))
+                        End If
+                    End If
+
+                    Set cascadeDiagnostics.Item(CStr(childId)) = diag
+                End If
+            Next childId
+        End If
+    Loop
+
+End Sub
 
 Private Sub Core_ClearCalcOutputs_ForScope( _
     ByRef dataArr As Variant, _

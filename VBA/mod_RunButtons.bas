@@ -221,6 +221,10 @@ Public Sub Run_Full_Update()
     Set wsCaller = ActiveSheet
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Full_Update")
     BeginPlanningEventRun "Run_Full_Update"
+    Gantt_Clear_Test_State
+    SetGanttPreserveTestInputs False
+    GanttLive_ClearTestRenderRequest
+    GanttLive_ClearActiveSimulationMode
     Run_Calc_Engine True
 
     If CalcEngine_HasBlockingErrorsForState() Then
