@@ -1,29 +1,35 @@
 Attribute VB_Name = "mod_CalcCoreNetwork"
 Option Explicit
 
-'=====================================================
-' mod_CalcCoreNetwork
-'=====================================================
-' Rôle :
-' - structure réseau légère pour le futur cœur unique
-' - aucun accès worksheet
-' - aucune dépendance au Gantt / WBS / TEST
-' - utilisable par PROD et TEST
+'===============================================================================
+' MODULE : mod_CalcCoreNetwork
+' DOMAINE / DOMAIN : Core Calculation
 '
-' Convention lien léger :
-' link(0) = PredID          As String
-' link(1) = LinkType        As String   ' FS / SS / FF
-' link(2) = Lag             As Double
-' link(3) = SummarySourceID As String   ' empty if normal leaf link
+' FR
+' Construit le graphe Core, l'ordre topologique, les relations parent/enfant et les rollups summary.
+' Ne doit pas contourner les contrats publics des autres domaines.
 '
-' linksBySuccId(succId) = Collection de link()
-' SummarySourceID is used only when the original predecessor
-' was a summary/parent task expanded to leaf links.
-'=====================================================
+' EN
+' Builds the Core graph, topological order, parent/child relations and summary rollups.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Core_CreateLinksBySucc, Core_MakeLink, Core_AddLink, Core_GetLinkPredId, Core_GetLinkType, Core_GetLinkLag, Core_GetLinkSummarySourceId, Core_BuildRowById
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+'------------------------------------------------------------------------------
+' FR: Construit la map ID successeur -> collection de records de lien a partir des donnees fournies par l'appelant.
+' EN: Builds the successor-ID-to-link-records map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_CreateLinksBySucc() As Object
     Set Core_CreateLinksBySucc = CreateObject("Scripting.Dictionary")
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit le record de lien PredID/Type/Lag/SummarySource a partir des donnees fournies par l'appelant.
+' EN: Builds the PredID/Type/Lag/SummarySource link record from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_MakeLink( _
     ByVal predId As String, _
@@ -41,6 +47,11 @@ Public Function Core_MakeLink( _
     Core_MakeLink = linkArr
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Ajoute le record de lien PredID/Type/Lag/SummarySource a la structure cible fournie par l'appelant.
+' EN: Adds the PredID/Type/Lag/SummarySource link record to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Sub Core_AddLink( _
     ByVal linksBySuccId As Object, _
@@ -70,17 +81,37 @@ Public Sub Core_AddLink( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne l'ID predecesseur stocke dans le record de lien sans exposer de mutateur sur l'etat source.
+' EN: Returns the predecessor ID stored in the link record without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function Core_GetLinkPredId(ByRef oneLink As Variant) As String
     Core_GetLinkPredId = Trim$(CStr(oneLink(0)))
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne le type FS/SS/FF du record de lien sans exposer de mutateur sur l'etat source.
+' EN: Returns the link record FS/SS/FF type without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Public Function Core_GetLinkType(ByRef oneLink As Variant) As String
     Core_GetLinkType = UCase$(Trim$(CStr(oneLink(1))))
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne le lag stocke dans le record de lien sans exposer de mutateur sur l'etat source.
+' EN: Returns the lag stored in the link record without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function Core_GetLinkLag(ByRef oneLink As Variant) As Double
     Core_GetLinkLag = CDbl(oneLink(2))
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne l'ID summary source du lien expanse sans exposer de mutateur sur l'etat source.
+' EN: Returns the expanded link's source summary ID without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Public Function Core_GetLinkSummarySourceId(ByRef oneLink As Variant) As String
 
@@ -98,6 +129,11 @@ SafeExit:
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit l'index ID -> ligne du dataset a partir des donnees fournies par l'appelant.
+' EN: Builds the dataset ID-to-row index from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_BuildRowById( _
     ByRef dataArr As Variant, _
@@ -124,6 +160,11 @@ Public Function Core_BuildRowById( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map ID -> ParentID a partir des donnees fournies par l'appelant.
+' EN: Builds the ID-to-ParentID map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_BuildParentIds( _
     ByRef dataArr As Variant, _
@@ -153,6 +194,11 @@ Public Function Core_BuildParentIds( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map parent ID -> enfants directs a partir des donnees fournies par l'appelant.
+' EN: Builds the parent-ID-to-direct-children map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_BuildDirectChildrenById( _
     ByRef dataArr As Variant, _
@@ -190,6 +236,11 @@ Public Function Core_BuildDirectChildrenById( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map predecesseur ID -> successeurs a partir des donnees fournies par l'appelant.
+' EN: Builds the predecessor-ID-to-successors map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_BuildChildrenByPred( _
     ByVal rowById As Object, _
@@ -232,6 +283,11 @@ Public Function Core_BuildChildrenByPred( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Construit l'ensemble des IDs de taches feuilles valides a partir des donnees fournies par l'appelant.
+' EN: Builds the set of valid leaf-task IDs from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Public Function Core_BuildValidLeafIds( _
     ByVal rowById As Object, _
     ByVal parentIds As Object) As Object
@@ -257,6 +313,11 @@ Public Function Core_BuildValidLeafIds( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map des degres entrants du reseau a partir des donnees fournies par l'appelant.
+' EN: Builds the network indegree map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function Core_BuildIndegree( _
     ByVal validIds As Object, _
@@ -300,6 +361,11 @@ Public Function Core_BuildIndegree( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Topo Sort Leaf Network sans modifier les donnees d'entree.
+' EN: Returns the Topo Sort Leaf Network collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function Core_TopoSortLeafNetwork( _
     ByVal validIds As Object, _
@@ -346,6 +412,11 @@ Public Function Core_TopoSortLeafNetwork( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si la collection Topo Failure satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Topo Failure collection satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Public Function Core_HasTopoFailure( _
     ByVal topoOrder As Collection, _
     ByVal validIds As Object) As Boolean
@@ -358,6 +429,11 @@ Public Function Core_HasTopoFailure( _
     Core_HasTopoFailure = (topoOrder.Count <> validIds.Count)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Propage ou agrege la collection Error To Children selon les relations du reseau courant.
+' EN: Propagates or rolls up the Error To Children collection through current network relations.
+'------------------------------------------------------------------------------
 
 Public Sub Core_PropagateErrorToChildren( _
     ByVal startId As String, _
@@ -391,6 +467,11 @@ Public Sub Core_PropagateErrorToChildren( _
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Propage ou agrege la map Summary Dates selon les relations du reseau courant.
+' EN: Propagates or rolls up the Summary Dates map through current network relations.
+'------------------------------------------------------------------------------
 
 Public Sub Core_RollupSummaryDates( _
     ByRef dataArr As Variant, _

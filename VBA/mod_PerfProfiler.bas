@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_PerfProfiler"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_PerfProfiler
+' DOMAINE / DOMAIN : Performance / Profiler
+'
+' FR
+' Mesure les scopes et compteurs de performance sans modifier les workflows instruments.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Measures performance scopes and counters without changing instrumented workflows.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Profiler_StartSession, Profiler_StopSession, Profiler_SetEnabled, Profiler_IsEnabled, Profiler_ShouldSuppressUserInterface, Profiler_SetUserInterfaceSuppression, Profiler_BeginScope, Profiler_StartScope
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 #If VBA7 Then
     Private Declare PtrSafe Function QueryPerformanceCounter Lib "kernel32" (ByRef counterValue As Currency) As Long
     Private Declare PtrSafe Function QueryPerformanceFrequency Lib "kernel32" (ByRef frequencyValue As Currency) As Long
@@ -22,6 +39,11 @@ Private gStats As Object
 Private gActiveSpans As Object
 Private gScopeStack As Collection
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Profiler Start Session dans l'etat runtime du composant.
+' EN: Activates or initializes Profiler Start Session in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Profiler_StartSession(Optional ByVal suppressUserInterface As Boolean = True)
 
     Profiler_Reset
@@ -31,6 +53,11 @@ Public Sub Profiler_StartSession(Optional ByVal suppressUserInterface As Boolean
     gSessionStart = Profiler_NowSeconds()
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Termine Profiler Stop Session et restaure l'etat runtime possede par le composant.
+' EN: Ends Profiler Stop Session and restores runtime state owned by the component.
+'------------------------------------------------------------------------------
 
 Public Sub Profiler_StopSession(Optional ByVal writeReport As Boolean = True)
 
@@ -46,6 +73,11 @@ Public Sub Profiler_StopSession(Optional ByVal writeReport As Boolean = True)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Profiler Set Enabled dans l'etat runtime du composant.
+' EN: Activates or initializes Profiler Set Enabled in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Profiler_SetEnabled(ByVal enabledValue As Boolean)
 
     If enabledValue Then
@@ -58,17 +90,37 @@ Public Sub Profiler_SetEnabled(ByVal enabledValue As Boolean)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Profiler Is Enabled sans modifier les donnees d'entree.
+' EN: Returns the Profiler Is Enabled value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function Profiler_IsEnabled() As Boolean
     Profiler_IsEnabled = (gProfilerEnabled And gSessionActive)
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Profiler Should Suppress User Interface sans modifier les donnees d'entree.
+' EN: Returns the Profiler Should Suppress User Interface value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function Profiler_ShouldSuppressUserInterface() As Boolean
     Profiler_ShouldSuppressUserInterface = gSuppressUserInterface
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Profiler Set User Interface Suppression dans l'etat runtime du composant.
+' EN: Activates or initializes Profiler Set User Interface Suppression in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Profiler_SetUserInterfaceSuppression(ByVal suppressValue As Boolean)
     gSuppressUserInterface = suppressValue
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Profiler Begin Scope dans l'etat runtime du composant.
+' EN: Activates or initializes Profiler Begin Scope in the component runtime state.
+'------------------------------------------------------------------------------
 
 Public Function Profiler_BeginScope( _
     ByVal scopeName As String, _
@@ -87,6 +139,11 @@ Public Function Profiler_BeginScope( _
     Set Profiler_BeginScope = scope
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Profiler Start Scope dans l'etat runtime du composant.
+' EN: Activates or initializes Profiler Start Scope in the component runtime state.
+'------------------------------------------------------------------------------
 
 Public Function Profiler_StartScope( _
     ByVal scopeName As String, _
@@ -117,6 +174,11 @@ Public Function Profiler_StartScope( _
     Profiler_StartScope = token
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Termine Profiler End Scope et restaure l'etat runtime possede par le composant.
+' EN: Ends Profiler End Scope and restores runtime state owned by the component.
+'------------------------------------------------------------------------------
 
 Public Sub Profiler_EndScope(ByVal token As Long)
 
@@ -151,6 +213,11 @@ Public Sub Profiler_EndScope(ByVal token As Long)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Profiler Record Operation dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Profiler Record Operation in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Public Sub Profiler_RecordOperation( _
     ByVal operationName As String, _
     Optional ByVal callCount As Long = 1, _
@@ -168,6 +235,13 @@ Public Sub Profiler_RecordOperation( _
     Next i
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Profiler Write Report dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Profiler Write Report in the store owned by the domain.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
 
 Public Sub Profiler_WriteReport(Optional ByVal sheetName As String = PROFILE_REPORT_SHEET)
 
@@ -238,6 +312,11 @@ Public Sub Profiler_WriteReport(Optional ByVal sheetName As String = PROFILE_REP
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Profiler Reset dans le perimetre possede par le composant.
+' EN: Resets Profiler Reset within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Public Sub Profiler_Reset()
 
     Set gStats = CreateObject("Scripting.Dictionary")
@@ -251,6 +330,11 @@ Public Sub Profiler_Reset()
     gSuppressUserInterface = False
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Cree ou remet en conformite la map Profiler Ensure Infrastructure de maniere idempotente.
+' EN: Creates or restores the Profiler Ensure Infrastructure map to a compliant state idempotently.
+'------------------------------------------------------------------------------
 
 Private Sub Profiler_EnsureInfrastructure()
 
@@ -267,6 +351,11 @@ Private Sub Profiler_EnsureInfrastructure()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Profiler Now Seconds sans modifier les donnees d'entree.
+' EN: Returns the Profiler Now Seconds value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Profiler_NowSeconds() As Double
 
     Dim rawCounter As Currency
@@ -276,6 +365,11 @@ Private Function Profiler_NowSeconds() As Double
     If gFrequency > 0# Then Profiler_NowSeconds = CDbl(rawCounter) / gFrequency
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Actualise Profiler Update Stats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Profiler Update Stats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Profiler_UpdateStats( _
     ByVal scopeName As String, _
@@ -302,6 +396,11 @@ Private Sub Profiler_UpdateStats( _
     gStats(key) = statsData
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Profiler Remove Scope From Stack dans le perimetre possede par le composant.
+' EN: Resets Profiler Remove Scope From Stack within the state owned by the component.
+'------------------------------------------------------------------------------
 
 Private Sub Profiler_RemoveScopeFromStack(ByVal token As Long)
 

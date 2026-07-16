@@ -12,21 +12,33 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
-
-
-
-
-
-
-
-
-
 Option Explicit
+
+'===============================================================================
+' MODULE : frmPlanningMessages
+' DOMAINE / DOMAIN : Planning Console UI
+'
+' FR
+' Affiche les messages planning, la navigation et les actions ACK dans la console modale.
+' Ne prepare pas, ne filtre pas et ne journalise pas les diagnostics.
+'
+' EN
+' Displays planning messages, navigation and ACK actions in the modal console.
+' Does not prepare, filter or log diagnostics.
+'
+' CONTRATS / CONTRACTS : LoadMessages
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : UserForm_Initialize
+'===============================================================================
 
 Private mItems As Collection
 Private mTitle As String
 Private mIndex As Long
 Private mLoadingMessage As Boolean
+
+'------------------------------------------------------------------------------
+' FR: Charge la collection Messages depuis sa source proprietaire sans appliquer de politique aval.
+' EN: Loads the Messages collection from its owning source without applying downstream policy.
+'------------------------------------------------------------------------------
 
 Public Sub LoadMessages( _
     ByVal messages As Collection, _
@@ -42,6 +54,10 @@ Public Sub LoadMessages( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur cmd Previous Click dans planning message form.
+' EN: Handles the cmd Previous Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub cmdPrevious_Click()
 
     If mItems Is Nothing Then Exit Sub
@@ -54,6 +70,10 @@ Private Sub cmdPrevious_Click()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur cmd Next Click dans planning message form.
+' EN: Handles the cmd Next Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub cmdNext_Click()
 
     If mItems Is Nothing Then Exit Sub
@@ -66,11 +86,20 @@ Private Sub cmdNext_Click()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur cmd Close Click dans planning message form.
+' EN: Handles the cmd Close Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub cmdClose_Click()
 
     Unload Me
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Current Message sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Current Message without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub RenderCurrentMessage()
 
@@ -112,6 +141,11 @@ Private Sub RenderCurrentMessage()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Message Type Visual sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Message Type Visual without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub ApplyMessageTypeVisual(ByVal msgType As String)
 
     Select Case UCase$(Trim$(msgType))
@@ -147,6 +181,11 @@ Private Sub ApplyMessageTypeVisual(ByVal msgType As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Current Message Acknowledged sans exposer de mutateur sur l'etat source.
+' EN: Returns the Current Message Acknowledged map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function CurrentMessageAcknowledged() As Boolean
 
     Dim item As Object
@@ -163,11 +202,21 @@ Private Function CurrentMessageAcknowledged() As Boolean
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Message Is Warning sans modifier les donnees d'entree.
+' EN: Returns the Message Is Warning value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function MessageIsWarning(ByVal msgType As String) As Boolean
 
     MessageIsWarning = (UCase$(Trim$(msgType)) = "WARNING")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Ack Control Visual sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Ack Control Visual without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyAckControlVisual( _
     ByVal item As Object, _
@@ -184,6 +233,10 @@ Private Sub ApplyAckControlVisual( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur chk Warning Ack Click dans planning message form.
+' EN: Handles the chk Warning Ack Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub chkWarningAck_Click()
 
     Dim item As Object
@@ -207,6 +260,10 @@ Private Sub chkWarningAck_Click()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur cmd Clear Ack Click dans planning message form.
+' EN: Handles the cmd Clear Ack Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub cmdClearAck_Click()
 
     ClearPlanningWarningAcknowledgements
@@ -214,17 +271,31 @@ Private Sub cmdClearAck_Click()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite le clic utilisateur cmd Clear History Click dans planning message form.
+' EN: Handles the cmd Clear History Click user click in planning message form.
+'------------------------------------------------------------------------------
 Private Sub cmdClearHistory_Click()
 
     ClearPlanningEventHistory
     RenderCurrentMessage
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Category Progress Caption a partir des donnees fournies par l'appelant.
+' EN: Builds the Category Progress Caption value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildCategoryProgressCaption(ByVal currentType As String) As String
 
     BuildCategoryProgressCaption = MessageEngine_BuildCategoryProgressCaption(mItems, mIndex, currentType)
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Form Layout sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Form Layout without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub ApplyFormLayout()
 
     Dim formW As Single
@@ -353,6 +424,11 @@ Private Sub ApplyFormLayout()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Calc Dynamic Form Width sans modifier les donnees d'entree.
+' EN: Returns the Calc Dynamic Form Width map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function CalcDynamicFormWidth() As Single
 
     Dim maxLineLen As Long
@@ -394,6 +470,11 @@ Private Function CalcDynamicFormWidth() As Single
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Calc Dynamic Form Height sans modifier les donnees d'entree.
+' EN: Returns the Calc Dynamic Form Height map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function CalcDynamicFormHeight() As Single
 
     Dim maxLineCount As Long
@@ -432,6 +513,11 @@ Private Function CalcDynamicFormHeight() As Single
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Positionne la valeur Form On Excel relativement a la fenetre Excel active.
+' EN: Positions the Form On Excel value relative to the active Excel window.
+'------------------------------------------------------------------------------
+
 Private Sub CenterFormOnExcel()
 
     On Error GoTo SafeExit
@@ -447,11 +533,20 @@ Private Sub CenterFormOnExcel()
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Initialise l'etat visuel du formulaire de messages planning.
+' EN: Initializes the planning message form visual state.
+'------------------------------------------------------------------------------
 Private Sub UserForm_Initialize()
 
     ApplyMessageTypeBadgeLayout
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Message Type Badge Layout sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Message Type Badge Layout without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyMessageTypeBadgeLayout()
 

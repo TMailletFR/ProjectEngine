@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_Settings"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_Settings
+' DOMAINE / DOMAIN : Settings / Language
+'
+' FR
+' Possede les reglages persistants, les langues par domaine et les controles du panneau Settings.
+' Ne decide aucune politique de calcul planning.
+'
+' EN
+' Owns persisted settings, per-domain languages and Settings panel controls.
+' Does not decide planning calculation policy.
+'
+' CONTRATS / CONTRACTS : Settings_Initialize, Settings_HydrateRuntimeState, Settings_ApplyLanguages, Settings_ToggleInfoMessages, Settings_ToggleGlobalLanguage, Settings_ToggleGlobalActivated, Settings_ToggleDashboardLanguage, Settings_ToggleGanttLanguage
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const SETTINGS_SHEET As String = "SETTINGS"
 Private Const SETTINGS_PREFIX As String = "SET_"
 
@@ -19,6 +36,10 @@ Private Const MODULE_SCURVE As String = "SCURVE"
 Private Const MODULE_WBS As String = "WBS"
 Private Const MODULE_EVENT As String = "EVENT"
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Initialize dans le contexte settings and language.
+' EN: Updates Settings Initialize in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_Initialize()
 
     Dim ws As Worksheet
@@ -43,6 +64,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Hydrate Runtime State dans le contexte settings and language.
+' EN: Updates Settings Hydrate Runtime State in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_HydrateRuntimeState()
 
     Dim ws As Worksheet
@@ -85,6 +110,10 @@ SafeExit:
     Application.EnableEvents = oldEvents
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Apply Languages dans le contexte settings and language.
+' EN: Updates Settings Apply Languages in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ApplyLanguages()
 
     Dim ws As Worksheet
@@ -114,6 +143,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Info Messages dans le contexte settings and language.
+' EN: Updates Settings Toggle Info Messages in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleInfoMessages()
 
     Dim ws As Worksheet
@@ -131,6 +164,10 @@ Public Sub Settings_ToggleInfoMessages()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Global Language dans le contexte settings and language.
+' EN: Updates Settings Toggle Global Language in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleGlobalLanguage()
 
     Dim ws As Worksheet
@@ -151,6 +188,10 @@ Public Sub Settings_ToggleGlobalLanguage()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Global Activated dans le contexte settings and language.
+' EN: Updates Settings Toggle Global Activated in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleGlobalActivated()
 
     Dim ws As Worksheet
@@ -172,26 +213,50 @@ Public Sub Settings_ToggleGlobalActivated()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Dashboard Language dans le contexte settings and language.
+' EN: Updates Settings Toggle Dashboard Language in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleDashboardLanguage()
     Settings_ToggleModuleLanguage MODULE_DASHBOARD
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Gantt Language dans le contexte settings and language.
+' EN: Updates Settings Toggle Gantt Language in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleGanttLanguage()
     Settings_ToggleModuleLanguage MODULE_GANTT
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle SCurve Language dans le contexte settings and language.
+' EN: Updates Settings Toggle SCurve Language in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleSCurveLanguage()
     Settings_ToggleModuleLanguage MODULE_SCURVE
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle WBSLanguage dans le contexte settings and language.
+' EN: Updates Settings Toggle WBSLanguage in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleWBSLanguage()
     Settings_ToggleModuleLanguage MODULE_WBS
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Event History Language dans le contexte settings and language.
+' EN: Updates Settings Toggle Event History Language in the settings and language context.
+'------------------------------------------------------------------------------
 Public Sub Settings_ToggleEventHistoryLanguage()
     Settings_ToggleModuleLanguage MODULE_EVENT
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Toggle Module Language dans le contexte settings and language.
+' EN: Updates Settings Toggle Module Language in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_ToggleModuleLanguage(ByVal moduleKey As String)
 
     Dim ws As Worksheet
@@ -213,6 +278,10 @@ Private Sub Settings_ToggleModuleLanguage(ByVal moduleKey As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Apply Single Module dans le contexte settings and language.
+' EN: Updates Settings Apply Single Module in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_ApplySingleModule( _
     ByVal moduleKey As String, _
     ByVal languageCode As String)
@@ -232,6 +301,10 @@ Private Sub Settings_ApplySingleModule( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Ensure Sheet dans le contexte settings and language.
+' EN: Updates Settings Ensure Sheet in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_EnsureSheet() As Worksheet
 
     Dim ws As Worksheet
@@ -261,6 +334,10 @@ Private Function Settings_EnsureSheet() As Worksheet
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Initialize Storage dans le contexte settings and language.
+' EN: Updates Settings Initialize Storage in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_InitializeStorage(ByVal ws As Worksheet)
 
     Dim globalLanguage As String
@@ -293,6 +370,10 @@ Private Sub Settings_InitializeStorage(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Info Is Enabled dans le contexte settings and language.
+' EN: Updates Settings Info Is Enabled in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_InfoIsEnabled(ByVal ws As Worksheet) As Boolean
 
     Dim rawValue As Variant
@@ -313,6 +394,10 @@ Private Function Settings_InfoIsEnabled(ByVal ws As Worksheet) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Ensure Language Cell dans le contexte settings and language.
+' EN: Updates Settings Ensure Language Cell in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_EnsureLanguageCell( _
     ByVal ws As Worksheet, _
     ByVal cellAddress As String, _
@@ -323,6 +408,10 @@ Private Sub Settings_EnsureLanguageCell( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Global Is Activated dans le contexte settings and language.
+' EN: Updates Settings Global Is Activated in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_GlobalIsActivated(ByVal ws As Worksheet) As Boolean
 
     Dim rawValue As Variant
@@ -343,6 +432,10 @@ Private Function Settings_GlobalIsActivated(ByVal ws As Worksheet) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Normalize Language dans le contexte settings and language.
+' EN: Updates Settings Normalize Language in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_NormalizeLanguage( _
     ByVal languageCode As String, _
     ByVal fallbackLanguage As String) As String
@@ -362,6 +455,10 @@ Private Function Settings_NormalizeLanguage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Opposite Language dans le contexte settings and language.
+' EN: Updates Settings Opposite Language in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_OppositeLanguage(ByVal languageCode As String) As String
 
     If Settings_NormalizeLanguage(languageCode, "EN") = "FR" Then
@@ -372,6 +469,10 @@ Private Function Settings_OppositeLanguage(ByVal languageCode As String) As Stri
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Module Storage Cell dans le contexte settings and language.
+' EN: Updates Settings Module Storage Cell in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_ModuleStorageCell(ByVal moduleKey As String) As String
 
     Select Case UCase$(Trim$(moduleKey))
@@ -389,6 +490,10 @@ Private Function Settings_ModuleStorageCell(ByVal moduleKey As String) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Module Language dans le contexte settings and language.
+' EN: Updates Settings Module Language in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_ModuleLanguage( _
     ByVal ws As Worksheet, _
     ByVal moduleKey As String) As String
@@ -405,6 +510,10 @@ Private Function Settings_ModuleLanguage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Write All Module Languages dans le contexte settings and language.
+' EN: Updates Settings Write All Module Languages in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_WriteAllModuleLanguages( _
     ByVal ws As Worksheet, _
     ByVal languageCode As String)
@@ -418,6 +527,10 @@ Private Sub Settings_WriteAllModuleLanguages( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Build Layout dans le contexte settings and language.
+' EN: Updates Settings Build Layout in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
 
     Dim previousSheet As Object
@@ -476,6 +589,10 @@ Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Info Switch dans le contexte settings and language.
+' EN: Updates Settings Add Info Switch in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddInfoSwitch( _
     ByVal ws As Worksheet, _
     ByVal leftPos As Double, _
@@ -493,7 +610,7 @@ Private Sub Settings_AddInfoSwitch( _
     trackLeft = leftPos + 58
 
     Set labelShape = Settings_AddTextShape(ws, "SET_INFO_LABEL", "Info", leftPos, topPos, 50, 24, msoAlignLeft, 9.5, True)
-    Set offShape = Settings_AddTextShape(ws, "SET_INFO_OFF", "OFF", trackLeft - 34, topPos, 30, 24, msoAlignCenter, 8.5, True)
+    Set offShape = Settings_AddTextShape(ws, "SET_INFO_OFF", "OFF", trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, topPos + 4, 44, 16)
     trackShape.Name = "SET_INFO_TRACK"
@@ -510,15 +627,19 @@ Private Sub Settings_AddInfoSwitch( _
     knobShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
     knobShape.Line.Visible = msoFalse
 
-    Set onShape = Settings_AddTextShape(ws, "SET_INFO_ON", "ON", trackLeft + 48, topPos, 28, 24, msoAlignCenter, 8.5, True)
+    Set onShape = Settings_AddTextShape(ws, "SET_INFO_ON", "ON", trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
 
     labelShape.OnAction = "Settings_ToggleInfoMessages"
     offShape.OnAction = "Settings_ToggleInfoMessages"
     onShape.OnAction = "Settings_ToggleInfoMessages"
-    Settings_FormatBooleanSwitch trackShape, knobShape, isEnabled
+    Settings_FormatToggle trackShape, knobShape, isEnabled
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Module Display Language dans le contexte settings and language.
+' EN: Updates Settings Module Display Language in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_ModuleDisplayLanguage( _
     ByVal ws As Worksheet, _
     ByVal moduleKey As String) As String
@@ -532,6 +653,10 @@ Private Function Settings_ModuleDisplayLanguage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings L dans le contexte settings and language.
+' EN: Updates Settings L in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_L( _
     ByVal ws As Worksheet, _
     ByVal frText As String, _
@@ -545,6 +670,10 @@ Private Function Settings_L( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Prepare Canvas dans le contexte settings and language.
+' EN: Updates Settings Prepare Canvas in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_PrepareCanvas(ByVal ws As Worksheet)
 
     ws.cells.Interior.Color = RGB(242, 244, 247)
@@ -580,6 +709,10 @@ Private Sub Settings_PrepareCanvas(ByVal ws As Worksheet)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Delete Generated Shapes dans le contexte settings and language.
+' EN: Updates Settings Delete Generated Shapes in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_DeleteGeneratedShapes(ByVal ws As Worksheet)
 
     Dim i As Long
@@ -592,6 +725,10 @@ Private Sub Settings_DeleteGeneratedShapes(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Panel dans le contexte settings and language.
+' EN: Updates Settings Add Panel in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddPanel( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -616,6 +753,10 @@ Private Sub Settings_AddPanel( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Centered Title dans le contexte settings and language.
+' EN: Updates Settings Add Centered Title in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddCenteredTitle( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -643,6 +784,10 @@ Private Sub Settings_AddCenteredTitle( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Language Switch dans le contexte settings and language.
+' EN: Updates Settings Add Language Switch in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddLanguageSwitch( _
     ByVal ws As Worksheet, _
     ByVal keyName As String, _
@@ -688,10 +833,14 @@ Private Sub Settings_AddLanguageSwitch( _
     labelShape.OnAction = macroName
     frShape.OnAction = macroName
     enShape.OnAction = macroName
-    Settings_FormatSwitch trackShape, knobShape, isEnglish
+    Settings_FormatToggle trackShape, knobShape, isEnglish
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Text Shape dans le contexte settings and language.
+' EN: Updates Settings Add Text Shape in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_AddTextShape( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -727,36 +876,110 @@ Private Function Settings_AddTextShape( _
 
 End Function
 
-Private Sub Settings_FormatSwitch( _
+'------------------------------------------------------------------------------
+' FR: Normalise la geometrie commune des toggles Settings, y compris les shapes persistantes.
+' EN: Normalizes shared Settings toggle geometry, including persisted shapes.
+'------------------------------------------------------------------------------
+Private Sub Settings_NormalizeToggleGeometry( _
     ByVal trackShape As Shape, _
-    ByVal knobShape As Shape, _
-    ByVal isEnglish As Boolean)
+    ByVal knobShape As Shape)
 
     If trackShape Is Nothing Or knobShape Is Nothing Then Exit Sub
 
-    If isEnglish Then
-        trackShape.Fill.ForeColor.RGB = RGB(68, 114, 196)
-        trackShape.Line.ForeColor.RGB = RGB(68, 114, 196)
-        knobShape.Left = trackShape.Left + trackShape.Width - knobShape.Width - 2
-    Else
-        trackShape.Fill.ForeColor.RGB = RGB(21, 96, 130)
-        trackShape.Line.ForeColor.RGB = RGB(21, 96, 130)
-        knobShape.Left = trackShape.Left + 2
-    End If
+    trackShape.LockAspectRatio = msoFalse
+    trackShape.Width = 44
+    trackShape.Height = 16
+    trackShape.Adjustments.item(1) = 0.5
 
-    trackShape.Line.Weight = 0.75
-    knobShape.Top = trackShape.Top + ((trackShape.Height - knobShape.Height) / 2)
+    knobShape.LockAspectRatio = msoFalse
+    knobShape.Width = 12
+    knobShape.Height = 12
 
 End Sub
 
-Private Sub Settings_FormatBooleanSwitch( _
+'------------------------------------------------------------------------------
+' FR: Aligne les labels gauche/droite sur la geometrie commune des toggles Settings.
+' EN: Aligns left/right labels to the shared Settings toggle geometry.
+'------------------------------------------------------------------------------
+Private Sub Settings_NormalizeToggleLabels( _
+    ByVal leftShape As Shape, _
+    ByVal trackShape As Shape, _
+    ByVal rightShape As Shape)
+
+    If trackShape Is Nothing Then Exit Sub
+
+    If Not leftShape Is Nothing Then
+        leftShape.Left = trackShape.Left - 34
+        leftShape.Top = trackShape.Top - 4
+        leftShape.Width = 28
+        leftShape.Height = 24
+        leftShape.TextFrame2.TextRange.Font.Size = 9.5
+    End If
+
+    If Not rightShape Is Nothing Then
+        rightShape.Left = trackShape.Left + 50
+        rightShape.Top = trackShape.Top - 4
+        rightShape.Width = 30
+        rightShape.Height = 24
+        rightShape.TextFrame2.TextRange.Font.Size = 9.5
+    End If
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR: Normalise les labels de tous les toggles Settings existants.
+' EN: Normalizes labels for all existing Settings toggles.
+'------------------------------------------------------------------------------
+Private Sub Settings_NormalizeAllToggleLabels(ByVal ws As Worksheet)
+
+    Dim keys As Variant
+    Dim keyName As Variant
+    Dim leftShape As Shape
+    Dim trackShape As Shape
+    Dim rightShape As Shape
+
+    If ws Is Nothing Then Exit Sub
+
+    keys = Array("GLOBAL", MODULE_DASHBOARD, MODULE_GANTT, MODULE_SCURVE, MODULE_WBS, MODULE_EVENT)
+
+    For Each keyName In keys
+        Set leftShape = Nothing
+        Set trackShape = Nothing
+        Set rightShape = Nothing
+        On Error Resume Next
+        Set leftShape = ws.Shapes("SET_LANG_" & CStr(keyName) & "_FR")
+        Set trackShape = ws.Shapes("SET_LANG_" & CStr(keyName) & "_TRACK")
+        Set rightShape = ws.Shapes("SET_LANG_" & CStr(keyName) & "_EN")
+        On Error GoTo 0
+        Settings_NormalizeToggleLabels leftShape, trackShape, rightShape
+    Next keyName
+
+    Set leftShape = Nothing
+    Set trackShape = Nothing
+    Set rightShape = Nothing
+    On Error Resume Next
+    Set leftShape = ws.Shapes("SET_INFO_OFF")
+    Set trackShape = ws.Shapes("SET_INFO_TRACK")
+    Set rightShape = ws.Shapes("SET_INFO_ON")
+    On Error GoTo 0
+    Settings_NormalizeToggleLabels leftShape, trackShape, rightShape
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Settings Format Toggle selon le contrat canonique du composant.
+' EN: Normalizes or formats Settings Format Toggle according to the component contract.
+'------------------------------------------------------------------------------
+
+Private Sub Settings_FormatToggle( _
     ByVal trackShape As Shape, _
     ByVal knobShape As Shape, _
-    ByVal isEnabled As Boolean)
+    ByVal isRightActive As Boolean)
 
     If trackShape Is Nothing Or knobShape Is Nothing Then Exit Sub
+    Settings_NormalizeToggleGeometry trackShape, knobShape
 
-    If isEnabled Then
+    If isRightActive Then
         trackShape.Fill.ForeColor.RGB = RGB(68, 114, 196)
         trackShape.Line.ForeColor.RGB = RGB(68, 114, 196)
         knobShape.Left = trackShape.Left + trackShape.Width - knobShape.Width - 2
@@ -770,7 +993,10 @@ Private Sub Settings_FormatBooleanSwitch( _
     knobShape.Top = trackShape.Top + ((trackShape.Height - knobShape.Height) / 2)
 
 End Sub
-
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Activated Control dans le contexte settings and language.
+' EN: Updates Settings Add Activated Control in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddActivatedControl( _
     ByVal ws As Worksheet, _
     ByVal leftPos As Double, _
@@ -802,6 +1028,10 @@ Private Sub Settings_AddActivatedControl( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Format Activated Control dans le contexte settings and language.
+' EN: Updates Settings Format Activated Control in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_FormatActivatedControl( _
     ByVal boxShape As Shape, _
     ByVal isActivated As Boolean)
@@ -821,6 +1051,10 @@ Private Sub Settings_FormatActivatedControl( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Add Command Button dans le contexte settings and language.
+' EN: Updates Settings Add Command Button in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_AddCommandButton( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -853,6 +1087,10 @@ Private Sub Settings_AddCommandButton( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Refresh Visuals dans le contexte settings and language.
+' EN: Updates Settings Refresh Visuals in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_RefreshVisuals(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
@@ -864,6 +1102,7 @@ Private Sub Settings_RefreshVisuals(ByVal ws As Worksheet)
     Settings_RefreshSwitch ws, MODULE_WBS, Settings_ModuleLanguage(ws, MODULE_WBS)
     Settings_RefreshSwitch ws, MODULE_EVENT, Settings_ModuleLanguage(ws, MODULE_EVENT)
     Settings_RefreshInfoSwitch ws, Settings_InfoIsEnabled(ws)
+    Settings_NormalizeAllToggleLabels ws
     Settings_RefreshTitles ws
     Settings_RefreshCommandCaptions ws
 
@@ -873,6 +1112,10 @@ Private Sub Settings_RefreshVisuals(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Refresh Titles dans le contexte settings and language.
+' EN: Updates Settings Refresh Titles in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_RefreshTitles(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
@@ -884,6 +1127,10 @@ Private Sub Settings_RefreshTitles(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Refresh Command Captions dans le contexte settings and language.
+' EN: Updates Settings Refresh Command Captions in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_RefreshCommandCaptions(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
@@ -896,6 +1143,10 @@ Private Sub Settings_RefreshCommandCaptions(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Set Shape Text dans le contexte settings and language.
+' EN: Updates Settings Set Shape Text in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_SetShapeText( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -907,6 +1158,10 @@ Private Sub Settings_SetShapeText( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Refresh Info Switch dans le contexte settings and language.
+' EN: Updates Settings Refresh Info Switch in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_RefreshInfoSwitch( _
     ByVal ws As Worksheet, _
     ByVal isEnabled As Boolean)
@@ -919,10 +1174,14 @@ Private Sub Settings_RefreshInfoSwitch( _
     Set knobShape = ws.Shapes("SET_INFO_KNOB")
     On Error GoTo 0
 
-    Settings_FormatBooleanSwitch trackShape, knobShape, isEnabled
+    Settings_FormatToggle trackShape, knobShape, isEnabled
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Refresh Switch dans le contexte settings and language.
+' EN: Updates Settings Refresh Switch in the settings and language context.
+'------------------------------------------------------------------------------
 Private Sub Settings_RefreshSwitch( _
     ByVal ws As Worksheet, _
     ByVal keyName As String, _
@@ -936,15 +1195,23 @@ Private Sub Settings_RefreshSwitch( _
     Set knobShape = ws.Shapes("SET_LANG_" & keyName & "_KNOB")
     On Error GoTo 0
 
-    Settings_FormatSwitch trackShape, knobShape, _
+    Settings_FormatToggle trackShape, knobShape, _
         (Settings_NormalizeLanguage(languageCode, "EN") = "EN")
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Reset Title dans le contexte settings and language.
+' EN: Updates Settings Reset Title in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_ResetTitle() As String
     Settings_ResetTitle = "Reset / R" & ChrW$(&HE9) & "initialisation"
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Settings Activated Label dans le contexte settings and language.
+' EN: Updates Settings Activated Label in the settings and language context.
+'------------------------------------------------------------------------------
 Private Function Settings_ActivatedLabel() As String
     Settings_ActivatedLabel = "Activated / Activ" & ChrW$(&HE9)
 End Function

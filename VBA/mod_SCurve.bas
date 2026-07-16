@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_SCurve"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_SCurve
+' DOMAINE / DOMAIN : S-Curve
+'
+' FR
+' Calcule les series S-Curve, possede leurs tables et rend le graphique et sa projection Dashboard.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Calculates S-Curve series, owns their tables and renders the chart and Dashboard projection.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Run_SCurve_Engine, SCurve_SafeEmptyState, SCurve_ApplyLanguage, SCurve_SetLanguage, SCurve_CurrentLanguage, DrawSCurveTodayVerticalLine, SCurve_BuildDashboardProjection, SCurve_DrawDashboardTodayLine
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const SCURVE_SHEET As String = "SCURVE"
 Private Const SCURVE_TABLE As String = "tbl_SCURVE"
 
@@ -16,6 +33,10 @@ Private gSCurveLanguage As String
 
 
 
+'------------------------------------------------------------------------------
+' FR: Lance le workflow SCurve Engine.
+' EN: Runs the SCurve Engine workflow.
+'------------------------------------------------------------------------------
 Public Sub Run_SCurve_Engine()
 
     Dim perfScope As clsPerfScope
@@ -86,10 +107,10 @@ Public Sub Run_SCurve_Engine()
         Exit Sub
     End If
 
-    Set mapWBS = BuildColumnMapGeneric(tblWBS)
-    Set mapCalc = BuildColumnMapGeneric(tblCalc)
-    Set mapSCurve = BuildColumnMapGeneric(tblSCurve)
-    Set mapCalcSCurve = BuildColumnMapGeneric(tblCalcSCurve)
+    Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
+    Set mapSCurve = CanonicalIdentity_BuildColumnMap(tblSCurve)
+    Set mapCalcSCurve = CanonicalIdentity_BuildColumnMap(tblCalcSCurve)
 
     ValidateSCurveSourceColumns mapWBS, mapCalc
     ValidateSCurveOutputColumns mapSCurve
@@ -101,8 +122,7 @@ Public Sub Run_SCurve_Engine()
 
     Set hasChildren = CreateObject("Scripting.Dictionary")
     Set idToWbs = CreateObject("Scripting.Dictionary")
-    Set calcRowById = CreateObject("Scripting.Dictionary")
-
+    Set calcRowById = CanonicalIdentity_BuildCalcRowById(dataCalc, mapCalc)
     Set includedIds = CreateObject("Scripting.Dictionary")
     Set missingWeightIds = CreateObject("Scripting.Dictionary")
     Set blockingErrorIds = CreateObject("Scripting.Dictionary")
@@ -114,9 +134,6 @@ Public Sub Run_SCurve_Engine()
     Set allDates = CreateObject("Scripting.Dictionary")
 
     BuildWBSParentMaps dataCalc, mapCalc, hasChildren, idToWbs
-    BuildCalcRowByIdMap dataCalc, mapCalc, calcRowById
-
-
     ResizeTableToRowCount tblCalcSCurve, rowCount
     ReDim outCalc(1 To rowCount, 1 To tblCalcSCurve.ListColumns.Count)
 
@@ -488,6 +505,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide SCurve Source Columns et signale les incoherences detectees.
+' EN: Validates SCurve Source Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateSCurveSourceColumns(ByVal mapWBS As Object, ByVal mapCalc As Object)
 
     Dim requiredWbsCols As Variant
@@ -525,6 +546,10 @@ Private Sub ValidateSCurveSourceColumns(ByVal mapWBS As Object, ByVal mapCalc As
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide SCurve Output Columns et signale les incoherences detectees.
+' EN: Validates SCurve Output Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateSCurveOutputColumns(ByVal mapSCurve As Object)
 
     Dim requiredCols As Variant
@@ -551,6 +576,10 @@ Private Sub ValidateSCurveOutputColumns(ByVal mapSCurve As Object)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide Calc SCurve Columns et signale les incoherences detectees.
+' EN: Validates Calc SCurve Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateCalcSCurveColumns(ByVal mapCalcSCurve As Object)
 
     Dim requiredCols As Variant
@@ -580,27 +609,10 @@ Private Sub ValidateCalcSCurveColumns(ByVal mapCalcSCurve As Object)
     Next c
 
 End Sub
-
-
-Private Function BuildColumnMapGeneric(ByVal tbl As ListObject) As Object
-
-    Dim perfScope As clsPerfScope
-
-    Dim d As Object
-    Dim i As Long
-
-    Set perfScope = Profiler_BeginScope("BuildColumnMapGeneric", "Excel Metadata")
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    For i = 1 To tbl.ListColumns.Count
-        d(tbl.ListColumns(i).Name) = i
-    Next i
-
-    Set BuildColumnMapGeneric = d
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Construit la map WBS Parent Maps a partir des donnees fournies par l'appelant.
+' EN: Builds the WBS Parent Maps map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub BuildWBSParentMaps( _
     ByRef dataWBS As Variant, _
@@ -639,6 +651,13 @@ Private Sub BuildWBSParentMaps( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference Resize Table To Row Count sans modifier les donnees d'entree.
+' EN: Handles the Resize Table To Row Count reference without mutating input data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub ResizeTableToRowCount(ByVal tbl As ListObject, ByVal targetRows As Long)
 
     Dim perfScope As clsPerfScope
@@ -674,6 +693,10 @@ Private Sub ResizeTableToRowCount(ByVal tbl As ListObject, ByVal targetRows As L
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Value By Date a la structure cible.
+' EN: Adds Value By Date to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddValueByDate(ByVal dict As Object, ByVal dayKey As Long, ByVal valueToAdd As Double)
 
     Dim perfScope As clsPerfScope
@@ -689,6 +712,10 @@ Private Sub AddValueByDate(ByVal dict As Object, ByVal dayKey As Long, ByVal val
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Ecrit SCurve Daily Table vers le stockage cible.
+' EN: Writes SCurve Daily Table to the target storage.
+'------------------------------------------------------------------------------
 Private Sub WriteSCurveDailyTable( _
     ByVal tblSCurve As ListObject, _
     ByVal mapSCurve As Object, _
@@ -815,6 +842,11 @@ Private Sub WriteSCurveDailyTable( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference Safe Empty State sans modifier les donnees d'entree.
+' EN: Handles the Safe Empty State reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Sub SCurve_SafeEmptyState()
 
     Dim wsSCurve As Worksheet
@@ -837,6 +869,11 @@ Public Sub SCurve_SafeEmptyState()
     SCurve_ClearChartSignature
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Trie la valeur Sort Long Array en place selon l'ordre deterministic attendu par le consommateur.
+' EN: Sorts the Sort Long Array value in place using the deterministic order expected by the consumer.
+'------------------------------------------------------------------------------
+
 Private Sub SortLongArray(ByRef arr() As Long)
 
     Dim perfScope As clsPerfScope
@@ -860,6 +897,10 @@ Private Sub SortLongArray(ByRef arr() As Long)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Calc SCurve Columns pour l'affichage ou l'ecriture.
+' EN: Formats Calc SCurve Columns for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatCalcSCurveColumns(ByVal tblCalcSCurve As ListObject, ByVal mapCalcSCurve As Object)
 
     If tblCalcSCurve.DataBodyRange Is Nothing Then Exit Sub
@@ -878,11 +919,20 @@ Private Sub FormatCalcSCurveColumns(ByVal tblCalcSCurve As ListObject, ByVal map
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise WBSLocal dans un format exploitable.
+' EN: Normalizes WBSLocal into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeWBSLocal(ByVal wbs As String) As String
 
     NormalizeWBSLocal = Replace(Trim$(wbs), ",", ".")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Progress To Double Local sans modifier les donnees d'entree.
+' EN: Returns the Progress To Double Local value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function ProgressToDoubleLocal(ByVal v As Variant) As Double
 
@@ -897,6 +947,10 @@ Private Function ProgressToDoubleLocal(ByVal v As Variant) As Double
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Affiche SCurve Grouped Message pour l'utilisateur ou le diagnostic.
+' EN: Shows SCurve Grouped Message for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowSCurveGroupedMessage( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
@@ -931,100 +985,10 @@ Private Sub ShowSCurveGroupedMessage( _
 
 End Sub
 
-Private Function BuildSCurveGroupedMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String) As String
-
-    Dim idsLine As String
-    Dim wbsLine As String
-
-    idsLine = BuildInlineListLocal(idsDict, 20)
-    wbsLine = BuildInlineWBSListLocal(idsDict, idToWbs, 20)
-
-    BuildSCurveGroupedMessage = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
-
-End Function
-
-Private Function BuildInlineListLocal(ByVal idsDict As Object, ByVal maxItems As Long) As String
-
-    Dim result As String
-    Dim key As Variant
-    Dim countShown As Long
-    Dim totalCount As Long
-
-    result = ""
-    countShown = 0
-    totalCount = idsDict.Count
-
-    For Each key In idsDict.Keys
-        countShown = countShown + 1
-        If countShown <= maxItems Then
-            If result <> "" Then result = result & " / "
-            result = result & CStr(key)
-        Else
-            Exit For
-        End If
-    Next key
-
-    If totalCount > maxItems Then
-        result = result & " / +" & CStr(totalCount - maxItems)
-    End If
-
-    BuildInlineListLocal = result
-
-End Function
-
-Private Function BuildInlineWBSListLocal(ByVal idsDict As Object, ByVal idToWbs As Object, ByVal maxItems As Long) As String
-
-    Dim result As String
-    Dim key As Variant
-    Dim countShown As Long
-    Dim totalCount As Long
-    Dim itemText As String
-
-    result = ""
-    countShown = 0
-    totalCount = idsDict.Count
-
-    For Each key In idsDict.Keys
-        countShown = countShown + 1
-        If countShown <= maxItems Then
-            If idToWbs.Exists(CStr(key)) Then
-                itemText = CStr(idToWbs(CStr(key)))
-            Else
-                itemText = "-"
-            End If
-
-            If result <> "" Then result = result & " / "
-            result = result & itemText
-        Else
-            Exit For
-        End If
-    Next key
-
-    If totalCount > maxItems Then
-        result = result & " / +" & CStr(totalCount - maxItems)
-    End If
-
-    BuildInlineWBSListLocal = result
-
-End Function
-
-
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree SCurve Chart si necessaire.
+' EN: Ensures or creates SCurve Chart when needed.
+'------------------------------------------------------------------------------
 Private Sub Ensure_SCurve_Chart()
 
     Dim perfScope As clsPerfScope
@@ -1048,6 +1012,11 @@ Private Sub Ensure_SCurve_Chart()
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Language sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Language without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Public Sub SCurve_ApplyLanguage(Optional ByVal languageCode As String = "")
 
@@ -1096,6 +1065,11 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Language dans l'etat runtime du composant.
+' EN: Activates or initializes Set Language in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub SCurve_SetLanguage(ByVal languageCode As String)
 
     Select Case UCase$(Trim$(languageCode))
@@ -1109,6 +1083,11 @@ Public Sub SCurve_SetLanguage(ByVal languageCode As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Language sans exposer de mutateur sur l'etat source.
+' EN: Returns the Language value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function SCurve_CurrentLanguage() As String
 
     EnsureSCurveLanguageInitialized
@@ -1116,6 +1095,10 @@ Public Function SCurve_CurrentLanguage() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree SCurve Language Initialized si necessaire.
+' EN: Ensures or creates SCurve Language Initialized when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureSCurveLanguageInitialized()
 
     If UCase$(Trim$(gSCurveLanguage)) <> "FR" And UCase$(Trim$(gSCurveLanguage)) <> "EN" Then
@@ -1123,6 +1106,11 @@ Private Sub EnsureSCurveLanguageInitialized()
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur L sans modifier les donnees d'entree.
+' EN: Returns the L value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function SCurve_L(ByVal frText As String, ByVal enText As String) As String
 
@@ -1134,6 +1122,11 @@ Private Function SCurve_L(ByVal frText As String, ByVal enText As String) As Str
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Date Axis Number Format sans modifier les donnees d'entree.
+' EN: Returns the Date Axis Number Format value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function SCurve_DateAxisNumberFormat() As String
 
     SCurve_DateAxisNumberFormat = "dd/mm/yyyy"
@@ -1141,6 +1134,10 @@ Private Function SCurve_DateAxisNumberFormat() As String
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Cree SCurve Chart pour le domaine S-Curve.
+' EN: Creates SCurve Chart for the S-Curve domain.
+'------------------------------------------------------------------------------
 Private Sub Create_SCurve_Chart()
 
     Dim perfScope As clsPerfScope
@@ -1256,6 +1253,13 @@ Private Sub Create_SCurve_Chart()
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Actualise Update S Curve Chart sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update S Curve Chart without changing the business rules that produce the data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub Update_SCurve_Chart(ByVal ch As Chart)
 
     Dim perfScope As clsPerfScope
@@ -1312,6 +1316,11 @@ Private Sub Update_SCurve_Chart(ByVal ch As Chart)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference S Curve Assign Chart Series Ranges sans modifier les donnees d'entree.
+' EN: Handles the S Curve Assign Chart Series Ranges reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub SCurveAssignChartSeriesRanges(ByVal ch As Chart, ByVal tbl As ListObject)
 
     Dim perfScope As clsPerfScope
@@ -1338,6 +1347,13 @@ Private Sub SCurveAssignChartSeriesRanges(ByVal ch As Chart, ByVal tbl As ListOb
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Delete Chart If Exists dans le perimetre possede par le composant.
+' EN: Resets Delete Chart If Exists within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub SCurve_DeleteChartIfExists(ByVal ws As Worksheet, ByVal chartName As String)
 
     Dim chartObj As ChartObject
@@ -1352,6 +1368,13 @@ Private Sub SCurve_DeleteChartIfExists(ByVal ws As Worksheet, ByVal chartName As
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Delete Shape If Exists dans le perimetre possede par le composant.
+' EN: Resets Delete Shape If Exists within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub SCurve_DeleteShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String)
 
     If ws Is Nothing Then Exit Sub
@@ -1363,6 +1386,13 @@ Private Sub SCurve_DeleteShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Clear Chart Signature dans le perimetre possede par le composant.
+' EN: Resets Clear Chart Signature within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub SCurve_ClearChartSignature()
 
     On Error Resume Next
@@ -1370,6 +1400,11 @@ Private Sub SCurve_ClearChartSignature()
     On Error GoTo 0
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Retourne la reference S Curve Chart Source Signature sans modifier les donnees d'entree.
+' EN: Returns the S Curve Chart Source Signature reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function SCurveChartSourceSignature(ByVal tbl As ListObject) As String
 
     SCurveChartSourceSignature = _
@@ -1383,6 +1418,11 @@ Private Function SCurveChartSourceSignature(ByVal tbl As ListObject) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference S Curve Range Signature sans modifier les donnees d'entree.
+' EN: Returns the S Curve Range Signature reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function SCurveRangeSignature(ByVal tbl As ListObject, ByVal columnName As String) As String
 
     Dim rng As Range
@@ -1393,6 +1433,11 @@ Private Function SCurveRangeSignature(ByVal tbl As ListObject, ByVal columnName 
         rng.Address(RowAbsolute:=True, ColumnAbsolute:=True, ReferenceStyle:=xlA1, External:=True)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur S Curve Stored Chart Signature sans modifier les donnees d'entree.
+' EN: Returns the S Curve Stored Chart Signature value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function SCurveStoredChartSignature() As String
 
@@ -1417,6 +1462,11 @@ Private Function SCurveStoredChartSignature() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Persiste la signature de source du graphique S-Curve utilisee pour eviter les reconstructions inutiles.
+' EN: Persists the S-Curve chart source signature used to avoid unnecessary rebuilds.
+'------------------------------------------------------------------------------
+
 Private Sub SCurveStoreChartSignature(ByVal signature As String)
 
     Dim nm As Name
@@ -1440,6 +1490,10 @@ Private Sub SCurveStoreChartSignature(ByVal signature As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate SCurve Chart pour l'affichage ou l'ecriture.
+' EN: Formats SCurve Chart for display or writing.
+'------------------------------------------------------------------------------
 Private Sub Format_SCurve_Chart(ByVal ch As Chart)
 
 
@@ -1475,6 +1529,11 @@ Private Sub Format_SCurve_Chart(ByVal ch As Chart)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Actualise Draw Today Vertical Line sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Draw Today Vertical Line without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
     Dim perfScope As clsPerfScope
@@ -1491,6 +1550,13 @@ Private Sub DrawTodayVerticalLine(ByVal ch As Chart)
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Actualise Draw S Curve Today Vertical Line sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Draw S Curve Today Vertical Line without changing the business rules that produce the data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Public Sub DrawSCurveTodayVerticalLine( _
     ByVal ch As Chart, _
@@ -1604,6 +1670,11 @@ HideLine:
 Done:
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Traite la reference S Curve Format Today Line sans modifier les donnees d'entree.
+' EN: Handles the S Curve Format Today Line reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub SCurveFormatTodayLine(ByVal shp As Shape)
 
     With shp.Line
@@ -1613,126 +1684,10 @@ Private Sub SCurveFormatTodayLine(ByVal shp As Shape)
     End With
 
 End Sub
-
-Private Sub BuildCalcRowByIdMap(ByRef dataCalc As Variant, ByVal mapCalc As Object, ByVal calcRowById As Object)
-
-    Dim r As Long
-    Dim rowCount As Long
-    Dim taskId As String
-
-    rowCount = UBound(dataCalc, 1)
-
-    For r = 1 To rowCount
-        taskId = Trim$(CStr(dataCalc(r, mapCalc("ID"))))
-        If taskId <> "" Then
-            calcRowById(taskId) = r
-        End If
-    Next r
-
-End Sub
-
-Private Sub SCurve_AddConsoleMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String, _
-    Optional ByVal eventType As String = "", _
-    Optional ByVal eventHash As String = "")
-
-    If consoleMessages Is Nothing Then Exit Sub
-
-    CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText, _
-        False, _
-        eventType, _
-        eventHash
-
-End Sub
-
-Private Sub SCurve_AddGroupedMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
-    Optional ByVal historyHandled As Boolean = False, _
-    Optional ByVal ackTokens As String = "")
-
-    If consoleMessages Is Nothing Then Exit Sub
-    If idsDict Is Nothing Then Exit Sub
-    If idsDict.Count = 0 Then Exit Sub
-
-    CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BuildSCurveGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction), _
-        historyHandled, _
-        ackTokens:=ackTokens
-
-End Sub
-
-Private Function SCurve_LogGroupedWarningEvents( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal eventType As String, _
-    ByVal frMessage As String, _
-    ByVal enMessage As String, _
-    ByVal frDetails As String, _
-    ByVal enDetails As String) As String
-
-    Dim key As Variant
-    Dim idVal As String
-    Dim wbsVal As String
-    Dim eventHash As String
-    Dim tokens As String
-
-    If idsDict Is Nothing Then Exit Function
-
-    For Each key In idsDict.Keys
-        idVal = Trim$(CStr(key))
-        If idVal <> "" Then
-            wbsVal = vbNullString
-            If Not idToWbs Is Nothing Then
-                If idToWbs.Exists(idVal) Then wbsVal = CStr(idToWbs(idVal))
-            End If
-
-            eventHash = BuildPlanningEventHash( _
-                "WARNING", eventType, frMessage, enMessage, frDetails, enDetails, _
-                "Run_SCurve_Engine", _
-                "SCURVE", _
-                "tbl_SCURVE", _
-                idVal, _
-                wbsVal, _
-                vbNullString)
-
-            LogPlanningEvent _
-                "WARNING", _
-                eventType, _
-                eventHash, _
-                frMessage, _
-                enMessage, _
-                frDetails, _
-                enDetails, _
-                "Run_SCurve_Engine", _
-                "SCURVE", _
-                "tbl_SCURVE", _
-                idVal, _
-                wbsVal, _
-                vbNullString, _
-                False
-
-            If tokens <> "" Then tokens = tokens & ";"
-            tokens = tokens & BuildPlanningWarningAckToken(eventType, eventHash)
-        End If
-    Next key
-
-    SCurve_LogGroupedWarningEvents = tokens
-
-End Function
+'------------------------------------------------------------------------------
+' FR: Indique si SCurve Excluded Task Type Local est vrai pour le contexte courant.
+' EN: Returns whether SCurve Excluded Task Type Local is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsSCurveExcludedTaskTypeLocal(ByVal taskTypeValue As Variant) As Boolean
 
     Dim s As String
@@ -1754,4 +1709,86 @@ Private Function IsSCurveExcludedTaskTypeLocal(ByVal taskTypeValue As Variant) A
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la projection S-Curve consommee par Dashboard sans exposer les tables proprietaires.
+' EN: Builds the S-Curve projection consumed by Dashboard without exposing owner tables.
+'------------------------------------------------------------------------------
+Public Function SCurve_BuildDashboardProjection() As Object
 
+    Dim projection As Object
+    Dim wsSCurve As Worksheet
+    Dim wsCalcSCurve As Worksheet
+    Dim tblSCurve As ListObject
+    Dim tblCalcSCurve As ListObject
+    Dim mapSCurve As Object
+    Dim mapCalcSCurve As Object
+    Dim arr As Variant
+    Dim r As Long
+    Dim value As Variant
+    Dim dateValue As Variant
+    Dim dateNumber As Double
+    Dim todaySerial As Long
+    Dim actualProgress As Double
+    Dim plannedProgress As Double
+
+    Set projection = CreateObject("Scripting.Dictionary")
+    projection("ActualProgress") = 0#
+    projection("PlannedProgress") = 0#
+
+    Set wsSCurve = ThisWorkbook.Worksheets(SCURVE_SHEET)
+    Set wsCalcSCurve = ThisWorkbook.Worksheets(CALC_SCURVE_SHEET)
+    Set tblSCurve = wsSCurve.ListObjects(SCURVE_TABLE)
+    Set tblCalcSCurve = wsCalcSCurve.ListObjects(CALC_SCURVE_TABLE)
+
+    Set mapSCurve = CanonicalIdentity_BuildColumnMap(tblSCurve)
+    Set mapCalcSCurve = CanonicalIdentity_BuildColumnMap(tblCalcSCurve)
+
+    If Not tblSCurve.DataBodyRange Is Nothing Then
+        If mapSCurve.Exists("Date") Then Set projection("DateRange") = tblSCurve.ListColumns("Date").DataBodyRange
+        If mapSCurve.Exists("Cumulative Baseline") Then Set projection("BaselineRange") = tblSCurve.ListColumns("Cumulative Baseline").DataBodyRange
+        If mapSCurve.Exists("Cumulative Actual") Then Set projection("ActualRange") = tblSCurve.ListColumns("Cumulative Actual").DataBodyRange
+        If mapSCurve.Exists("Calculated Curve Dashed") Then Set projection("ForecastRange") = tblSCurve.ListColumns("Calculated Curve Dashed").DataBodyRange
+
+        If mapSCurve.Exists("Date") And mapSCurve.Exists("Cumulative Baseline") Then
+            arr = tblSCurve.DataBodyRange.value
+            todaySerial = CLng(Date)
+            For r = 1 To UBound(arr, 1)
+                dateValue = GetCellValue(arr(r, mapSCurve("Date")))
+                If HasValue(dateValue) And (IsNumeric(dateValue) Or IsDate(dateValue)) Then
+                    If IsDate(dateValue) Then dateNumber = CDbl(CDate(dateValue)) Else dateNumber = CDbl(dateValue)
+                    If CLng(dateNumber) <= todaySerial Then
+                        value = GetCellValue(arr(r, mapSCurve("Cumulative Baseline")))
+                        If IsNumeric(value) Then plannedProgress = CDbl(value)
+                    End If
+                End If
+            Next r
+        End If
+    End If
+
+    If Not tblCalcSCurve.DataBodyRange Is Nothing Then
+        If mapCalcSCurve.Exists("SCurve Actualized Weight") Then
+            arr = tblCalcSCurve.DataBodyRange.value
+            For r = 1 To UBound(arr, 1)
+                value = GetCellValue(arr(r, mapCalcSCurve("SCurve Actualized Weight")))
+                If IsNumeric(value) Then actualProgress = actualProgress + CDbl(value)
+            Next r
+        End If
+    End If
+
+    projection("ActualProgress") = actualProgress
+    projection("PlannedProgress") = plannedProgress
+    Set SCurve_BuildDashboardProjection = projection
+
+End Function
+
+'------------------------------------------------------------------------------
+' FR: Dessine la ligne Today du Dashboard en resolvant la table S-Curve dans son domaine proprietaire.
+' EN: Draws the Dashboard Today line while resolving the S-Curve table inside its owner domain.
+'------------------------------------------------------------------------------
+Public Sub SCurve_DrawDashboardTodayLine(ByVal ch As Chart, ByVal ws As Worksheet, ByVal shapeName As String)
+
+    Dim tblSCurve As ListObject
+    Set tblSCurve = ThisWorkbook.Worksheets(SCURVE_SHEET).ListObjects(SCURVE_TABLE)
+    DrawSCurveTodayVerticalLine ch, ws, tblSCurve, shapeName
+
+End Sub

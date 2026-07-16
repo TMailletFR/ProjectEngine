@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_Constraints"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_Constraints
+' DOMAINE / DOMAIN : Constraints
+'
+' FR
+' Importe les contraintes WBS, valide leurs regles et synchronise leurs colonnes vers CALC.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Imports WBS constraints, validates their rules and synchronizes their columns to CALC.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Handle_Constraints_Change, Import_WBS_To_Constraints, Sync_Constraints_To_CALC, Sync_Constraints_To_CALC_ForWorkflow, Constraints_DeactivateAll
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Handle_Constraints_Change
+'===============================================================================
+
+
 
 
 Private Const CONSTRAINTS_SHEET_NAME As String = "CONSTRAINTS"
@@ -10,6 +27,10 @@ Private Const CONSTRAINTS_TOP_LEFT As String = "A2"
 Private Const WBS_SHEET_NAME As String = "WBS"
 Private Const WBS_TABLE_NAME As String = "tbl_WBS"
 
+'------------------------------------------------------------------------------
+' FR: Traite un changement ou evenement pour Constraints Change.
+' EN: Handles a change or event for Constraints Change.
+'------------------------------------------------------------------------------
 Public Sub Handle_Constraints_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     Dim tbl As ListObject
@@ -50,6 +71,13 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Traite la collection Import WBS To Constraints sans modifier les donnees d'entree.
+' EN: Handles the Import WBS To Constraints collection without mutating input data.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
+
 Public Sub Import_WBS_To_Constraints()
 
     Dim perfScope As clsPerfScope
@@ -84,8 +112,8 @@ Public Sub Import_WBS_To_Constraints()
     Set wsConstraints = EnsureConstraintsWorksheet()
     Set tblConstraints = EnsureConstraintsTable(wsConstraints)
 
-    Set mapWBS = BuildColumnMap_Constraints(tblWBS)
-    Set mapConstraints = BuildColumnMap_Constraints(tblConstraints)
+    Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
+    Set mapConstraints = CanonicalIdentity_BuildColumnMap(tblConstraints)
 
     RequireColumns_Constraints mapWBS, Array( _
         "ID", "WBS", "Task Name", "Task Description", "Task Type", _
@@ -150,6 +178,10 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Synchronise Constraints To CALC entre les tables du planning.
+' EN: Synchronizes Constraints To CALC between planning tables.
+'------------------------------------------------------------------------------
 Public Sub Sync_Constraints_To_CALC()
 
     BeginPlanningEventRun "Sync_Constraints_To_CALC"
@@ -157,6 +189,10 @@ Public Sub Sync_Constraints_To_CALC()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Synchronise Constraints To CALC For Workflow entre les tables du planning.
+' EN: Synchronizes Constraints To CALC For Workflow between planning tables.
+'------------------------------------------------------------------------------
 Public Function Sync_Constraints_To_CALC_ForWorkflow( _
     ByVal consoleMessages As Collection) As Boolean
 
@@ -166,6 +202,10 @@ Public Function Sync_Constraints_To_CALC_ForWorkflow( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Synchronise Constraints To CALC Impl entre les tables du planning.
+' EN: Synchronizes Constraints To CALC Impl between planning tables.
+'------------------------------------------------------------------------------
 Private Function Sync_Constraints_To_CALC_Impl( _
     ByVal showConsole As Boolean, _
     Optional ByVal externalConsoleMessages As Collection) As Boolean
@@ -217,8 +257,8 @@ Private Function Sync_Constraints_To_CALC_Impl( _
             "Missing table " & CONSTRAINTS_TABLE_NAME & ". Run Import_WBS_To_Constraints first."
     End If
 
-    Set mapCalc = BuildColumnMap_Constraints(tblCalc)
-    Set mapConstraints = BuildColumnMap_Constraints(tblConstraints)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
+    Set mapConstraints = CanonicalIdentity_BuildColumnMap(tblConstraints)
 
     RequireColumns_Constraints mapCalc, CalcConstraintHeaders(), "tbl_CALC"
     RequireColumns_Constraints mapConstraints, Array( _
@@ -245,7 +285,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
     End If
 
     arrCalc = tblCalc.DataBodyRange.value
-    Set calcRowById = BuildCalcRowById(arrCalc, mapCalc)
+    Set calcRowById = CanonicalIdentity_BuildCalcRowById(arrCalc, mapCalc)
 
     ClearCalcConstraintColumns arrCalc, mapCalc
 
@@ -335,6 +375,10 @@ ErrHandler:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Constraints Worksheet si necessaire.
+' EN: Ensures or creates Constraints Worksheet when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureConstraintsWorksheet() As Worksheet
 
     Dim ws As Worksheet
@@ -356,6 +400,10 @@ Private Function EnsureConstraintsWorksheet() As Worksheet
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Constraints Table si necessaire.
+' EN: Ensures or creates Constraints Table when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
 
     Dim tbl As ListObject
@@ -404,6 +452,11 @@ Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
     Set EnsureConstraintsTable = tbl
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Constraints Headers sans modifier les donnees d'entree.
+' EN: Returns the Constraints Headers value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function ConstraintsHeaders() As Variant
 
     ConstraintsHeaders = Array( _
@@ -427,6 +480,11 @@ Private Function ConstraintsHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Calc Constraint Headers sans modifier les donnees d'entree.
+' EN: Returns the Calc Constraint Headers value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function CalcConstraintHeaders() As Variant
 
     CalcConstraintHeaders = Array( _
@@ -439,21 +497,10 @@ Private Function CalcConstraintHeaders() As Variant
         "Deadline")
 
 End Function
-
-Private Function BuildColumnMap_Constraints(ByVal tbl As ListObject) As Object
-
-    Dim d As Object
-    Dim i As Long
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    For i = 1 To tbl.ListColumns.Count
-        d(tbl.ListColumns(i).Name) = i
-    Next i
-
-    Set BuildColumnMap_Constraints = d
-
-End Function
+'------------------------------------------------------------------------------
+' FR: Valide Require Columns Constraints et applique la politique d'erreur definie par le composant.
+' EN: Validates Require Columns Constraints and applies the component's defined failure policy.
+'------------------------------------------------------------------------------
 
 Private Sub RequireColumns_Constraints( _
     ByVal mapCol As Object, _
@@ -470,26 +517,10 @@ Private Sub RequireColumns_Constraints( _
     Next c
 
 End Sub
-
-Private Function BuildCalcRowById( _
-    ByRef arrCalc As Variant, _
-    ByVal mapCalc As Object) As Object
-
-    Dim d As Object
-    Dim r As Long
-    Dim idVal As String
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    For r = 1 To UBound(arrCalc, 1)
-        idVal = Trim$(CStr(arrCalc(r, mapCalc("ID"))))
-        If idVal <> "" Then d(idVal) = r
-    Next r
-
-    Set BuildCalcRowById = d
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Calc Constraint Columns.
+' EN: Clears or resets Calc Constraint Columns.
+'------------------------------------------------------------------------------
 Private Sub ClearCalcConstraintColumns( _
     ByRef arrCalc As Variant, _
     ByVal mapCalc As Object)
@@ -507,6 +538,10 @@ Private Sub ClearCalcConstraintColumns( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide Active Constraints et signale les incoherences detectees.
+' EN: Validates Active Constraints and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateActiveConstraints( _
     ByRef arrConstraints As Variant, _
     ByVal mapConstraints As Object, _
@@ -702,6 +737,10 @@ NextRow:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Active Constraint Empty est vrai pour le contexte courant.
+' EN: Returns whether Active Constraint Empty is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsActiveConstraintEmpty( _
     ByRef arrConstraints As Variant, _
     ByVal rowIdx As Long, _
@@ -715,6 +754,10 @@ Private Function IsActiveConstraintEmpty( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Constraint Date est vrai pour le contexte courant.
+' EN: Returns whether Constraint Date is true for the current context.
+'------------------------------------------------------------------------------
 Private Function HasConstraintDate(ByVal value As Variant) As Boolean
 
     If IsEmpty(value) Then Exit Function
@@ -727,6 +770,10 @@ Private Function HasConstraintDate(ByVal value As Variant) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Constraint Summary Row est vrai pour le contexte courant.
+' EN: Returns whether Constraint Summary Row is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsConstraintSummaryRow(ByVal value As Variant) As Boolean
 
     Dim txt As String
@@ -738,66 +785,20 @@ Private Function IsConstraintSummaryRow(ByVal value As Variant) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Constraint Level Of Effort est vrai pour le contexte courant.
+' EN: Returns whether Constraint Level Of Effort is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsConstraintLevelOfEffort(ByVal value As Variant) As Boolean
 
     IsConstraintLevelOfEffort = (LCase$(Trim$(CStr(value))) = "level of effort")
 
 End Function
 
-Private Function BuildConstraintValidationMessage( _
-    ByRef arrConstraints As Variant, _
-    ByVal rowIdx As Long, _
-    ByVal mapConstraints As Object, _
-    ByVal frPrefix As String, _
-    ByVal enPrefix As String, _
-    Optional ByVal frExplanation As String = "", _
-    Optional ByVal enExplanation As String = "") As String
-
-    Dim idVal As String
-    Dim wbsVal As String
-    Dim taskName As String
-    Dim frText As String
-    Dim enText As String
-
-    idVal = Trim$(CStr(arrConstraints(rowIdx, mapConstraints("ID"))))
-    wbsVal = Trim$(CStr(arrConstraints(rowIdx, mapConstraints("WBS"))))
-    taskName = Trim$(CStr(arrConstraints(rowIdx, mapConstraints("Task Name"))))
-
-    frText = "FR:" & vbCrLf & frPrefix
-    If Trim$(frExplanation) <> "" Then
-        frText = frText & vbCrLf & vbCrLf & "-> " & frExplanation
-    End If
-    frText = frText & vbCrLf & vbCrLf & _
-        "ID : " & idVal & vbCrLf & _
-        "WBS : " & wbsVal & vbCrLf & _
-        "Task : " & taskName
-
-    enText = "EN:" & vbCrLf & enPrefix
-    If Trim$(enExplanation) <> "" Then
-        enText = enText & vbCrLf & vbCrLf & "-> " & enExplanation
-    End If
-    enText = enText & vbCrLf & vbCrLf & _
-        "ID: " & idVal & vbCrLf & _
-        "WBS: " & wbsVal & vbCrLf & _
-        "Task: " & taskName
-
-    BuildConstraintValidationMessage = frText & vbCrLf & vbCrLf & enText
-
-End Function
-
-Private Sub AddConstraintWarning( _
-    ByVal consoleMessages As Collection, _
-    ByVal messageText As String, _
-    Optional ByVal historyHandled As Boolean = False, _
-    Optional ByVal eventType As String = "", _
-    Optional ByVal eventHash As String = "")
-
-    If consoleMessages Is Nothing Then Exit Sub
-
-    CalcBridge_AddConsoleMessage consoleMessages, "WARNING", messageText, historyHandled, eventType, eventHash
-
-End Sub
-
+'------------------------------------------------------------------------------
+' FR: Indique si Active Constraints est vrai pour le contexte courant.
+' EN: Returns whether Active Constraints is true for the current context.
+'------------------------------------------------------------------------------
 Private Function HasActiveConstraints( _
     ByVal tblConstraints As ListObject, _
     ByVal mapConstraints As Object) As Boolean
@@ -822,6 +823,10 @@ NextRow:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Active Value dans un format exploitable.
+' EN: Normalizes Active Value into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeActiveValue(ByVal rawValue As Variant) As String
 
     Dim s As String
@@ -836,6 +841,11 @@ Private Function NormalizeActiveValue(ByVal rawValue As Variant) As String
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Calc Constraint Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Calc Constraint Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyCalcConstraintFormats(ByVal tblCalc As ListObject)
 
@@ -853,6 +863,10 @@ Private Sub ApplyCalcConstraintFormats(ByVal tblCalc As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit Calc Constraint Columns vers le stockage cible.
+' EN: Writes Calc Constraint Columns to the target storage.
+'------------------------------------------------------------------------------
 Private Sub WriteCalcConstraintColumns( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -874,6 +888,10 @@ Private Sub WriteCalcConstraintColumns( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne Constraint Column Array depuis le contexte constraints.
+' EN: Returns Constraint Column Array from the constraints context.
+'------------------------------------------------------------------------------
 Private Function GetConstraintColumnArray( _
     ByRef sourceArr As Variant, _
     ByVal colIndex As Long) As Variant
@@ -891,6 +909,11 @@ Private Function GetConstraintColumnArray( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Existing Constraint Rows a partir des donnees fournies par l'appelant.
+' EN: Builds the Existing Constraint Rows map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildExistingConstraintRows( _
     ByVal tbl As ListObject, _
@@ -942,6 +965,11 @@ Private Function BuildExistingConstraintRows( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Count Constraint Source Rows sans exposer de mutateur sur l'etat source.
+' EN: Returns the Count Constraint Source Rows map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function CountConstraintSourceRows( _
     ByRef arrWBS As Variant, _
     ByVal mapWBS As Object) As Long
@@ -955,6 +983,11 @@ Private Function CountConstraintSourceRows( _
     Next r
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Constraint Source Row Has IDentity sans modifier les donnees d'entree.
+' EN: Returns the Constraint Source Row Has IDentity map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function ConstraintSourceRowHasIdentity( _
     ByRef arrWBS As Variant, _
@@ -972,6 +1005,11 @@ Private Function ConstraintSourceRowHasIdentity( _
     ConstraintSourceRowHasIdentity = (idVal <> "" Or wbsVal <> "")
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Construit la map Summary WBS Map a partir des donnees fournies par l'appelant.
+' EN: Builds the Summary WBS Map map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildSummaryWbsMap( _
     ByRef arrWBS As Variant, _
     ByVal mapWBS As Object) As Object
@@ -993,6 +1031,11 @@ Private Function BuildSummaryWbsMap( _
     Set BuildSummaryWbsMap = d
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Alimente la map Constraint Output Row From WBS dans la structure cible fournie par l'appelant.
+' EN: Populates the Constraint Output Row From WBS map in the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub FillConstraintOutputRowFromWBS( _
     ByRef outArr() As Variant, _
@@ -1032,6 +1075,11 @@ Private Sub FillConstraintOutputRowFromWBS( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Alimente la map Constraint Output Row From Existing dans la structure cible fournie par l'appelant.
+' EN: Populates the Constraint Output Row From Existing map in the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub FillConstraintOutputRowFromExisting( _
     ByRef outArr() As Variant, _
     ByVal outRow As Long, _
@@ -1054,6 +1102,10 @@ Private Sub FillConstraintOutputRowFromExisting( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Mirror Field est vrai pour le contexte courant.
+' EN: Returns whether Planning Mirror Field is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsPlanningMirrorField(ByVal fieldName As String) As Boolean
 
     Select Case fieldName
@@ -1065,6 +1117,11 @@ Private Function IsPlanningMirrorField(ByVal fieldName As String) As Boolean
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Traite la map Copy Preserved Constraint Fields sans modifier les donnees d'entree.
+' EN: Handles the Copy Preserved Constraint Fields map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Sub CopyPreservedConstraintFields( _
     ByRef outArr() As Variant, _
@@ -1100,6 +1157,13 @@ Private Sub CopyPreservedConstraintFields( _
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Resize Table To Row Count Constraints sans modifier les donnees d'entree.
+' EN: Handles the Resize Table To Row Count Constraints reference without mutating input data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub ResizeTableToRowCount_Constraints( _
     ByVal tbl As ListObject, _
@@ -1137,6 +1201,11 @@ Private Sub ResizeTableToRowCount_Constraints( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Constraints Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Constraints Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub ApplyConstraintsFormats(ByVal tbl As ListObject)
 
     On Error Resume Next
@@ -1166,6 +1235,13 @@ tbl.ListColumns("Active").Range.NumberFormat = "@"
     On Error GoTo 0
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Constraints Validation sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Constraints Validation without changing the business rules that produce the data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
 
@@ -1221,6 +1297,38 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Desactive toutes les contraintes existantes sans creer la feuille ou la table.
+' EN: Deactivates all existing constraints without creating the sheet or table.
+'------------------------------------------------------------------------------
+Public Sub Constraints_DeactivateAll()
 
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim activeCol As ListColumn
+    Dim col As ListColumn
+    Dim normalizedName As String
 
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(CONSTRAINTS_SHEET_NAME)
+    If Not ws Is Nothing Then Set tbl = ws.ListObjects(CONSTRAINTS_TABLE_NAME)
+    On Error GoTo 0
 
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    For Each col In tbl.ListColumns
+        normalizedName = UCase$(Trim$(CStr(col.Name)))
+        Select Case normalizedName
+            Case "CONSTRAINT ACTIVE", "ACTIVE", "IS ACTIVE"
+                Set activeCol = col
+                Exit For
+        End Select
+    Next col
+
+    If activeCol Is Nothing Then Exit Sub
+    If activeCol.DataBodyRange Is Nothing Then Exit Sub
+
+    activeCol.DataBodyRange.value = "No"
+
+End Sub

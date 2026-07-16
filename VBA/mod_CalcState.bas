@@ -1,9 +1,30 @@
 Attribute VB_Name = "mod_CalcState"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_CalcState
+' DOMAINE / DOMAIN : Calculation / Data Sync
+'
+' FR
+' Possede l'etat runtime du domaine et ses transitions explicites.
+' Ne persiste ni ne recalcule les donnees metier sauf mention contraire.
+'
+' EN
+' Owns domain runtime state and its explicit transitions.
+' Does not persist or recalculate business data unless stated otherwise.
+'
+' CONTRATS / CONTRACTS : Ensure_CalcState_Table, Ensure_CalcState_Table_Console, Write_CalcState_Snapshot, Write_CalcState_Snapshot_Console, CalcState_ResetStorage, CalcState_GetSignatureByIdMap, CalcState_GetRunStatus, CalcState_MarkDirty
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const CALC_STATE_SHEET_NAME As String = "CALC_STATE"
 Private Const CALC_STATE_TABLE_NAME As String = "tbl_CALC_STATE"
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Calc State Table si necessaire.
+' EN: Ensures or creates Calc State Table when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_CalcState_Table()
 
     Dim localConsole As Collection
@@ -17,6 +38,10 @@ Public Sub Ensure_CalcState_Table()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Calc State Table Console si necessaire.
+' EN: Ensures or creates Calc State Table Console when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_CalcState_Table_Console(ByVal consoleMessages As Collection)
 
     Dim wsState As Worksheet
@@ -51,6 +76,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit Calc State Snapshot vers le stockage cible.
+' EN: Writes Calc State Snapshot to the target storage.
+'------------------------------------------------------------------------------
 Public Sub Write_CalcState_Snapshot(ByVal runStatus As String)
 
     Dim localConsole As Collection
@@ -65,6 +94,10 @@ Public Sub Write_CalcState_Snapshot(ByVal runStatus As String)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Ecrit Calc State Snapshot Console vers le stockage cible.
+' EN: Writes Calc State Snapshot Console to the target storage.
+'------------------------------------------------------------------------------
 Public Sub Write_CalcState_Snapshot_Console( _
     ByVal runStatus As String, _
     ByVal consoleMessages As Collection)
@@ -138,7 +171,7 @@ Public Sub Write_CalcState_Snapshot_Console( _
         arrOut(r, mapState("Finish Constraint Type")) = GetCalcStateVal(arrCalc, r, mapCalc, "Finish Constraint Type")
         arrOut(r, mapState("Finish Constraint Date")) = GetCalcStateVal(arrCalc, r, mapCalc, "Finish Constraint Date")
 
-        arrOut(r, mapState("Row Signature")) = BuildCalcStateRowSignature(arrCalc, r, mapCalc)
+        arrOut(r, mapState("Row Signature")) = IncrementalSignature_BuildRow(arrCalc, r, mapCalc)
         arrOut(r, mapState("Run Status")) = UCase$(Trim$(runStatus))
 
     Next r
@@ -159,6 +192,11 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Calc State Add Stop To Console a la structure cible fournie par l'appelant.
+' EN: Adds the Calc State Add Stop To Console collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub CalcState_AddStopToConsole( _
     ByVal consoleMessages As Collection, _
     ByVal frText As String, _
@@ -170,6 +208,11 @@ Private Sub CalcState_AddStopToConsole( _
         BiMsg(frText, enText)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Calc State Headers a partir des donnees fournies par l'appelant.
+' EN: Builds the Calc State Headers value from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildCalcStateHeaders() As Variant
 
@@ -200,6 +243,10 @@ Private Function BuildCalcStateHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Worksheet Exists Calc State si necessaire.
+' EN: Ensures or creates Worksheet Exists Calc State when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureWorksheetExists_CalcState( _
     ByVal sheetName As String, _
     Optional ByRef wasCreated As Boolean = False) As Worksheet
@@ -228,6 +275,10 @@ Private Function EnsureWorksheetExists_CalcState( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Table With Headers Calc State si necessaire.
+' EN: Ensures or creates Table With Headers Calc State when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureTableWithHeaders_CalcState( _
     ByVal ws As Worksheet, _
     ByVal tableName As String, _
@@ -289,6 +340,11 @@ Private Function EnsureTableWithHeaders_CalcState( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la map Column Map CALC State a partir des donnees fournies par l'appelant.
+' EN: Builds the Column Map CALC State map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildColumnMap_CalcState(ByVal tbl As ListObject) As Object
 
     Dim d As Object
@@ -304,30 +360,16 @@ Private Function BuildColumnMap_CalcState(ByVal tbl As ListObject) As Object
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Valide Calc State Source Columns et signale les incoherences detectees.
+' EN: Validates Calc State Source Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateCalcStateSourceColumns(ByVal mapCalc As Object)
 
     Dim requiredCols As Variant
     Dim c As Variant
 
-    requiredCols = Array( _
-        "ID", _
-        "ParentID", _
-        "IsSummary", _
-        "Predecessors WBS", _
-        "Cal", _
-        "Baseline Start", _
-        "Baseline Duration", _
-        "Actual Start", _
-        "Actual Finish", _
-        "Forecast Start", _
-        "Forecast Finish", _
-                "Deadline", _
-        "Constraint Active", _
-        "Start Constraint Type", _
-        "Start Constraint Date", _
-        "Finish Constraint Type", _
-        "Finish Constraint Date" _
-    )
+    requiredCols = IncrementalSignature_RequiredColumns()
 
     For Each c In requiredCols
         If Not mapCalc.Exists(CStr(c)) Then
@@ -339,6 +381,10 @@ Private Sub ValidateCalcStateSourceColumns(ByVal mapCalc As Object)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide Calc State Target Columns et signale les incoherences detectees.
+' EN: Validates Calc State Target Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateCalcStateTargetColumns(ByVal mapState As Object)
 
     Dim requiredCols As Variant
@@ -377,6 +423,13 @@ Private Sub ValidateCalcStateTargetColumns(ByVal mapState As Object)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference Resize Table To Row Count CALC State sans modifier les donnees d'entree.
+' EN: Handles the Resize Table To Row Count CALC State reference without mutating input data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub ResizeTableToRowCount_CalcState(ByVal tbl As ListObject, ByVal targetRows As Long)
 
     Dim currentRows As Long
@@ -406,6 +459,11 @@ Private Sub ResizeTableToRowCount_CalcState(ByVal tbl As ListObject, ByVal targe
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Calc State Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Calc State Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyCalcStateFormats(ByVal tbl As ListObject)
 
@@ -438,6 +496,10 @@ Private Sub ApplyCalcStateFormats(ByVal tbl As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne Calc State Val depuis le contexte calculation state.
+' EN: Returns Calc State Val from the calculation state context.
+'------------------------------------------------------------------------------
 Private Function GetCalcStateVal( _
     ByRef arr As Variant, _
     ByVal rowIdx As Long, _
@@ -453,151 +515,128 @@ Private Function GetCalcStateVal( _
 
 End Function
 
-Private Function BuildCalcStateRowSignature( _
-    ByRef arrCalc As Variant, _
-    ByVal rowIdx As Long, _
-    ByVal mapCalc As Object) As String
-
-    Dim s As String
-
-    s = ""
-    s = s & "|ID=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "ID"), "TEXT")
-    s = s & "|ParentID=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "ParentID"), "TEXT")
-    s = s & "|IsSummary=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "IsSummary"), "BOOLEAN")
-    s = s & "|PredWBS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Predecessors WBS"), "PREDWBS")
-    s = s & "|Cal=" & NormalizeIncrementalSignatureValue(NormalizeCalendarType(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Cal")), "TEXT")
-
-    s = s & "|BS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Baseline Start"), "DATE")
-    s = s & "|BD=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Baseline Duration"), "NUMBER")
-    s = s & "|AS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Actual Start"), "DATE")
-    s = s & "|AF=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Actual Finish"), "DATE")
-    s = s & "|FS=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Forecast Start"), "DATE")
-    s = s & "|FF=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Forecast Finish"), "DATE")
-        s = s & "|DL=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Deadline"), "DATE")
-    s = s & "|CActive=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Constraint Active"), "BOOLEAN")
-    s = s & "|SCType=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Start Constraint Type"), "TEXT")
-    s = s & "|SCDate=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Start Constraint Date"), "DATE")
-    s = s & "|FCType=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Finish Constraint Type"), "TEXT")
-    s = s & "|FCDate=" & NormalizeIncrementalSignatureValue(GetCalcStateVal(arrCalc, rowIdx, mapCalc, "Finish Constraint Date"), "DATE")
-
-    BuildCalcStateRowSignature = s
-
-End Function
+'------------------------------------------------------------------------------
+' FR: Construit Calc State Row Signature pour le traitement calculation state.
+' EN: Builds Calc State Row Signature for calculation state processing.
 
 
-Public Function NormalizeIncrementalSignatureValue( _
-    ByVal v As Variant, _
-    Optional ByVal valueKind As String = "TEXT") As String
+'------------------------------------------------------------------------------
+' FR: Normalise Incremental Signature Value dans un format exploitable.
+' EN: Normalizes Incremental Signature Value into a usable format.
 
-    Select Case UCase$(Trim$(valueKind))
+'------------------------------------------------------------------------------
+' FR: Normalise Incremental Signature Boolean dans un format exploitable.
+' EN: Normalizes Incremental Signature Boolean into a usable format.
 
-        Case "BOOLEAN"
-            NormalizeIncrementalSignatureValue = NormalizeIncrementalSignatureBoolean(v)
+'------------------------------------------------------------------------------
+' FR: Normalise Incremental Signature Date dans un format exploitable.
+' EN: Normalizes Incremental Signature Date into a usable format.
 
-        Case "DATE"
-            NormalizeIncrementalSignatureValue = NormalizeIncrementalSignatureDate(v)
+'------------------------------------------------------------------------------
+' FR: Normalise Incremental Signature Number dans un format exploitable.
+' EN: Normalizes Incremental Signature Number into a usable format.
 
-        Case "NUMBER"
-            NormalizeIncrementalSignatureValue = NormalizeIncrementalSignatureNumber(v)
+'------------------------------------------------------------------------------
+' FR: Normalise Incremental Signature Text dans un format exploitable.
+' EN: Normalizes Incremental Signature Text into a usable format.
 
-        Case "PREDWBS"
-            NormalizeIncrementalSignatureValue = NormalizeIncrementalSignatureText(v, True)
+'------------------------------------------------------------------------------
+' FR: Supprime toutes les lignes de CALC_STATE sans creer son infrastructure.
+' EN: Deletes every CALC_STATE row without creating its infrastructure.
+'------------------------------------------------------------------------------
+Public Sub CalcState_ResetStorage()
 
-        Case Else
-            NormalizeIncrementalSignatureValue = NormalizeIncrementalSignatureText(v, False)
+    Dim ws As Worksheet
+    Dim tbl As ListObject
 
-    End Select
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME)
+    If Not ws Is Nothing Then Set tbl = ws.ListObjects(CALC_STATE_TABLE_NAME)
+    On Error GoTo 0
 
-End Function
+    If tbl Is Nothing Then Exit Sub
 
-Private Function NormalizeIncrementalSignatureBoolean(ByVal v As Variant) As String
+    ResizeTableToRowCount_CalcState tbl, 0
 
-    Dim s As String
+End Sub
 
-    If IsEmpty(v) Then Exit Function
-    If IsNull(v) Then Exit Function
+'------------------------------------------------------------------------------
+' FR: Lit le snapshot incremental sous forme ID -> signature sans exposer le schema CALC_STATE.
+' EN: Reads the incremental snapshot as ID -> signature without exposing the CALC_STATE schema.
+'------------------------------------------------------------------------------
+Public Function CalcState_GetSignatureByIdMap() As Object
 
-    If VarType(v) = vbBoolean Then
-        If CBool(v) Then
-            NormalizeIncrementalSignatureBoolean = "TRUE"
-        Else
-            NormalizeIncrementalSignatureBoolean = "FALSE"
-        End If
-        Exit Function
-    End If
+    Dim result As Object
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim mapState As Object
+    Dim arrState As Variant
+    Dim r As Long
+    Dim idVal As String
 
-    s = UCase$(Trim$(CStr(v)))
+    Set result = CreateObject("Scripting.Dictionary")
+    On Error GoTo SafeExit
+    Set ws = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME)
+    Set tbl = ws.ListObjects(CALC_STATE_TABLE_NAME)
+    If tbl.DataBodyRange Is Nothing Then GoTo SafeExit
 
-    Select Case s
+    Set mapState = BuildColumnMap_CalcState(tbl)
+    If Not mapState.Exists("ID") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", "Missing required column in tbl_CALC_STATE: ID"
+    If Not mapState.Exists("Row Signature") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", "Missing required column in tbl_CALC_STATE: Row Signature"
+    arrState = tbl.DataBodyRange.value
 
-        Case "TRUE", "VRAI", "-1", "1", "YES", "OUI"
-            NormalizeIncrementalSignatureBoolean = "TRUE"
+    For r = 1 To UBound(arrState, 1)
+        idVal = Trim$(CStr(arrState(r, mapState("ID"))))
+        If idVal <> "" Then result(idVal) = Trim$(CStr(arrState(r, mapState("Row Signature"))))
+    Next r
 
-        Case "FALSE", "FAUX", "0", "NO", "NON", ""
-            NormalizeIncrementalSignatureBoolean = "FALSE"
-
-        Case Else
-            NormalizeIncrementalSignatureBoolean = s
-
-    End Select
+SafeExit:
+    Set CalcState_GetSignatureByIdMap = result
 
 End Function
 
-Private Function NormalizeIncrementalSignatureDate(ByVal v As Variant) As String
+'------------------------------------------------------------------------------
+' FR: Retourne le statut du snapshot incremental courant, ou une chaine vide s'il est absent.
+' EN: Returns the current incremental snapshot status, or an empty string when absent.
+'------------------------------------------------------------------------------
+Public Function CalcState_GetRunStatus() As String
 
-    If IsEmpty(v) Then Exit Function
-    If IsNull(v) Then Exit Function
-    If Trim$(CStr(v)) = "" Then Exit Function
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim mapState As Object
+    Dim arrState As Variant
 
-    On Error GoTo Fallback
+    On Error GoTo SafeExit
+    Set ws = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME)
+    Set tbl = ws.ListObjects(CALC_STATE_TABLE_NAME)
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    Set mapState = BuildColumnMap_CalcState(tbl)
+    If Not mapState.Exists("Run Status") Then Exit Function
+    arrState = tbl.DataBodyRange.value
+    CalcState_GetRunStatus = Trim$(CStr(arrState(1, mapState("Run Status"))))
 
-    If IsDate(v) Then
-        NormalizeIncrementalSignatureDate = Format$(CDate(v), "yyyymmdd")
-        Exit Function
-    End If
-
-    If IsNumeric(v) Then
-        If CDbl(v) > 0 Then
-            NormalizeIncrementalSignatureDate = Format$(CDate(CDbl(v)), "yyyymmdd")
-            Exit Function
-        End If
-    End If
-
-Fallback:
-    NormalizeIncrementalSignatureDate = Trim$(CStr(v))
-
+SafeExit:
 End Function
 
-Private Function NormalizeIncrementalSignatureNumber(ByVal v As Variant) As String
+'------------------------------------------------------------------------------
+' FR: Invalide le snapshot incremental existant en positionnant son statut a DIRTY.
+' EN: Invalidates the existing incremental snapshot by setting its status to DIRTY.
+'------------------------------------------------------------------------------
+Public Sub CalcState_MarkDirty()
 
-    If IsEmpty(v) Then Exit Function
-    If IsNull(v) Then Exit Function
-    If Trim$(CStr(v)) = "" Then Exit Function
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim mapState As Object
 
-    If IsNumeric(v) Then
-        NormalizeIncrementalSignatureNumber = Format$(CDbl(v), "0.############")
-    Else
-        NormalizeIncrementalSignatureNumber = Trim$(CStr(v))
-    End If
+    On Error GoTo SafeExit
+    Set ws = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME)
+    Set tbl = ws.ListObjects(CALC_STATE_TABLE_NAME)
 
-End Function
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    Set mapState = BuildColumnMap_CalcState(tbl)
+    If Not mapState.Exists("Run Status") Then Exit Sub
 
-Private Function NormalizeIncrementalSignatureText( _
-    ByVal v As Variant, _
-    Optional ByVal removeSpaces As Boolean = False) As String
+    tbl.ListColumns("Run Status").DataBodyRange.value = "DIRTY"
 
-    Dim s As String
-
-    If IsEmpty(v) Then Exit Function
-    If IsNull(v) Then Exit Function
-
-    s = Trim$(CStr(v))
-
-    If removeSpaces Then
-        s = Replace$(s, " ", "")
-    End If
-
-    NormalizeIncrementalSignatureText = s
-
-End Function
-
+SafeExit:
+End Sub

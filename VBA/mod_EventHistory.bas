@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_EventHistory"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_EventHistory
+' DOMAINE / DOMAIN : Event History / ACK
+'
+' FR
+' Possede le journal des evenements planning, les ACK et leur projection UI.
+' Ne produit pas les diagnostics metier qu'il journalise.
+'
+' EN
+' Owns planning event history, ACK state and their UI projection.
+' Does not produce the business diagnostics it records.
+'
+' CONTRATS / CONTRACTS : BeginPlanningEventRun, EndPlanningEventRun, EventHistory_SetLanguage, EventHistory_ApplyLanguage, ShouldShowInfoOnlyPlanningConsole, EventHistory_SetShowInfo, EventHistory_CurrentShowInfo, Toggle_EventHistory_Info
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const CALC_ALARM_SHEET As String = "CALC_ALARM"
 Private Const CALC_ALARM_TABLE As String = "tbl_CALC_ALARM"
 Private Const EVENT_HISTORY_SHEET As String = "EVENT_HISTORY"
@@ -27,6 +44,10 @@ Private gPlanningLanguage As String
 Private gEventHistoryUiStateBootstrapped As Boolean
 Private gEventHistoryInternalWriteDepth As Long
 
+'------------------------------------------------------------------------------
+' FR: Ouvre le cycle de traitement Planning Event Run.
+' EN: Begins the Planning Event Run processing cycle.
+'------------------------------------------------------------------------------
 Public Sub BeginPlanningEventRun(Optional ByVal sourceProcedure As String = "")
 
     gPlanningEventRunId = BuildPlanningEventRunId(sourceProcedure)
@@ -34,12 +55,21 @@ Public Sub BeginPlanningEventRun(Optional ByVal sourceProcedure As String = "")
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ferme le cycle de traitement Planning Event Run.
+' EN: Ends the Planning Event Run processing cycle.
+'------------------------------------------------------------------------------
 Public Sub EndPlanningEventRun()
 
     gPlanningEventRunActive = False
     gPlanningEventRunId = vbNullString
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Language dans l'etat runtime du composant.
+' EN: Activates or initializes Set Language in the component runtime state.
+'------------------------------------------------------------------------------
 
 Public Sub EventHistory_SetLanguage(ByVal languageCode As String)
 
@@ -56,6 +86,11 @@ Public Sub EventHistory_SetLanguage(ByVal languageCode As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Language sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Language without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Public Sub EventHistory_ApplyLanguage(Optional ByVal languageCode As String = "")
 
     If Trim$(languageCode) <> "" Then EventHistory_SetLanguage languageCode
@@ -63,25 +98,43 @@ Public Sub EventHistory_ApplyLanguage(Optional ByVal languageCode As String = ""
 
 End Sub
 
-Public Function EventHistory_CurrentLanguage() As String
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Language sans exposer de mutateur sur l'etat source.
+' EN: Returns the Language value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
+Private Function EventHistory_CurrentLanguage() As String
 
     EnsureEventHistoryState
     EventHistory_CurrentLanguage = gPlanningLanguage
 
 End Function
 
-Public Function GetPlanningConsoleLanguage() As String
+'------------------------------------------------------------------------------
+' FR: Retourne Planning Console Language depuis le contexte event history and acknowledgements.
+' EN: Returns Planning Console Language from the event history and acknowledgements context.
+'------------------------------------------------------------------------------
+Private Function GetPlanningConsoleLanguage() As String
 
     GetPlanningConsoleLanguage = EventHistory_CurrentLanguage()
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Should Show Info Only Planning Console est vrai pour le contexte courant.
+' EN: Returns whether Should Show Info Only Planning Console is true for the current context.
+'------------------------------------------------------------------------------
 Public Function ShouldShowInfoOnlyPlanningConsole() As Boolean
 
     EnsureEventHistoryState
     ShouldShowInfoOnlyPlanningConsole = gEventHistoryShowInfo
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Show Info dans l'etat runtime du composant.
+' EN: Activates or initializes Set Show Info in the component runtime state.
+'------------------------------------------------------------------------------
 
 Public Sub EventHistory_SetShowInfo(ByVal showInfo As Boolean)
 
@@ -90,12 +143,21 @@ Public Sub EventHistory_SetShowInfo(ByVal showInfo As Boolean)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Show Info sans exposer de mutateur sur l'etat source.
+' EN: Returns the Show Info value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function EventHistory_CurrentShowInfo() As Boolean
 
     EventHistory_CurrentShowInfo = ShouldShowInfoOnlyPlanningConsole()
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Event History Info et met a jour les sorties associees.
+' EN: Toggles Event History Info state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_EventHistory_Info()
 
     Dim wsHistory As Worksheet
@@ -117,6 +179,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Event History Language et met a jour les sorties associees.
+' EN: Toggles Event History Language state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_EventHistory_Language()
 
     Dim oldScreenUpdating As Boolean
@@ -140,6 +206,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite un changement ou evenement pour Event History Change.
+' EN: Handles a change or event for Event History Change.
+'------------------------------------------------------------------------------
 Public Sub Handle_EventHistory_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     On Error GoTo SafeExit
@@ -167,6 +237,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Allowed Manual Event Ack Change est vrai pour le contexte courant.
+' EN: Returns whether Allowed Manual Event Ack Change is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsAllowedManualEventAckChange(ByVal ws As Worksheet, ByVal Target As Range) As Boolean
 
     Dim tblAck As ListObject
@@ -192,6 +266,10 @@ Private Function IsAllowedManualEventAckChange(ByVal ws As Worksheet, ByVal Targ
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Manual Event Ack Rows dans un format exploitable.
+' EN: Normalizes Manual Event Ack Rows into a usable format.
+'------------------------------------------------------------------------------
 Private Sub NormalizeManualEventAckRows(ByVal ws As Worksheet, ByVal Target As Range)
 
     Dim tblAck As ListObject
@@ -228,6 +306,10 @@ Private Sub NormalizeManualEventAckRows(ByVal ws As Worksheet, ByVal Target As R
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Event History View a partir de l'etat courant.
+' EN: Refreshes Event History View from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_EventHistory_View()
 
     Dim perfScope As clsPerfScope
@@ -301,6 +383,10 @@ CleanFail:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Planning Console Message For Current Language pour l'affichage ou l'ecriture.
+' EN: Formats Planning Console Message For Current Language for display or writing.
+'------------------------------------------------------------------------------
 Public Function FormatPlanningConsoleMessageForCurrentLanguage(ByVal rawMessage As String) As String
 
     Dim txt As String
@@ -342,6 +428,11 @@ Public Function FormatPlanningConsoleMessageForCurrentLanguage(ByVal rawMessage 
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Warning Ack Token a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Warning Ack Token value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Public Function BuildPlanningWarningAckToken( _
     ByVal eventType As String, _
     ByVal eventHash As String) As String
@@ -352,6 +443,11 @@ Public Function BuildPlanningWarningAckToken( _
     BuildPlanningWarningAckToken = UCase$(Trim$(eventType)) & "|" & Trim$(eventHash)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Planning Message Is Acknowledged sans modifier les donnees d'entree.
+' EN: Returns the Planning Message Is Acknowledged map without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant) As Boolean
 
@@ -384,6 +480,11 @@ Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant) As Boolean
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Planning Message Can Acknowledge sans modifier les donnees d'entree.
+' EN: Returns the Planning Message Can Acknowledge value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function PlanningMessage_CanAcknowledge(ByVal item As Variant) As Boolean
 
     On Error GoTo SafeExit
@@ -394,6 +495,10 @@ Public Function PlanningMessage_CanAcknowledge(ByVal item As Variant) As Boolean
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Planning Warning Ack State dans le contexte event history and acknowledgements.
+' EN: Updates Planning Warning Ack State in the event history and acknowledgements context.
+'------------------------------------------------------------------------------
 Public Sub SetPlanningWarningAckState( _
     ByVal item As Variant, _
     ByVal acknowledged As Boolean)
@@ -435,6 +540,10 @@ SafeExit:
     End If
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Planning Warning Acknowledgements.
+' EN: Clears or resets Planning Warning Acknowledgements.
+'------------------------------------------------------------------------------
 Public Sub ClearPlanningWarningAcknowledgements()
 
     Dim wsAlarm As Worksheet
@@ -463,6 +572,10 @@ CleanFail:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Planning Event History.
+' EN: Clears or resets Planning Event History.
+'------------------------------------------------------------------------------
 Public Sub ClearPlanningEventHistory()
 
     Dim wsAlarm As Worksheet
@@ -494,7 +607,12 @@ CleanFail:
 
 End Sub
 
-Public Function PlanningMessage_BuildAckTokens(ByVal item As Variant) As String
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Message Build Ack Tokens a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Message Build Ack Tokens value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
+Private Function PlanningMessage_BuildAckTokens(ByVal item As Variant) As String
 
     Dim rawMessage As String
     Dim eventType As String
@@ -528,6 +646,10 @@ Public Function PlanningMessage_BuildAckTokens(ByVal item As Variant) As String
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Event History Infrastructure si necessaire.
+' EN: Ensures or creates Planning Event History Infrastructure when needed.
+'------------------------------------------------------------------------------
 Public Sub EnsurePlanningEventHistoryInfrastructure()
 
     Dim wsAlarm As Worksheet
@@ -570,6 +692,10 @@ CleanFail:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Journalise Planning Event dans l'historique planning.
+' EN: Logs Planning Event into the planning history.
+'------------------------------------------------------------------------------
 Public Sub LogPlanningEvent( _
     ByVal severity As String, _
     ByVal eventType As String, _
@@ -660,6 +786,11 @@ CleanFail:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Planning Events Log Console Messages Safe dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Planning Events Log Console Messages Safe in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Public Function PlanningEvents_LogConsoleMessagesSafe( _
     ByVal consoleMessages As Collection, _
     ByVal sourceProcedure As String, _
@@ -701,7 +832,11 @@ Fail:
     Resume CleanExit
 
 End Function
-Public Sub LogPlanningConsoleMessages( _
+'------------------------------------------------------------------------------
+' FR: Journalise Planning Console Messages dans l'historique planning.
+' EN: Logs Planning Console Messages into the planning history.
+'------------------------------------------------------------------------------
+Private Sub LogPlanningConsoleMessages( _
     ByVal consoleMessages As Collection, _
     Optional ByVal sourceProcedure As String = "CalcBridge_ShowPlanningConsole")
 
@@ -780,6 +915,11 @@ CleanFail:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Event Hash a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Event Hash value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Public Function BuildPlanningEventHash( _
     ByVal severity As String, _
     ByVal eventType As String, _
@@ -804,7 +944,12 @@ Public Function BuildPlanningEventHash( _
 
 End Function
 
-Public Function BuildPlanningEventSignature( _
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Event Signature a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Event Signature value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
+Private Function BuildPlanningEventSignature( _
     ByVal severity As String, _
     ByVal eventType As String, _
     ByVal frMessage As String, _
@@ -838,6 +983,10 @@ Public Function BuildPlanningEventSignature( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Hash Planning Event Signature est vrai pour le contexte courant.
+' EN: Returns whether Hash Planning Event Signature is true for the current context.
+'------------------------------------------------------------------------------
 Private Function HashPlanningEventSignature(ByVal rawText As String) As String
 
     Dim i As Long
@@ -853,6 +1002,11 @@ Private Function HashPlanningEventSignature(ByVal rawText As String) As String
     HashPlanningEventSignature = "EVH-" & Format$(CLng(acc), "0000000000")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur First Planning Event Message Line sans modifier les donnees d'entree.
+' EN: Returns the First Planning Event Message Line value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function FirstPlanningEventMessageLine(ByVal value As String) As String
 
@@ -872,6 +1026,11 @@ Private Function FirstPlanningEventMessageLine(ByVal value As String) As String
     Next i
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Extract Planning Event Context Line sans modifier les donnees d'entree.
+' EN: Returns the Extract Planning Event Context Line value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function ExtractPlanningEventContextLine( _
     ByVal value As String, _
@@ -902,6 +1061,10 @@ Private Function ExtractPlanningEventContextLine( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Planning Event Signature Text dans un format exploitable.
+' EN: Normalizes Planning Event Signature Text into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizePlanningEventSignatureText(ByVal value As String) As String
 
     Dim txt As String
@@ -917,6 +1080,11 @@ Private Function NormalizePlanningEventSignatureText(ByVal value As String) As S
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Console Message History Handled sans modifier les donnees d'entree.
+' EN: Returns the Console Message History Handled value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function ConsoleMessageHistoryHandled(ByVal item As Variant) As Boolean
 
     On Error Resume Next
@@ -925,6 +1093,10 @@ Private Function ConsoleMessageHistoryHandled(ByVal item As Variant) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Console Event Severity dans un format exploitable.
+' EN: Normalizes Console Event Severity into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeConsoleEventSeverity(ByVal msgType As String) As String
 
     Select Case UCase$(Trim$(msgType))
@@ -939,6 +1111,11 @@ Private Function NormalizeConsoleEventSeverity(ByVal msgType As String) As Strin
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Transforme la valeur Split Console Message For History sans modifier la semantique du message source.
+' EN: Transforms the Split Console Message For History value without changing source-message semantics.
+'------------------------------------------------------------------------------
 
 Private Sub SplitConsoleMessageForHistory( _
     ByVal rawMessage As String, _
@@ -981,6 +1158,11 @@ Private Sub SplitConsoleMessageForHistory( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Trim Planning Message Line Edges sans modifier les donnees d'entree.
+' EN: Returns the Trim Planning Message Line Edges value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function TrimPlanningMessageLineEdges(ByVal value As String) As String
 
     Dim txt As String
@@ -999,6 +1181,11 @@ Private Function TrimPlanningMessageLineEdges(ByVal value As String) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Console Local Dedup Key a partir des donnees fournies par l'appelant.
+' EN: Builds the Console Local Dedup Key value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildConsoleLocalDedupKey( _
     ByVal severity As String, _
     ByVal frMessage As String, _
@@ -1014,6 +1201,10 @@ Private Function BuildConsoleLocalDedupKey( _
         Trim$(enDetails)
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Event Run Id si necessaire.
+' EN: Ensures or creates Planning Event Run Id when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsurePlanningEventRunId(ByVal sourceProcedure As String)
 
     If Trim$(gPlanningEventRunId) = "" Or Not gPlanningEventRunActive Then
@@ -1023,6 +1214,11 @@ Private Sub EnsurePlanningEventRunId(ByVal sourceProcedure As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Event Run ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Event Run ID value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildPlanningEventRunId(ByVal sourceProcedure As String) As String
 
     BuildPlanningEventRunId = _
@@ -1031,6 +1227,11 @@ Private Function BuildPlanningEventRunId(ByVal sourceProcedure As String) As Str
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Event ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Event ID value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildPlanningEventId(ByVal rowCount As Long, ByVal eventTs As Date) As String
 
     BuildPlanningEventId = _
@@ -1038,6 +1239,10 @@ Private Function BuildPlanningEventId(ByVal rowCount As Long, ByVal eventTs As D
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Event Sheet si necessaire.
+' EN: Ensures or creates Planning Event Sheet when needed.
+'------------------------------------------------------------------------------
 Private Function EnsurePlanningEventSheet(ByVal sheetName As String) As Worksheet
 
     On Error Resume Next
@@ -1051,6 +1256,10 @@ Private Function EnsurePlanningEventSheet(ByVal sheetName As String) As Workshee
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Event Table si necessaire.
+' EN: Ensures or creates Planning Event Table when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsurePlanningEventTable( _
     ByVal ws As Worksheet, _
     ByVal tableName As String, _
@@ -1078,6 +1287,15 @@ Private Sub EnsurePlanningEventTable( _
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Migrate Event History Hour Header sans modifier les donnees d'entree.
+' EN: Handles the Migrate Event History Hour Header reference without mutating input data.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub MigrateEventHistoryHourHeader(ByVal tbl As ListObject)
 
@@ -1111,6 +1329,10 @@ Private Sub MigrateEventHistoryHourHeader(ByVal tbl As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Event History State si necessaire.
+' EN: Ensures or creates Event History State when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureEventHistoryState()
 
     BootstrapEventHistoryUiStateFromSheet
@@ -1123,6 +1345,11 @@ Private Sub EnsureEventHistoryState()
     If Trim$(gPlanningLanguage) = "" Then gPlanningLanguage = "FR"
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Bootstrap Event History Ui State From Sheet sans modifier les donnees d'entree.
+' EN: Handles the Bootstrap Event History Ui State From Sheet reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Sub BootstrapEventHistoryUiStateFromSheet()
 
@@ -1152,6 +1379,13 @@ Private Sub BootstrapEventHistoryUiStateFromSheet()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Try Read Event History Two State Toggle sans modifier les donnees d'entree.
+' EN: Returns the Try Read Event History Two State Toggle reference without mutating input data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Function TryReadEventHistoryTwoStateToggle( _
     ByVal ws As Worksheet, _
     ByVal bgName As String, _
@@ -1173,6 +1407,11 @@ Private Function TryReadEventHistoryTwoStateToggle( _
     TryReadEventHistoryTwoStateToggle = True
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Event History Display Message a partir des donnees fournies par l'appelant.
+' EN: Builds the Event History Display Message value from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildEventHistoryDisplayMessage( _
     ByVal frMessage As String, _
@@ -1204,6 +1443,11 @@ Private Function BuildEventHistoryDisplayMessage( _
     BuildEventHistoryDisplayMessage = msg
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Event Ack Lookup a partir des donnees fournies par l'appelant.
+' EN: Builds the Event Ack Lookup map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildEventAckLookup(ByVal tblAck As ListObject) As Object
 
@@ -1241,6 +1485,10 @@ Private Function BuildEventAckLookup(ByVal tblAck As ListObject) As Object
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Event Acknowledged est vrai pour le contexte courant.
+' EN: Returns whether Event Acknowledged is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsEventAcknowledged( _
     ByVal ackLookup As Object, _
     ByVal severity As String, _
@@ -1256,6 +1504,11 @@ Private Function IsEventAcknowledged( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Event Ack Key a partir des donnees fournies par l'appelant.
+' EN: Builds the Event Ack Key value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildEventAckKey( _
     ByVal severity As String, _
     ByVal eventType As String, _
@@ -1267,6 +1520,11 @@ Private Function BuildEventAckKey( _
         Trim$(eventHash)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Are Planning Warning Ack Tokens Acknowledged sans modifier les donnees d'entree.
+' EN: Returns the Are Planning Warning Ack Tokens Acknowledged map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function ArePlanningWarningAckTokensAcknowledged( _
     ByVal ackLookup As Object, _
@@ -1303,6 +1561,13 @@ Private Function ArePlanningWarningAckTokensAcknowledged( _
     ArePlanningWarningAckTokensAcknowledged = foundToken
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Upsert Planning Warning Ack Token sans modifier les donnees d'entree.
+' EN: Handles the Upsert Planning Warning Ack Token reference without mutating input data.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
 
 Private Sub UpsertPlanningWarningAckToken( _
     ByVal ackToken As String, _
@@ -1368,6 +1633,11 @@ Private Sub UpsertPlanningWarningAckToken( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Event Task Name From Alarm sans exposer de mutateur sur l'etat source.
+' EN: Returns the Event Task Name From Alarm reference without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function FindEventTaskNameFromAlarm( _
     ByVal eventType As String, _
     ByVal eventHash As String) As String
@@ -1392,6 +1662,11 @@ Private Function FindEventTaskNameFromAlarm( _
 
 SafeExit:
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Event WBS From Alarm sans exposer de mutateur sur l'etat source.
+' EN: Returns the Event WBS From Alarm reference without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Function FindEventWbsFromAlarm( _
     ByVal eventType As String, _
@@ -1418,6 +1693,10 @@ Private Function FindEventWbsFromAlarm( _
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Supprime Planning Warning Ack Token du contexte event history and acknowledgements.
+' EN: Removes Planning Warning Ack Token from the event history and acknowledgements context.
+'------------------------------------------------------------------------------
 Private Sub RemovePlanningWarningAckToken(ByVal ackToken As String)
 
     Dim tblAck As ListObject
@@ -1447,6 +1726,11 @@ Private Sub RemovePlanningWarningAckToken(ByVal ackToken As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Planning Message Get Optional Text sans modifier les donnees d'entree.
+' EN: Returns the Planning Message Get Optional Text value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function PlanningMessage_GetOptionalText( _
     ByVal item As Variant, _
     ByVal keyName As String) As String
@@ -1457,6 +1741,10 @@ Private Function PlanningMessage_GetOptionalText( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Truthy est vrai pour le contexte courant.
+' EN: Returns whether Truthy is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsTruthy(ByVal value As Variant) As Boolean
 
     Dim txt As String
@@ -1471,6 +1759,10 @@ Private Function IsTruthy(ByVal value As Variant) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Event Table Headers si necessaire.
+' EN: Ensures or creates Planning Event Table Headers when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsurePlanningEventTableHeaders(ByVal tbl As ListObject, ByVal headers As Variant)
 
     Dim i As Long
@@ -1483,6 +1775,11 @@ Private Sub EnsurePlanningEventTableHeaders(ByVal tbl As ListObject, ByVal heade
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Table Has Column sans modifier les donnees d'entree.
+' EN: Returns the Table Has Column reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
     On Error Resume Next
@@ -1490,6 +1787,11 @@ Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As Str
     On Error GoTo 0
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Planning Event Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Planning Event Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub ApplyPlanningEventFormats( _
     ByVal tblAlarm As ListObject, _
@@ -1572,6 +1874,10 @@ Private Sub ApplyPlanningEventFormats( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Event History Toggle Shapes si necessaire.
+' EN: Ensures or creates Event History Toggle Shapes when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureEventHistoryToggleShapes(ByVal ws As Worksheet)
 
     On Error Resume Next
@@ -1584,6 +1890,10 @@ Private Sub EnsureEventHistoryToggleShapes(ByVal ws As Worksheet)
     On Error GoTo 0
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Event History Command Buttons si necessaire.
+' EN: Ensures or creates Event History Command Buttons when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureEventHistoryCommandButtons( _
     ByVal wsHistory As Worksheet, _
     ByVal wsAck As Worksheet)
@@ -1602,6 +1912,10 @@ Private Sub EnsureEventHistoryCommandButtons( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Event History Command Button a la structure cible.
+' EN: Adds Event History Command Button to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddEventHistoryCommandButton( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -1645,6 +1959,10 @@ Private Sub AddEventHistoryCommandButton( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Event History Toggle Visuals a partir de l'etat courant.
+' EN: Refreshes Event History Toggle Visuals from the current state.
+'------------------------------------------------------------------------------
 Private Sub RefreshEventHistoryToggleVisuals(ByVal ws As Worksheet)
 
     Dim shpInfoBg As Shape
@@ -1677,6 +1995,10 @@ Private Sub RefreshEventHistoryToggleVisuals(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Event History Toggle Label a la structure cible.
+' EN: Adds Event History Toggle Label to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddEventHistoryToggleLabel( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -1709,6 +2031,10 @@ Private Sub AddEventHistoryToggleLabel( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Event History Toggle Track a la structure cible.
+' EN: Adds Event History Toggle Track to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddEventHistoryToggleTrack( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -1739,6 +2065,10 @@ Private Sub AddEventHistoryToggleTrack( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Event History Toggle Knob a la structure cible.
+' EN: Adds Event History Toggle Knob to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddEventHistoryToggleKnob( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String, _
@@ -1771,6 +2101,10 @@ Private Sub AddEventHistoryToggleKnob( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Event History Toggle Track pour l'affichage ou l'ecriture.
+' EN: Formats Event History Toggle Track for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatEventHistoryToggleTrack(ByVal shp As Shape, ByVal isOn As Boolean)
 
     shp.Line.Weight = 1
@@ -1786,6 +2120,10 @@ Private Sub FormatEventHistoryToggleTrack(ByVal shp As Shape, ByVal isOn As Bool
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Event History Toggle Label pour l'affichage ou l'ecriture.
+' EN: Formats Event History Toggle Label for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatEventHistoryToggleLabel(ByVal shp As Shape, ByVal isOn As Boolean)
 
     shp.Line.Visible = msoFalse
@@ -1805,6 +2143,11 @@ Private Sub FormatEventHistoryToggleLabel(ByVal shp As Shape, ByVal isOn As Bool
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference Position Event History Toggle Knob sans modifier les donnees d'entree.
+' EN: Handles the Position Event History Toggle Knob reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub PositionEventHistoryToggleKnob(ByVal knob As Shape, ByVal track As Shape, ByVal isOn As Boolean)
 
     If track Is Nothing Then Exit Sub
@@ -1818,6 +2161,10 @@ Private Sub PositionEventHistoryToggleKnob(ByVal knob As Shape, ByVal track As S
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Supprime Event History Shape If Exists du contexte event history and acknowledgements.
+' EN: Removes Event History Shape If Exists from the event history and acknowledgements context.
+'------------------------------------------------------------------------------
 Private Sub DeleteEventHistoryShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String)
 
     On Error Resume Next
@@ -1826,6 +2173,10 @@ Private Sub DeleteEventHistoryShapeIfExists(ByVal ws As Worksheet, ByVal shapeNa
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Planning Event Table Rows.
+' EN: Clears or resets Planning Event Table Rows.
+'------------------------------------------------------------------------------
 Private Sub ClearPlanningEventTableRows(ByVal tbl As ListObject)
 
     If tbl Is Nothing Then Exit Sub
@@ -1835,12 +2186,20 @@ Private Sub ClearPlanningEventTableRows(ByVal tbl As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Event Internal Write Active est vrai pour le contexte courant.
+' EN: Returns whether Planning Event Internal Write Active is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsPlanningEventInternalWriteActive() As Boolean
 
     IsPlanningEventInternalWriteActive = (gEventHistoryInternalWriteDepth > 0)
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ouvre le cycle de traitement Planning Event Internal Write.
+' EN: Begins the Planning Event Internal Write processing cycle.
+'------------------------------------------------------------------------------
 Private Sub BeginPlanningEventInternalWrite( _
     ByRef wsAlarm As Worksheet, _
     ByRef wsHistory As Worksheet, _
@@ -1858,6 +2217,10 @@ Private Sub BeginPlanningEventInternalWrite( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ferme le cycle de traitement Planning Event Internal Write.
+' EN: Ends the Planning Event Internal Write processing cycle.
+'------------------------------------------------------------------------------
 Private Sub EndPlanningEventInternalWrite( _
     ByVal wsAlarm As Worksheet, _
     ByVal wsHistory As Worksheet, _
@@ -1872,6 +2235,10 @@ Private Sub EndPlanningEventInternalWrite( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Event Infrastructure Ready est vrai pour le contexte courant.
+' EN: Returns whether Planning Event Infrastructure Ready is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsPlanningEventInfrastructureReady() As Boolean
 
     Dim wsAlarm As Worksheet
@@ -1900,6 +2267,11 @@ Private Function IsPlanningEventInfrastructureReady() As Boolean
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Calc Alarm Headers sans modifier les donnees d'entree.
+' EN: Returns the Calc Alarm Headers value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function CalcAlarmHeaders() As Variant
 
     CalcAlarmHeaders = Array( _
@@ -1925,6 +2297,11 @@ Private Function CalcAlarmHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Event History Headers sans modifier les donnees d'entree.
+' EN: Returns the Event History Headers value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function EventHistoryHeaders() As Variant
 
     EventHistoryHeaders = Array( _
@@ -1935,6 +2312,11 @@ Private Function EventHistoryHeaders() As Variant
         "Acknowledged")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Event Ack Headers sans modifier les donnees d'entree.
+' EN: Returns the Event Ack Headers value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function EventAckHeaders() As Variant
 
@@ -1953,11 +2335,30 @@ Private Function EventAckHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Vide les stockages runtime Alarm, EventHistory et ACK sans recreer l'infrastructure.
+' EN: Clears Alarm, EventHistory, and ACK runtime storage without rebuilding infrastructure.
+'------------------------------------------------------------------------------
+Public Sub EventHistory_ResetRuntimeStorage()
 
+    Dim wsAlarm As Worksheet
+    Dim wsHistory As Worksheet
+    Dim wsAck As Worksheet
+    Dim tblAlarm As ListObject
+    Dim tblHistory As ListObject
+    Dim tblAck As ListObject
 
+    On Error Resume Next
+    Set wsAlarm = ThisWorkbook.Worksheets(CALC_ALARM_SHEET)
+    Set wsHistory = ThisWorkbook.Worksheets(EVENT_HISTORY_SHEET)
+    Set wsAck = ThisWorkbook.Worksheets(EVENT_ACK_SHEET)
+    If Not wsAlarm Is Nothing Then Set tblAlarm = wsAlarm.ListObjects(CALC_ALARM_TABLE)
+    If Not wsHistory Is Nothing Then Set tblHistory = wsHistory.ListObjects(EVENT_HISTORY_TABLE)
+    If Not wsAck Is Nothing Then Set tblAck = wsAck.ListObjects(EVENT_ACK_TABLE)
+    On Error GoTo 0
 
+    If Not tblAlarm Is Nothing Then ClearPlanningEventTableRows tblAlarm
+    If Not tblHistory Is Nothing Then ClearPlanningEventTableRows tblHistory
+    If Not tblAck Is Nothing Then ClearPlanningEventTableRows tblAck
 
-
-
-
-
+End Sub

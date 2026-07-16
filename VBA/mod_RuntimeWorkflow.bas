@@ -1,16 +1,22 @@
 Attribute VB_Name = "mod_RuntimeWorkflow"
 Option Explicit
 
-'=================================================
-' mod_RuntimeWorkflow
-' Minimal parent/child runtime workflow context.
+'===============================================================================
+' MODULE : mod_RuntimeWorkflow
+' DOMAINE / DOMAIN : Runtime Workflow
 '
-' Current responsibilities:
-' - in-memory context
-' - display ownership observation
-' - targeted deferred display for Lock/recalc orchestration
-' - no global root-only display enforcement
-'=================================================
+' FR
+' Possede la pile des workflows, le report d'affichage et le contexte d'execution planning.
+' Ne calcule pas et ne produit pas les messages metier.
+'
+' EN
+' Owns workflow nesting, deferred display and planning execution context.
+' Does not calculate or produce business messages.
+'
+' CONTRATS / CONTRACTS : BeginPlanningWorkflow, EndPlanningWorkflow, BeginPlanningWorkflowStopOnlyDisplay, EndPlanningWorkflowStopOnlyDisplay, IsPlanningWorkflowStopOnlyDisplay, BeginPlanningWorkflowFinalDisplay, EndPlanningWorkflowFinalDisplay, IsPlanningWorkflowFinalDisplay
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
 
 Private gPlanningWorkflowStack As Collection
 Private gPlanningWorkflowSequence As Long
@@ -19,6 +25,10 @@ Private gPlanningWorkflowDeferredDisplayMessages As Collection
 Private gPlanningWorkflowStopOnlyDisplayDepth As Long
 Private gPlanningWorkflowFinalDisplayDepth As Long
 
+'------------------------------------------------------------------------------
+' FR: Ouvre le cycle de traitement Planning Workflow.
+' EN: Begins the Planning Workflow processing cycle.
+'------------------------------------------------------------------------------
 Public Function BeginPlanningWorkflow(Optional ByVal sourceProcedure As String = "") As String
 
     Dim ctx As Object
@@ -68,6 +78,10 @@ Public Function BeginPlanningWorkflow(Optional ByVal sourceProcedure As String =
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ferme le cycle de traitement Planning Workflow.
+' EN: Ends the Planning Workflow processing cycle.
+'------------------------------------------------------------------------------
 Public Sub EndPlanningWorkflow()
 
     EnsurePlanningWorkflowStack
@@ -86,7 +100,11 @@ Public Sub EndPlanningWorkflow()
 
 End Sub
 
-Public Sub ClearPlanningWorkflowContext()
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Planning Workflow Context.
+' EN: Clears or resets Planning Workflow Context.
+'------------------------------------------------------------------------------
+Private Sub ClearPlanningWorkflowContext()
 
     Set gPlanningWorkflowStack = New Collection
     gPlanningWorkflowDisplayOwnerId = vbNullString
@@ -96,12 +114,20 @@ Public Sub ClearPlanningWorkflowContext()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ouvre le cycle de traitement Planning Workflow Stop Only Display.
+' EN: Begins the Planning Workflow Stop Only Display processing cycle.
+'------------------------------------------------------------------------------
 Public Sub BeginPlanningWorkflowStopOnlyDisplay()
 
     gPlanningWorkflowStopOnlyDisplayDepth = gPlanningWorkflowStopOnlyDisplayDepth + 1
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ferme le cycle de traitement Planning Workflow Stop Only Display.
+' EN: Ends the Planning Workflow Stop Only Display processing cycle.
+'------------------------------------------------------------------------------
 Public Sub EndPlanningWorkflowStopOnlyDisplay()
 
     If gPlanningWorkflowStopOnlyDisplayDepth > 0 Then
@@ -110,18 +136,30 @@ Public Sub EndPlanningWorkflowStopOnlyDisplay()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Workflow Stop Only Display est vrai pour le contexte courant.
+' EN: Returns whether Planning Workflow Stop Only Display is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsPlanningWorkflowStopOnlyDisplay() As Boolean
 
     IsPlanningWorkflowStopOnlyDisplay = (gPlanningWorkflowStopOnlyDisplayDepth > 0)
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ouvre le cycle de traitement Planning Workflow Final Display.
+' EN: Begins the Planning Workflow Final Display processing cycle.
+'------------------------------------------------------------------------------
 Public Sub BeginPlanningWorkflowFinalDisplay()
 
     gPlanningWorkflowFinalDisplayDepth = gPlanningWorkflowFinalDisplayDepth + 1
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ferme le cycle de traitement Planning Workflow Final Display.
+' EN: Ends the Planning Workflow Final Display processing cycle.
+'------------------------------------------------------------------------------
 Public Sub EndPlanningWorkflowFinalDisplay()
 
     If gPlanningWorkflowFinalDisplayDepth > 0 Then
@@ -130,11 +168,20 @@ Public Sub EndPlanningWorkflowFinalDisplay()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Workflow Final Display est vrai pour le contexte courant.
+' EN: Returns whether Planning Workflow Final Display is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsPlanningWorkflowFinalDisplay() As Boolean
 
     IsPlanningWorkflowFinalDisplay = (gPlanningWorkflowFinalDisplayDepth > 0)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning Workflow Context Safe dans le perimetre possede par le composant.
+' EN: Resets Reset Planning Workflow Context Safe within the state owned by the component.
+'------------------------------------------------------------------------------
 
 Public Sub ResetPlanningWorkflowContextSafe(Optional ByVal reason As String = "")
 
@@ -143,6 +190,10 @@ Public Sub ResetPlanningWorkflowContextSafe(Optional ByVal reason As String = ""
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Workflow Started si necessaire.
+' EN: Ensures or creates Planning Workflow Started when needed.
+'------------------------------------------------------------------------------
 Public Function EnsurePlanningWorkflowStarted(Optional ByVal sourceProcedure As String = "") As Boolean
 
     EnsurePlanningWorkflowStack
@@ -159,6 +210,10 @@ Public Function EnsurePlanningWorkflowStarted(Optional ByVal sourceProcedure As 
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Planning Workflow Active est vrai pour le contexte courant.
+' EN: Returns whether Planning Workflow Active is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsPlanningWorkflowActive() As Boolean
 
     EnsurePlanningWorkflowStack
@@ -169,7 +224,11 @@ Public Function IsPlanningWorkflowActive() As Boolean
 
 End Function
 
-Public Function GetCurrentPlanningWorkflow() As Object
+'------------------------------------------------------------------------------
+' FR: Retourne Current Planning Workflow depuis le contexte runtime workflow.
+' EN: Returns Current Planning Workflow from the runtime workflow context.
+'------------------------------------------------------------------------------
+Private Function GetCurrentPlanningWorkflow() As Object
 
     EnsurePlanningWorkflowStack
     If Not ValidatePlanningWorkflowStack() Then
@@ -184,7 +243,11 @@ Public Function GetCurrentPlanningWorkflow() As Object
 
 End Function
 
-Public Function ValidatePlanningWorkflowStack() As Boolean
+'------------------------------------------------------------------------------
+' FR: Valide Planning Workflow Stack et signale les incoherences detectees.
+' EN: Validates Planning Workflow Stack and reports detected inconsistencies.
+'------------------------------------------------------------------------------
+Private Function ValidatePlanningWorkflowStack() As Boolean
 
     Dim i As Long
     Dim ctx As Object
@@ -226,6 +289,10 @@ Public Function ValidatePlanningWorkflowStack() As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Root Planning Workflow est vrai pour le contexte courant.
+' EN: Returns whether Root Planning Workflow is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsRootPlanningWorkflow() As Boolean
 
     Dim ctx As Object
@@ -239,12 +306,20 @@ Public Function IsRootPlanningWorkflow() As Boolean
 
 End Function
 
-Public Function GetPlanningWorkflowDisplayOwnerId() As String
+'------------------------------------------------------------------------------
+' FR: Retourne Planning Workflow Display Owner Id depuis le contexte runtime workflow.
+' EN: Returns Planning Workflow Display Owner Id from the runtime workflow context.
+'------------------------------------------------------------------------------
+Private Function GetPlanningWorkflowDisplayOwnerId() As String
 
     GetPlanningWorkflowDisplayOwnerId = gPlanningWorkflowDisplayOwnerId
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Current Workflow Display est vrai pour le contexte courant.
+' EN: Returns whether Current Workflow Display is true for the current context.
+'------------------------------------------------------------------------------
 Public Function CanCurrentWorkflowDisplay(Optional ByVal sourceProcedure As String = "") As Boolean
 
     Dim ctx As Object
@@ -270,6 +345,10 @@ Public Function CanCurrentWorkflowDisplay(Optional ByVal sourceProcedure As Stri
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Should Defer Current Workflow Display To Root est vrai pour le contexte courant.
+' EN: Returns whether Should Defer Current Workflow Display To Root is true for the current context.
+'------------------------------------------------------------------------------
 Public Function ShouldDeferCurrentWorkflowDisplayToRoot(Optional ByVal sourceProcedure As String = "") As Boolean
 
     Dim ctx As Object
@@ -298,6 +377,11 @@ Public Function ShouldDeferCurrentWorkflowDisplayToRoot(Optional ByVal sourcePro
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Traite la collection Defer Planning Workflow Display Messages sans modifier les donnees d'entree.
+' EN: Handles the Defer Planning Workflow Display Messages collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Sub DeferPlanningWorkflowDisplayMessages(ByVal messages As Collection)
 
     Dim item As Variant
@@ -318,6 +402,11 @@ Public Sub DeferPlanningWorkflowDisplayMessages(ByVal messages As Collection)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite la collection Drain Planning Workflow Deferred Display Messages sans modifier les donnees d'entree.
+' EN: Handles the Drain Planning Workflow Deferred Display Messages collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Sub DrainPlanningWorkflowDeferredDisplayMessages(ByVal targetMessages As Collection)
 
     Dim item As Variant
@@ -335,6 +424,10 @@ Public Sub DrainPlanningWorkflowDeferredDisplayMessages(ByVal targetMessages As 
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne Current Planning Workflow Id depuis le contexte runtime workflow.
+' EN: Returns Current Planning Workflow Id from the runtime workflow context.
+'------------------------------------------------------------------------------
 Public Function GetCurrentPlanningWorkflowId() As String
 
     Dim ctx As Object
@@ -348,6 +441,10 @@ Public Function GetCurrentPlanningWorkflowId() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Current Planning Root Workflow Id depuis le contexte runtime workflow.
+' EN: Returns Current Planning Root Workflow Id from the runtime workflow context.
+'------------------------------------------------------------------------------
 Public Function GetCurrentPlanningRootWorkflowId() As String
 
     Dim ctx As Object
@@ -361,6 +458,10 @@ Public Function GetCurrentPlanningRootWorkflowId() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Current Planning Workflow Depth depuis le contexte runtime workflow.
+' EN: Returns Current Planning Workflow Depth from the runtime workflow context.
+'------------------------------------------------------------------------------
 Public Function GetCurrentPlanningWorkflowDepth() As Long
 
     Dim ctx As Object
@@ -374,6 +475,10 @@ Public Function GetCurrentPlanningWorkflowDepth() As Long
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Root Planning Workflow depuis le contexte runtime workflow.
+' EN: Returns Root Planning Workflow from the runtime workflow context.
+'------------------------------------------------------------------------------
 Private Function GetRootPlanningWorkflow() As Object
 
     EnsurePlanningWorkflowStack
@@ -385,6 +490,10 @@ Private Function GetRootPlanningWorkflow() As Object
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Workflow Stack si necessaire.
+' EN: Ensures or creates Planning Workflow Stack when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsurePlanningWorkflowStack()
 
     If gPlanningWorkflowStack Is Nothing Then
@@ -393,6 +502,10 @@ Private Sub EnsurePlanningWorkflowStack()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Planning Workflow Deferred Messages si necessaire.
+' EN: Ensures or creates Planning Workflow Deferred Messages when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsurePlanningWorkflowDeferredMessages()
 
     If gPlanningWorkflowDeferredDisplayMessages Is Nothing Then
@@ -401,6 +514,10 @@ Private Sub EnsurePlanningWorkflowDeferredMessages()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Valide Planning Workflow Context et signale les incoherences detectees.
+' EN: Validates Planning Workflow Context and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Function ValidatePlanningWorkflowContext( _
     ByVal ctx As Object, _
     ByVal expectedDepth As Long, _
@@ -448,6 +565,11 @@ Private Function ValidatePlanningWorkflowContext( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Workflow Context Has Key sans modifier les donnees d'entree.
+' EN: Returns the Workflow Context Has Key map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function WorkflowContextHasKey(ByVal ctx As Object, ByVal keyName As String) As Boolean
 
     On Error GoTo MissingKey
@@ -463,11 +585,21 @@ MissingKey:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la valeur Trace Planning Workflow a la trace technique uniquement lorsque l'instrumentation est active.
+' EN: Adds the Trace Planning Workflow value to the technical trace only when instrumentation is enabled.
+'------------------------------------------------------------------------------
+
 Private Sub TracePlanningWorkflow(ByVal messageText As String)
 
     Debug.Print "PlanningWorkflow: " & messageText
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la valeur Planning Workflow ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Planning Workflow ID value from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildPlanningWorkflowId(ByVal sourceProcedure As String) As String
 
@@ -482,6 +614,11 @@ Private Function BuildPlanningWorkflowId(ByVal sourceProcedure As String) As Str
         CleanPlanningWorkflowIdPart(cleanSource)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Clean Planning Workflow ID Part sans modifier les donnees d'entree.
+' EN: Returns the Clean Planning Workflow ID Part value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function CleanPlanningWorkflowIdPart(ByVal value As String) As String
 

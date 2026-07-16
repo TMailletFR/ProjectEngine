@@ -1,24 +1,31 @@
 Attribute VB_Name = "mod_CalendarEngine"
 Option Explicit
 
-'=====================================================
-' mod_CalendarEngine
-' Pure calendar helpers for planning calculations.
-' No worksheet access, no side effects.
+'===============================================================================
+' MODULE : mod_CalendarEngine
+' DOMAINE / DOMAIN : Calendar
 '
-' V1 calendars:
-' - blank / 7j/7 = every day
-' - 6j/7 = Monday-Saturday
-' - 5j/7 = Monday-Friday
+' FR
+' Applique les calendriers 5D/6D aux decalages, durees et recherches de jours ouvrables.
+' Ne doit pas contourner les contrats publics des autres domaines.
 '
-' Duration convention is inclusive:
-' AddWorkingDays(start, 1, cal) = normalized start.
-'=====================================================
+' EN
+' Applies 5D/6D calendars to offsets, durations and working-day searches.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : NormalizeCalendarType, IsValidCalendarType, IsWorkingDay, NextWorkingDay, PreviousWorkingDay, AddWorkingDays, SubtractWorkingDays, DateDiffWorkingDays
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
 
 Public Const CALENDAR_7D As String = "7j/7"
 Public Const CALENDAR_6D As String = "6j/7"
 Public Const CALENDAR_5D As String = "5j/7"
 
+'------------------------------------------------------------------------------
+' FR: Normalise Calendar Type dans un format exploitable.
+' EN: Normalizes Calendar Type into a usable format.
+'------------------------------------------------------------------------------
 Public Function NormalizeCalendarType(ByVal rawValue As Variant) As String
 
     Dim txt As String
@@ -43,6 +50,10 @@ Public Function NormalizeCalendarType(ByVal rawValue As Variant) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Calendar Type est vrai pour le contexte courant.
+' EN: Returns whether Valid Calendar Type is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsValidCalendarType(ByVal rawValue As Variant) As Boolean
 
     On Error GoTo InvalidValue
@@ -55,6 +66,10 @@ InvalidValue:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Working Day est vrai pour le contexte courant.
+' EN: Returns whether Working Day is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsWorkingDay( _
     ByVal dateValue As Variant, _
     Optional ByVal calendarType As Variant = "") As Boolean
@@ -80,6 +95,11 @@ Public Function IsWorkingDay( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Next Working Day sans modifier les donnees d'entree.
+' EN: Returns the Next Working Day value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function NextWorkingDay( _
     ByVal dateValue As Variant, _
     Optional ByVal calendarType As Variant = "") As Variant
@@ -102,6 +122,11 @@ Public Function NextWorkingDay( _
     NextWorkingDay = CDbl(d)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Previous Working Day sans modifier les donnees d'entree.
+' EN: Returns the Previous Working Day value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function PreviousWorkingDay( _
     ByVal dateValue As Variant, _
@@ -126,6 +151,10 @@ Public Function PreviousWorkingDay( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Working Days a la structure cible.
+' EN: Adds Working Days to the target structure.
+'------------------------------------------------------------------------------
 Public Function AddWorkingDays( _
     ByVal startDate As Variant, _
     ByVal durationDays As Variant, _
@@ -168,6 +197,11 @@ Public Function AddWorkingDays( _
     AddWorkingDays = CDbl(d)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Subtract Working Days sans modifier les donnees d'entree.
+' EN: Returns the Subtract Working Days value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function SubtractWorkingDays( _
     ByVal finishDate As Variant, _
@@ -212,6 +246,11 @@ Public Function SubtractWorkingDays( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Date Diff Working Days sans modifier les donnees d'entree.
+' EN: Returns the Date Diff Working Days value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function DateDiffWorkingDays( _
     ByVal startDate As Variant, _
     ByVal finishDate As Variant, _
@@ -254,6 +293,11 @@ Public Function DateDiffWorkingDays( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Lag sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Lag without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Public Function ApplyLag( _
     ByVal baseDate As Variant, _
     ByVal lagDays As Variant, _
@@ -294,6 +338,11 @@ Public Function ApplyLag( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Offset Working Days sans modifier les donnees d'entree.
+' EN: Returns the Offset Working Days value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function OffsetWorkingDays( _
     ByVal dateValue As Variant, _
     ByVal offsetDays As Variant, _
@@ -317,6 +366,11 @@ Public Function OffsetWorkingDays( _
     OffsetWorkingDays = ShiftWorkingDays(dateValue, offsetVal, calType)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Signed Working Day Offset sans modifier les donnees d'entree.
+' EN: Returns the Signed Working Day Offset value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function SignedWorkingDayOffset( _
     ByVal requiredDate As Variant, _
@@ -356,6 +410,11 @@ Public Function SignedWorkingDayOffset( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Shift Working Days sans modifier les donnees d'entree.
+' EN: Returns the Shift Working Days value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function ShiftWorkingDays( _
     ByVal dateValue As Variant, _
     ByVal offsetDays As Long, _
@@ -385,6 +444,10 @@ Private Function ShiftWorkingDays( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise To Working Day Forward dans un format exploitable.
+' EN: Normalizes To Working Day Forward into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeToWorkingDayForward( _
     ByVal dateValue As Variant, _
     ByVal calendarType As String) As Date
@@ -400,6 +463,10 @@ Private Function NormalizeToWorkingDayForward( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise To Working Day Backward dans un format exploitable.
+' EN: Normalizes To Working Day Backward into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeToWorkingDayBackward( _
     ByVal dateValue As Variant, _
     ByVal calendarType As String) As Date
@@ -414,6 +481,11 @@ Private Function NormalizeToWorkingDayBackward( _
     NormalizeToWorkingDayBackward = d
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Working Days Fast sans exposer de mutateur sur l'etat source.
+' EN: Returns the Working Days Fast value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Function CountWorkingDaysFast( _
     ByVal startSerial As Long, _

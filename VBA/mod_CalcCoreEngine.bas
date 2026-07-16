@@ -1,35 +1,52 @@
 Attribute VB_Name = "mod_CalcCoreEngine"
 Option Explicit
 
-'=====================================================
-' mod_CalcCoreEngine
-'=====================================================
-' Rôle :
-' - futur cœur unique de calcul
-' - travaille uniquement en mémoire
-' - ne lit / n'écrit aucune feuille
-' - ne connaît ni WBS ni Gantt ni TEST
+'===============================================================================
+' MODULE : mod_CalcCoreEngine
+' DOMAINE / DOMAIN : Core Calculation
 '
-' Entrées :
-' - dataArr(row, col)
-' - mapCol(name) = col index
-' - linksBySuccId(succId) = Collection de link()
+' FR
+' Execute le calcul planning unique sur les taches feuilles, les contraintes, les dependances et le post-process LOE.
+' Ne doit pas contourner les contrats publics des autres domaines.
 '
-' Sorties :
-' - modifie dataArr en place :
-'   * Calculated Start
-'   * Calculated Finish
-'   * Calculated Duration
-'   * Error flag
-'   * ErrorMsg
+' EN
+' Runs the single planning calculation over leaf tasks, constraints, dependencies and LOE post-processing.
+' Must not bypass public contracts owned by other domains.
 '
-' Convention :
-' - les dépendances sont déjà préparées
-' - les summaries sont déjà identifiées
-' - les warnings restent en dehors du cœur pour l'instant
-'=====================================================
+' CONTRATS / CONTRACTS : Run_Calc_Core
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
 
-
+'------------------------------------------------------------------------------
+' FR:
+' Orchestre le calcul Core en memoire: prepare les index, nettoie le scope de
+' recalcul, calcule les taches feuilles en ordre topologique, traite les LOE,
+' propage les erreurs bloquantes puis consolide les summaries.
+'
+' EN:
+' Orchestrates the in-memory Core calculation: builds indexes, clears the
+' recalculation scope, computes leaf tasks in topological order, processes LOE
+' tasks, propagates blocking errors, and rolls up summary dates.
+'
+' Entrees / Inputs:
+' - dataArr avec les colonnes Core deja mappees dans mapCol.
+' - linksBySuccId prepare par le Bridge, indexe par successeur.
+' - recalcScope optionnel pour un recalcul partiel.
+' - dictionnaires optionnels de diagnostics dependency/constraint/cascade.
+'
+' Sorties / Outputs:
+' - Met a jour dans dataArr les dates calculees, durees, flags et messages.
+' - Renseigne les diagnostics structures passes par le caller.
+' - Preserve les sorties hors scope lors d'un recalcul partiel.
+'
+' Appele par / Called by:
+' - Les adaptateurs Bridge/production qui preparent les donnees Core.
+' - Les workflows TEST/SCENARIO qui executent le moteur en memoire.
+'
+' Notes:
+' - Point d'entree stable du moteur Core; aucune lecture/ecriture feuille.
+' - Les taches LOE sont exclues du topo standard puis calculees en post-process.
+'------------------------------------------------------------------------------
 Public Sub Run_Calc_Core( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -167,6 +184,28 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR:
+' Recharge les dates calculees deja presentes dans dataArr afin qu'un recalcul
+' partiel puisse reutiliser les predecesseurs et successeurs hors scope.
+'
+' EN:
+' Reloads calculated dates already present in dataArr so a partial recalculation
+' can reuse predecessors and successors that are outside the scope.
+'
+' Entrees / Inputs:
+' - dataArr, mapCol et rowById du run Core courant.
+' - Dictionnaires calcStartById et calcFinishById a alimenter.
+'
+' Sorties / Outputs:
+' - Ajoute les dates Calculated Start/Finish existantes dans les caches Core.
+'
+' Appele par / Called by:
+' - Run_Calc_Core en mode recalcul partiel.
+'
+' Notes:
+' - Ne calcule rien; cette procedure ne fait que rehydrater l'etat existant.
+'------------------------------------------------------------------------------
 Private Sub Core_LoadExistingCalcOutputs( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -203,6 +242,34 @@ Private Sub Core_LoadExistingCalcOutputs( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR:
+' Calcule une tache feuille standard a partir de ses dates terrain, de ses
+' contraintes et de ses liens predecesseurs; enregistre les blocages metier
+' des que la tache devient non calculable.
+'
+' EN:
+' Computes one standard leaf task from actual/forecast dates, constraints, and
+' predecessor links; records business blocking errors as soon as the task cannot
+' be scheduled consistently.
+'
+' Entrees / Inputs:
+' - currentId, dataArr, mapCol et rowById pour lire la ligne de tache.
+' - linksBySuccId, directChildrenById et calcStart/FinishById pour les dependances.
+' - Dictionnaires de diagnostics dependency/constraint et erreurs bloquantes.
+'
+' Sorties / Outputs:
+' - Ajoute start/finish calcules dans calcStartById et calcFinishById.
+' - Ajoute Error flag/ErrorMsg et diagnostics en cas de violation.
+'
+' Appele par / Called by:
+' - Run_Calc_Core pendant le parcours topologique des taches feuilles.
+'
+' Notes:
+' - Gere FS/SS/FF, lag, sources summary, contraintes start/finish et dates
+'   actual/forecast.
+' - Les LOE ne passent pas par ce calcul; elles sont traitees ensuite.
+'------------------------------------------------------------------------------
 Private Sub Core_ComputeOneLeafTask( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -789,6 +856,10 @@ Private Sub Core_ComputeOneLeafTask( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Enregistre le diagnostic structure d'une contrainte puis renvoie le message bilingue stocke dans ErrorMsg.
+' EN: Records the structured constraint diagnostic and returns the bilingual message stored in ErrorMsg.
+'------------------------------------------------------------------------------
 Private Function Core_BuildConstraintDiagnosticMessage( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -825,6 +896,10 @@ Private Function Core_BuildConstraintDiagnosticMessage( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Construit l'objet diagnostic detaille d'une violation de contrainte a partir du contexte de calcul de la tache.
+' EN: Builds the detailed diagnostic object for a constraint violation from the task calculation context.
+'------------------------------------------------------------------------------
 Private Sub Core_RecordConstraintDiagnostic( _
     ByVal constraintDiagnostics As Object, _
     ByRef dataArr As Variant, _
@@ -980,6 +1055,10 @@ Private Sub Core_RecordConstraintDiagnostic( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne la premiere valeur renseignee entre une valeur prioritaire et une valeur de repli.
+' EN: Returns the first populated value between a primary value and a fallback value.
+'------------------------------------------------------------------------------
 Private Function Core_FirstValue(ByVal primaryValue As Variant, ByVal fallbackValue As Variant) As Variant
 
     If HasValue(primaryValue) Then
@@ -990,6 +1069,10 @@ Private Function Core_FirstValue(ByVal primaryValue As Variant, ByVal fallbackVa
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit le message Core FR/EN minimal associe a une violation de contrainte, avec ID, WBS et nom de tache.
+' EN: Builds the minimal FR/EN Core message for a constraint violation, including task ID, WBS, and name.
+'------------------------------------------------------------------------------
 Private Function Core_BuildConstraintCoreMessage( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -1019,6 +1102,30 @@ Private Function Core_BuildConstraintCoreMessage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR:
+' Enregistre une erreur bloquante sur une tache et la reporte immediatement
+' dans les colonnes d'erreur de la ligne Core.
+'
+' EN:
+' Registers a blocking error on a task and immediately mirrors it to the Core
+' row error columns.
+'
+' Entrees / Inputs:
+' - currentId, rowIdx et message metier deja formule.
+' - dataArr/mapCol pour mettre a jour la ligne.
+' - blockingErrors pour memoriser la racine de blocage.
+'
+' Sorties / Outputs:
+' - blockingErrors(currentId) = message.
+' - Error flag/ErrorMsg mis a jour dans dataArr.
+'
+' Appele par / Called by:
+' - Core_ComputeOneLeafTask, Core_MarkTopoFailure, Core_ValidateLOEAsNonPredecessor, Core_ApplyLOEPostProcess.
+'
+' Notes:
+' - Point commun de creation des erreurs dures qui seront ensuite propagees.
+'------------------------------------------------------------------------------
 Private Sub Core_AddBlockingError( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -1032,6 +1139,28 @@ Private Sub Core_AddBlockingError( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR:
+' Transforme un echec de tri topologique en erreur bloquante sur toutes les
+' taches feuilles valides, avec un diagnostic de cycle quand il est retrouvable.
+'
+' EN:
+' Converts a topological sort failure into a blocking error on every valid leaf
+' task, including a cycle diagnostic when one can be recovered.
+'
+' Entrees / Inputs:
+' - validIds, linksBySuccId, rowById, dataArr et mapCol du run Core.
+' - blockingErrors a completer.
+'
+' Sorties / Outputs:
+' - Marque les taches impactees en erreur bloquante.
+'
+' Appele par / Called by:
+' - Run_Calc_Core lorsque l'ordre topologique ne couvre pas tous les IDs valides.
+'
+' Notes:
+' - Cette erreur stoppe le calcul normal car l'ordre de dependance n'est plus fiable.
+'------------------------------------------------------------------------------
 Private Sub Core_MarkTopoFailure( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1057,6 +1186,10 @@ Private Sub Core_MarkTopoFailure( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit le message utilisateur pour un cycle logique detecte par le tri topologique.
+' EN: Builds the user-facing message for a logical cycle detected by the topological sort.
+'------------------------------------------------------------------------------
 Private Function Core_BuildTopoCycleDiagnosticMessage( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1091,6 +1224,10 @@ SafeFallback:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Recherche dans le graphe des liens le premier cycle entre taches feuilles valides.
+' EN: Searches the dependency graph for the first cycle between valid leaf tasks.
+'------------------------------------------------------------------------------
 Private Function Core_FindFirstTopoCycleEdges( _
     ByVal validIds As Object, _
     ByVal linksBySuccId As Object) As Collection
@@ -1156,6 +1293,10 @@ Private Function Core_FindFirstTopoCycleEdges( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Parcourt le graphe en profondeur et extrait les aretes du premier cycle rencontre.
+' EN: Traverses the graph depth-first and extracts the edges of the first encountered cycle.
+'------------------------------------------------------------------------------
 Private Sub Core_DFS_FindTopoCycleEdges( _
     ByVal currentId As String, _
     ByVal childrenByPred As Object, _
@@ -1215,6 +1356,10 @@ Private Sub Core_DFS_FindTopoCycleEdges( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Transforme les aretes d'un cycle en texte lisible avec taches, type de lien et lag.
+' EN: Formats cycle edges as readable text with tasks, link type, and lag.
+'------------------------------------------------------------------------------
 Private Function Core_FormatTopoCycleEdges( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1248,6 +1393,28 @@ Private Function Core_FormatTopoCycleEdges( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR:
+' Cree le diagnostic source qui explique quelle dependance impose une date de
+' debut minimale plus tardive que la date demandee.
+'
+' EN:
+' Creates the source diagnostic explaining which dependency imposes a minimum
+' start date later than the requested date.
+'
+' Entrees / Inputs:
+' - Task cible, predecesseur bloquant, type de lien, lag et dates candidates.
+' - Source eventuelle quand le predecesseur bloquant provient d'un summary.
+'
+' Sorties / Outputs:
+' - Dictionnaire diagnostic pret a etre stocke ou enrichi.
+'
+' Appele par / Called by:
+' - Core_ComputeOneLeafTask pendant l'analyse des liens de debut.
+'
+' Notes:
+' - Ce diagnostic est la base des messages dependency et des cascades aval.
+'------------------------------------------------------------------------------
 Private Function Core_CreateStartDependencyDiagnostic( _
     ByVal taskId As String, _
     ByVal predId As String, _
@@ -1276,6 +1443,28 @@ Private Function Core_CreateStartDependencyDiagnostic( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR:
+' Stocke le diagnostic structure lorsqu'une Forecast Start est anterieure a la
+' date minimale imposee par les dependances.
+'
+' EN:
+' Stores the structured diagnostic when a Forecast Start is earlier than the
+' minimum start date imposed by dependencies.
+'
+' Entrees / Inputs:
+' - Task cible, Forecast Start demandee, date minimale autorisee.
+' - Diagnostic source de la dependance bloquante.
+'
+' Sorties / Outputs:
+' - dependencyDiagnostics(taskId) avec les champs de cause et de date.
+'
+' Appele par / Called by:
+' - Core_ComputeOneLeafTask au moment de valider Forecast Start.
+'
+' Notes:
+' - Ne formule pas le message utilisateur; elle preserve les donnees auditables.
+'------------------------------------------------------------------------------
 Private Sub Core_RecordForecastStartDependencyDiagnostic( _
     ByVal dependencyDiagnostics As Object, _
     ByVal taskId As String, _
@@ -1306,6 +1495,10 @@ Private Sub Core_RecordForecastStartDependencyDiagnostic( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit le libelle humain d'une tache de cycle a partir du WBS, du nom ou de l'ID.
+' EN: Builds the human-readable label for a cycle task from WBS, task name, or ID.
+'------------------------------------------------------------------------------
 Private Function Core_CycleTaskLabel( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1339,6 +1532,10 @@ Fallback:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Formate le lag d'un lien de cycle avec signe explicite et decimal standardise.
+' EN: Formats a cycle link lag with an explicit sign and standardized decimal separator.
+'------------------------------------------------------------------------------
 Private Function Core_FormatCycleLag(ByVal lagVal As Double) As String
 
     Dim lagText As String
@@ -1358,6 +1555,30 @@ Private Function Core_FormatCycleLag(ByVal lagVal As Double) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR:
+' Propage les erreurs bloquantes racines vers les successeurs afin que toute la
+' chaine aval soit marquee non calculable.
+'
+' EN:
+' Propagates root blocking errors to successors so the full downstream chain is
+' marked as non-computable.
+'
+' Entrees / Inputs:
+' - blockingErrors racines, childrenByPred, rowById, dataArr et mapCol.
+' - cascadeDiagnostics optionnel pour tracer la propagation.
+'
+' Sorties / Outputs:
+' - Error flag/ErrorMsg sur les descendants impactes.
+' - cascadeDiagnostics rempli avec la racine et le parent de propagation.
+'
+' Appele par / Called by:
+' - Run_Calc_Core apres le calcul standard et le post-process LOE.
+'
+' Notes:
+' - Les descendants recoivent un message de chaine bloquee s'ils n'ont pas deja
+'   leur propre erreur racine.
+'------------------------------------------------------------------------------
 Private Sub Core_PropagateBlockingErrors( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1398,6 +1619,27 @@ Private Sub Core_PropagateBlockingErrors( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR:
+' Cree les diagnostics de cascade pour tous les descendants d'une erreur racine,
+' en conservant la cause initiale et le parent qui propage le blocage.
+'
+' EN:
+' Creates cascade diagnostics for all descendants of one root error, preserving
+' the initial cause and the parent that propagated the block.
+'
+' Entrees / Inputs:
+' - rootId, childrenByPred, allErrorIds et diagnostics racines disponibles.
+'
+' Sorties / Outputs:
+' - cascadeDiagnostics enrichi pour chaque descendant impacte.
+'
+' Appele par / Called by:
+' - Core_PropagateBlockingErrors, une fois par erreur racine.
+'
+' Notes:
+' - Parcours en largeur pour produire une chaine de responsabilite lisible.
+'------------------------------------------------------------------------------
 Private Sub Core_RecordCascadeDiagnosticsForRoot( _
     ByVal rootId As String, _
     ByVal childrenByPred As Object, _
@@ -1466,6 +1708,10 @@ Private Sub Core_RecordCascadeDiagnosticsForRoot( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Efface les sorties calculees uniquement pour les IDs du recalcul partiel et retire leurs caches en memoire.
+' EN: Clears calculated outputs only for partial recalculation IDs and removes their in-memory cache entries.
+'------------------------------------------------------------------------------
 Private Sub Core_ClearCalcOutputs_ForScope( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1507,6 +1753,10 @@ Private Sub Core_ClearCalcOutputs_ForScope( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Identifie les taches Level of Effort afin de les exclure du calcul topo standard et de les traiter a part.
+' EN: Identifies Level of Effort tasks so they can be excluded from standard topological calculation and handled separately.
+'------------------------------------------------------------------------------
 Private Function Core_BuildLOEIds( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _
@@ -1543,6 +1793,10 @@ Private Function Core_BuildLOEIds( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise les libelles de type de tache consommes par le Core.
+' EN: Normalizes task type labels consumed by the Core.
+'------------------------------------------------------------------------------
 Private Function Core_NormalizeTaskType(ByVal rawValue As Variant) As String
 
     Dim s As String
@@ -1567,6 +1821,10 @@ Private Function Core_NormalizeTaskType(ByVal rawValue As Variant) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retire d'un dictionnaire de travail tous les IDs presents dans un second dictionnaire.
+' EN: Removes from a working dictionary every ID present in a second dictionary.
+'------------------------------------------------------------------------------
 Private Sub Core_RemoveIdsFromDictionary( _
     ByVal targetDict As Object, _
     ByVal idsToRemove As Object)
@@ -1583,6 +1841,11 @@ Private Sub Core_RemoveIdsFromDictionary( _
     Next idVal
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Valide Core Validate LOE As Non Predecessor et applique la politique d'erreur definie par le composant.
+' EN: Validates Core Validate LOE As Non Predecessor and applies the component's defined failure policy.
+'------------------------------------------------------------------------------
 
 Private Sub Core_ValidateLOEAsNonPredecessor( _
     ByRef dataArr As Variant, _
@@ -1637,6 +1900,33 @@ Private Sub Core_ValidateLOEAsNonPredecessor( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR:
+' Calcule les taches Level of Effort apres les taches standard, a partir de
+' liens SS pour le debut et FF pour la fin, puis neutralise les champs analytiques
+' qui ne s'appliquent pas a une LOE.
+'
+' EN:
+' Computes Level of Effort tasks after standard tasks, using SS links for start
+' and FF links for finish, then clears analytics fields that do not apply to LOE.
+'
+' Entrees / Inputs:
+' - loeIds, dataArr, mapCol, rowById, linksBySuccId et directChildrenById.
+' - calcStartById/calcFinishById issus du calcul standard.
+' - blockingErrors pour signaler les LOE invalides ou non calculables.
+'
+' Sorties / Outputs:
+' - Dates calculees LOE ajoutees aux caches Core.
+' - Erreurs bloquantes sur LOE si les liens SS/FF requis sont absents ou invalides.
+' - Champs Driving Logic, Critical Path, Total/Free Float et REX nettoyes si presents.
+'
+' Appele par / Called by:
+' - Run_Calc_Core apres le parcours topologique des taches non-LOE.
+'
+' Notes:
+' - Les LOE doivent avoir au moins un SS et un FF; FS et autres types sont refuses.
+' - Les sources summary SS sont regroupees pour choisir le debut le plus tot du groupe.
+'------------------------------------------------------------------------------
 Private Sub Core_ApplyLOEPostProcess( _
     ByRef dataArr As Variant, _
     ByVal mapCol As Object, _

@@ -1,9 +1,35 @@
 Attribute VB_Name = "mod_DataSync"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_DataSync
+' DOMAINE / DOMAIN : WBS / CALC Synchronization
+'
+' FR
+' Synchronise les datasets canoniques WBS, CALC et LOGIC_LINKS avant le calcul.
+' Ne calcule pas les dates planning et ne rend aucune vue.
+'
+' EN
+' Synchronizes canonical WBS, CALC and LOGIC_LINKS datasets before calculation.
+' Does not calculate planning dates or render views.
+'
+' CONTRATS / CONTRACTS : Sync_WBS_To_CALC, Planning_WBSIsEmpty, Planning_CalcSafeEmptyState, Planning_GanttSafeEmptyState, Planning_FullSafeEmptyState, Sync_Forecast_Only, RebuildLogicLinksTable
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const LOGIC_LINKS_TABLE_NAME As String = "tbl_LOGIC_LINKS"
 Private Const LOGIC_LINKS_FIRST_CELL As String = "Z1"
 
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Sync WBS To CALC dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Sync WBS To CALC in the store owned by the domain.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
 
@@ -359,6 +385,11 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Indique si WBS ne contient aucune identite de tache apres restauration des formules gerees. En cas d'echec de lecture, retourne True pour declencher le Safe Empty State.
+' EN: Returns whether WBS contains no task identity after managed formulas are restored. On read failure, returns True to trigger the Safe Empty State.
+'------------------------------------------------------------------------------
+
 Public Function Planning_WBSIsEmpty() As Boolean
 
     Dim perfScope As clsPerfScope
@@ -395,6 +426,11 @@ FailSafe:
     Planning_WBSIsEmpty = True
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map WBS Row Has Task IDentity sans modifier les donnees d'entree.
+' EN: Returns the WBS Row Has Task IDentity map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function WBSRowHasTaskIdentity( _
     ByVal tblWBS As ListObject, _
@@ -436,6 +472,11 @@ Private Function WBSRowHasTaskIdentity( _
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Vide les sorties CALC possedees lorsque WBS ne contient aucun projet exploitable.
+' EN: Clears owned CALC outputs when WBS contains no usable project.
+'------------------------------------------------------------------------------
+
 Public Sub Planning_CalcSafeEmptyState()
 
     Dim oldScreenUpdating As Boolean
@@ -460,6 +501,11 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Place le Gantt dans son etat visuel vide sans lancer le renderer normal.
+' EN: Places Gantt in its safe empty visual state without running the normal renderer.
+'------------------------------------------------------------------------------
+
 Public Sub Planning_GanttSafeEmptyState()
 
     Dim oldScreenUpdating As Boolean
@@ -472,8 +518,8 @@ Public Sub Planning_GanttSafeEmptyState()
     Application.ScreenUpdating = False
     Application.EnableEvents = False
 
-    ClearPlanningTableRows "CALC_STATE", "tbl_CALC_STATE"
-    ClearPlanningTableRows "CALC_GANTT_TEST", "tbl_CALC_GANTT_TEST"
+    CalcState_ResetStorage
+    GanttSimulation_ResetTableStorage
     Gantt_SafeEmptyState
 
 SafeExit:
@@ -481,6 +527,11 @@ SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Orchestre les Safe Empty States CALC, Gantt, S-Curve et Dashboard dans l'ordre du workflow vide.
+' EN: Orchestrates CALC, Gantt, S-Curve and Dashboard Safe Empty States in empty-workflow order.
+'------------------------------------------------------------------------------
 
 Public Sub Planning_FullSafeEmptyState()
 
@@ -490,6 +541,10 @@ Public Sub Planning_FullSafeEmptyState()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Planning Table Rows.
+' EN: Clears or resets Planning Table Rows.
+'------------------------------------------------------------------------------
 Private Sub ClearPlanningTableRows(ByVal sheetName As String, ByVal tableName As String)
 
     Dim ws As Worksheet
@@ -508,6 +563,10 @@ Private Sub ClearPlanningTableRows(ByVal sheetName As String, ByVal tableName As
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Task Type Column Exists si necessaire.
+' EN: Ensures or creates Task Type Column Exists when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureTaskTypeColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -566,6 +625,10 @@ Private Sub EnsureTaskTypeColumnExists( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Calendar Column Exists si necessaire.
+' EN: Ensures or creates Calendar Column Exists when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureCalendarColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -594,6 +657,10 @@ Private Sub EnsureCalendarColumnExists( _
     End If
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Deadline Output Columns Exist si necessaire.
+' EN: Ensures or creates Deadline Output Columns Exist when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureDeadlineOutputColumnsExist( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -657,6 +724,10 @@ End Sub
 
 
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Longest Path Output Columns Exist si necessaire.
+' EN: Ensures or creates Longest Path Output Columns Exist when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureLongestPathOutputColumnsExist( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -696,6 +767,10 @@ Private Sub EnsureLongestPathOutputColumnsExist( _
     End If
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Normalise Task Type Value dans un format exploitable.
+' EN: Normalizes Task Type Value into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeTaskTypeValue(ByVal rawValue As Variant) As String
 
     Dim s As String
@@ -721,6 +796,13 @@ Private Function NormalizeTaskTypeValue(ByVal rawValue As Variant) As String
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Sync Forecast Only dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Sync Forecast Only in the store owned by the domain.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
 
 Function Sync_Forecast_Only() As Boolean
 
@@ -860,198 +942,10 @@ SafeExit:
 End Function
 
 
-Public Sub Push_Calculated_Back_To_WBS()
-
-    Dim perfScope As clsPerfScope
-
-    Dim wsWBS As Worksheet
-    Dim wsCalc As Worksheet
-    Dim tblWBS As ListObject
-    Dim tblCalc As ListObject
-
-    Dim mapWBS As Object
-    Dim mapCalc As Object
-    Dim calcRowById As Object
-
-    Dim allowedFields As Variant
-    Dim authorizedFields As Variant
-    Dim writeStarted As Boolean
-    Dim outCols As Object
-
-    Dim arrWBS As Variant
-    Dim arrCalc As Variant
-    Dim outArr() As Variant
-
-    Dim r As Long
-    Dim c As Long
-    Dim i As Long
-
-    Dim wbsRows As Long
-    Dim calcRows As Long
-
-    Dim id As String
-    Dim fieldName As String
-    Dim calcRow As Long
-
-    Dim consoleMessages As Collection
-
-    Set perfScope = Profiler_BeginScope("Push_Calculated_Back_To_WBS", "Excel Table Write")
-
-    On Error GoTo SafeExit
-
-    Set consoleMessages = New Collection
-
-    Set wsWBS = ThisWorkbook.Worksheets("WBS")
-    Set wsCalc = ThisWorkbook.Worksheets("CALC")
-
-    Set tblWBS = wsWBS.ListObjects("tbl_WBS")
-    Set tblCalc = wsCalc.ListObjects("tbl_CALC")
-
-    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
-    If tblCalc.DataBodyRange Is Nothing Then Exit Sub
-
-    Set mapWBS = CreateObject("Scripting.Dictionary")
-    Set mapCalc = CreateObject("Scripting.Dictionary")
-    Set calcRowById = CreateObject("Scripting.Dictionary")
-    Set outCols = CreateObject("Scripting.Dictionary")
-
-    allowedFields = Array( _
-        "Calculated Start", _
-        "Calculated Finish", _
-        "Driving Logic", _
-        "Critical Path", _
-        "Longest Path", _
-        "Critical Path REX", _
-        "Total Float", _
-        "Free Float", _
-        "Total Float REX", _
-        "Free Float REX", _
-        "Deadline Float")
-
-    authorizedFields = Array( _
-        "Calculated Start", _
-        "Calculated Finish", _
-        "Driving Logic", _
-        "Critical Path", _
-        "Longest Path", _
-        "Critical Path REX", _
-        "Total Float", _
-        "Free Float", _
-        "Total Float REX", _
-        "Free Float REX", _
-        "Deadline Float", _
-        "Baseline Finish", _
-        "Actual Duration", _
-        "Calculated Duration")
-
-    For c = 1 To tblWBS.ListColumns.Count
-        mapWBS(tblWBS.ListColumns(c).Name) = c
-    Next c
-
-    For c = 1 To tblCalc.ListColumns.Count
-        mapCalc(tblCalc.ListColumns(c).Name) = c
-    Next c
-
-    If Not mapWBS.Exists("ID") Then
-        DataSync_AddConsoleMessage consoleMessages, "STOP", _
-            "La colonne ID est introuvable dans tbl_WBS.", _
-            "Column ID was not found in tbl_WBS."
-        GoTo SafeExit
-    End If
-
-    If Not mapCalc.Exists("ID") Then
-        DataSync_AddConsoleMessage consoleMessages, "STOP", _
-            "La colonne ID est introuvable dans tbl_CALC.", _
-            "Column ID was not found in tbl_CALC."
-        GoTo SafeExit
-    End If
-
-    For i = LBound(allowedFields) To UBound(allowedFields)
-
-        fieldName = CStr(allowedFields(i))
-
-        If Not mapWBS.Exists(fieldName) Then
-            DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                "Colonne de sortie introuvable dans tbl_WBS : " & fieldName, _
-                "Output column not found in tbl_WBS: " & fieldName
-            GoTo SafeExit
-        End If
-
-        If Not mapCalc.Exists(fieldName) Then
-            DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                "Colonne de sortie introuvable dans tbl_CALC : " & fieldName, _
-                "Output column not found in tbl_CALC: " & fieldName
-            GoTo SafeExit
-        End If
-
-    Next i
-
-    arrWBS = tblWBS.DataBodyRange.value
-    arrCalc = tblCalc.DataBodyRange.value
-
-    wbsRows = UBound(arrWBS, 1)
-    calcRows = UBound(arrCalc, 1)
-
-    For r = 1 To calcRows
-        id = Trim$(CStr(arrCalc(r, mapCalc("ID"))))
-        If id <> "" Then
-            If Not calcRowById.Exists(id) Then
-                calcRowById(id) = r
-            End If
-        End If
-    Next r
-
-    For i = LBound(allowedFields) To UBound(allowedFields)
-
-        fieldName = CStr(allowedFields(i))
-        ReDim outArr(1 To wbsRows, 1 To 1)
-
-        For r = 1 To wbsRows
-
-            id = Trim$(CStr(arrWBS(r, mapWBS("ID"))))
-
-            If id <> "" Then
-                If calcRowById.Exists(id) Then
-                    calcRow = CLng(calcRowById(id))
-                    outArr(r, 1) = arrCalc(calcRow, mapCalc(fieldName))
-                Else
-                    outArr(r, 1) = Empty
-                End If
-            Else
-                outArr(r, 1) = Empty
-            End If
-
-        Next r
-
-        outCols(fieldName) = outArr
-
-    Next i
-
-    BeginAuthorizedWBSWrite "Push_Calculated_Back_To_WBS", authorizedFields
-
-    For i = LBound(allowedFields) To UBound(allowedFields)
-        fieldName = CStr(allowedFields(i))
-        tblWBS.ListColumns(fieldName).DataBodyRange.value = outCols(fieldName)
-    Next i
-
-    RestoreWBSFormulaColumns tblWBS
-
-SafeExit:
-    If writeStarted Then EndAuthorizedWBSWrite
-
-    If Err.Number <> 0 Then
-        If consoleMessages Is Nothing Then Set consoleMessages = New Collection
-        DataSync_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur dans Push_Calculated_Back_To_WBS : " & Err.Description, _
-            "Error in Push_Calculated_Back_To_WBS: " & Err.Description
-    End If
-
-    If Not consoleMessages Is Nothing Then
-        CalcBridge_ShowPlanningConsole consoleMessages
-    End If
-
-End Sub
-
+'------------------------------------------------------------------------------
+' FR: Indique si Allowed Calculated Push Field est vrai pour le contexte courant.
+' EN: Returns whether Allowed Calculated Push Field is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsAllowedCalculatedPushField(ByVal fieldName As String) As Boolean
 
     Select Case fieldName
@@ -1078,6 +972,11 @@ Private Function IsAllowedCalculatedPushField(ByVal fieldName As String) As Bool
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply WBS Date Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply WBS Date Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub ApplyWBSDateFormats(ByVal tblWBS As ListObject)
 
     On Error Resume Next
@@ -1096,6 +995,11 @@ Private Sub ApplyWBSDateFormats(ByVal tblWBS As ListObject)
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Traite la collection Rebuild Logic Links Table sans modifier les donnees d'entree.
+' EN: Handles the Rebuild Logic Links Table collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Sub RebuildLogicLinksTable()
 
@@ -1150,7 +1054,7 @@ Public Sub RebuildLogicLinksTable()
         mapWBS(tblWBS.ListColumns(i).Name) = i
     Next i
 
-    Set wbsToId = BuildWbsToIdMapFromTable(tblWBS, mapWBS)
+    Set wbsToId = CanonicalIdentity_BuildWbsToIdMap(tblWBS, mapWBS)
     arr = tblWBS.DataBodyRange.value
     rowCount = UBound(arr, 1)
 
@@ -1221,6 +1125,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Logic Links Table si necessaire.
+' EN: Ensures or creates Logic Links Table when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureLogicLinksTable(ByVal wsCalc As Worksheet) As ListObject
 
     Dim perfScope As clsPerfScope
@@ -1253,6 +1161,10 @@ Private Function EnsureLogicLinksTable(ByVal wsCalc As Worksheet) As ListObject
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Ecrit Logic Links Headers vers le stockage cible.
+' EN: Writes Logic Links Headers to the target storage.
+'------------------------------------------------------------------------------
 Private Sub WriteLogicLinksHeaders(ByVal headerRange As Range)
 
     headerRange.Cells(1, 1).value = "Succ ID"
@@ -1266,6 +1178,10 @@ Private Sub WriteLogicLinksHeaders(ByVal headerRange As Range)
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Logic Links Table Rows.
+' EN: Clears or resets Logic Links Table Rows.
+'------------------------------------------------------------------------------
 Private Sub ClearLogicLinksTableRows(ByVal tbl As ListObject)
 
     Dim perfScope As clsPerfScope
@@ -1281,6 +1197,10 @@ Private Sub ClearLogicLinksTableRows(ByVal tbl As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Journalise Logic Links Table Matches Empty dans l'historique planning.
+' EN: Logs Logic Links Table Matches Empty into the planning history.
+'------------------------------------------------------------------------------
 Private Function LogicLinksTableMatchesEmpty(ByVal tbl As ListObject) As Boolean
 
     Dim values As Variant
@@ -1302,6 +1222,10 @@ Private Function LogicLinksTableMatchesEmpty(ByVal tbl As ListObject) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Journalise Logic Links Table Matches Output dans l'historique planning.
+' EN: Logs Logic Links Table Matches Output into the planning history.
+'------------------------------------------------------------------------------
 Private Function LogicLinksTableMatchesOutput( _
     ByVal tbl As ListObject, _
     ByRef outArr() As Variant, _
@@ -1338,6 +1262,13 @@ Private Function LogicLinksTableMatchesOutput( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Traite la reference Rewrite Logic Links Table sans modifier les donnees d'entree.
+' EN: Handles the Rewrite Logic Links Table reference without mutating input data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub RewriteLogicLinksTable( _
     ByVal tbl As ListObject, _
     ByRef outArr() As Variant, _
@@ -1372,6 +1303,11 @@ Private Sub RewriteLogicLinksTable( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Logic Links Table Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Logic Links Table Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub ApplyLogicLinksTableFormats(ByVal tbl As ListObject)
 
     Dim perfScope As clsPerfScope
@@ -1393,144 +1329,10 @@ Private Sub ApplyLogicLinksTableFormats(ByVal tbl As ListObject)
 
 End Sub
 
-Private Sub RestoreWBSFormulaColumns(ByVal tblWBS As ListObject)
-
-    Dim perfScope As clsPerfScope
-    Dim consoleMessages As Collection
-    Dim authorizedFields As Variant
-    Dim dataArr As Variant
-    Dim hasIdentity() As Boolean
-    Dim rowCount As Long
-    Dim r As Long
-    Dim idColIndex As Long
-    Dim wbsColIndex As Long
-    Dim idVal As String
-    Dim wbsVal As String
-    Dim baselineFinishCol As ListColumn
-    Dim actualDurationCol As ListColumn
-    Dim calculatedDurationCol As ListColumn
-
-    Set perfScope = Profiler_BeginScope("RestoreWBSFormulaColumns", "Excel Formula Restore")
-
-    On Error GoTo SafeExit
-
-    Set consoleMessages = New Collection
-
-    If tblWBS Is Nothing Then Exit Sub
-    If tblWBS.DataBodyRange Is Nothing Then Exit Sub
-
-    On Error Resume Next
-    idColIndex = tblWBS.ListColumns("ID").Index
-    wbsColIndex = tblWBS.ListColumns("WBS").Index
-    Set baselineFinishCol = tblWBS.ListColumns("Baseline Finish")
-    Set actualDurationCol = tblWBS.ListColumns("Actual Duration")
-    Set calculatedDurationCol = tblWBS.ListColumns("Calculated Duration")
-    Err.Clear
-    On Error GoTo SafeExit
-
-    dataArr = tblWBS.DataBodyRange.value
-    rowCount = UBound(dataArr, 1)
-    ReDim hasIdentity(1 To rowCount)
-
-    For r = 1 To rowCount
-        idVal = vbNullString
-        wbsVal = vbNullString
-        If idColIndex > 0 Then idVal = Trim$(CStr(dataArr(r, idColIndex)))
-        If wbsColIndex > 0 Then wbsVal = Trim$(CStr(dataArr(r, wbsColIndex)))
-        wbsVal = Replace$(wbsVal, ",", ".")
-        hasIdentity(r) = (idVal <> vbNullString Or wbsVal <> vbNullString)
-    Next r
-
-    authorizedFields = Array("Baseline Finish", "Actual Duration", "Calculated Duration")
-    BeginAuthorizedWBSWrite "RestoreWBSFormulaColumns", authorizedFields
-
-    If Not baselineFinishCol Is Nothing Then
-        RestoreWBSFormulaColumnIfNeeded baselineFinishCol, hasIdentity, _
-            "=SI(OU([@[Baseline Start]]="""";[@[Baseline Duration]]="""");"""";[@[Baseline Start]]+[@[Baseline Duration]]-1)", _
-            "dd/mm/yyyy"
-    End If
-
-    If Not actualDurationCol Is Nothing Then
-        RestoreWBSFormulaColumnIfNeeded actualDurationCol, hasIdentity, _
-            "=SI(OU([@[Actual Start]]="""";[@[Actual Finish]]="""");"""";[@[Actual Finish]]-[@[Actual Start]]+1)", _
-            "0"
-    End If
-
-    If Not calculatedDurationCol Is Nothing Then
-        RestoreWBSFormulaColumnIfNeeded calculatedDurationCol, hasIdentity, _
-            "=SI(OU([@[Calculated Start]]="""";[@[Calculated Finish]]="""");"""";[@[Calculated Finish]]-[@[Calculated Start]]+1)", _
-            "0"
-    End If
-
-SafeExit:
-    EndAuthorizedWBSWrite
-
-    If Err.Number <> 0 Then
-        If consoleMessages Is Nothing Then Set consoleMessages = New Collection
-        DataSync_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur dans RestoreWBSFormulaColumns : " & Err.Description, _
-            "Error in RestoreWBSFormulaColumns: " & Err.Description
-        CalcBridge_ShowPlanningConsole consoleMessages
-    End If
-
-End Sub
-
-Private Sub RestoreWBSFormulaColumnIfNeeded( _
-    ByVal targetColumn As ListColumn, _
-    ByRef hasIdentity() As Boolean, _
-    ByVal expectedFormula As String, _
-    ByVal expectedNumberFormat As String)
-
-    Dim targetRange As Range
-    Dim currentFormulas As Variant
-    Dim outputFormulas() As Variant
-    Dim currentValue As Variant
-    Dim expectedValue As String
-    Dim currentFormat As Variant
-    Dim rowCount As Long
-    Dim r As Long
-    Dim needsWrite As Boolean
-
-    If targetColumn Is Nothing Then Exit Sub
-    Set targetRange = targetColumn.DataBodyRange
-    If targetRange Is Nothing Then Exit Sub
-
-    rowCount = targetRange.Rows.Count
-    currentFormulas = targetRange.FormulaLocal
-    ReDim outputFormulas(1 To rowCount, 1 To 1)
-
-    For r = 1 To rowCount
-        If hasIdentity(r) Then
-            expectedValue = expectedFormula
-        Else
-            expectedValue = vbNullString
-        End If
-
-        outputFormulas(r, 1) = expectedValue
-
-        If rowCount = 1 And Not IsArray(currentFormulas) Then
-            currentValue = currentFormulas
-        Else
-            currentValue = currentFormulas(r, 1)
-        End If
-
-        If IsError(currentValue) Or IsNull(currentValue) Then
-            needsWrite = True
-        ElseIf StrComp(CStr(currentValue), expectedValue, vbTextCompare) <> 0 Then
-            needsWrite = True
-        End If
-    Next r
-
-    If needsWrite Then targetRange.FormulaLocal = outputFormulas
-
-    currentFormat = targetRange.NumberFormat
-    If IsNull(currentFormat) Then
-        targetRange.NumberFormat = expectedNumberFormat
-    ElseIf StrComp(CStr(currentFormat), expectedNumberFormat, vbTextCompare) <> 0 Then
-        targetRange.NumberFormat = expectedNumberFormat
-    End If
-
-End Sub
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Table Has Column sans modifier les donnees d'entree.
+' EN: Returns the Table Has Column reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
@@ -1571,6 +1373,10 @@ End Function
 '=====================================================
 
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree WBSTask Type Input Setup si necessaire.
+' EN: Ensures or creates WBSTask Type Input Setup when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
     Dim perfScope As clsPerfScope
@@ -1633,6 +1439,10 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Summary Display Column Exists si necessaire.
+' EN: Ensures or creates Summary Display Column Exists when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureSummaryDisplayColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
@@ -1693,6 +1503,10 @@ Private Sub EnsureSummaryDisplayColumnExists( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise Summary Display Value dans un format exploitable.
+' EN: Normalizes Summary Display Value into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeSummaryDisplayValue(ByVal rawValue As Variant) As String
 
     Dim txt As String
@@ -1712,6 +1526,11 @@ Private Function NormalizeSummaryDisplayValue(ByVal rawValue As Variant) As Stri
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Default Summary Display Value sans modifier les donnees d'entree.
+' EN: Returns the Default Summary Display Value map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function DefaultSummaryDisplayValue( _
     ByVal tblWBS As ListObject, _
@@ -1745,6 +1564,10 @@ Private Function DefaultSummaryDisplayValue( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise WBSSummary Display Values dans un format exploitable.
+' EN: Normalizes WBSSummary Display Values into a usable format.
+'------------------------------------------------------------------------------
 Private Sub NormalizeWBSSummaryDisplayValues( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object, _
@@ -1777,6 +1600,10 @@ Private Sub NormalizeWBSSummaryDisplayValues( _
     Next r
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree WBSCalendar Input Setup si necessaire.
+' EN: Ensures or creates WBSCalendar Input Setup when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
 
     Dim perfScope As clsPerfScope
@@ -1826,6 +1653,11 @@ Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit la map WBS Summary WBS Lookup a partir des donnees fournies par l'appelant.
+' EN: Builds the WBS Summary WBS Lookup map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildWBSSummaryWbsLookup( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object) As Object
@@ -1872,6 +1704,10 @@ Private Function BuildWBSSummaryWbsLookup( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Calendar Ignored WBSRow est vrai pour le contexte courant.
+' EN: Returns whether Calendar Ignored WBSRow is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsCalendarIgnoredWBSRow( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object, _
@@ -1903,6 +1739,10 @@ Private Function IsCalendarIgnoredWBSRow( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise WBSCalendar Values dans un format exploitable.
+' EN: Normalizes WBSCalendar Values into a usable format.
+'------------------------------------------------------------------------------
 Private Sub NormalizeWBSCalendarValues( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object, _
@@ -1941,6 +1781,11 @@ Private Sub NormalizeWBSCalendarValues( _
     Next r
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Traite la collection Data Sync Collect Missing Predecessor Refs sans modifier les donnees d'entree.
+' EN: Handles the Data Sync Collect Missing Predecessor Refs collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub DataSync_CollectMissingPredecessorRefs( _
     ByVal linksOut As Collection, _
     ByVal missingRefs As Collection)
@@ -1979,6 +1824,11 @@ Private Sub DataSync_CollectMissingPredecessorRefs( _
     Next linkRow
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la collection Data Sync Build Missing Predecessor Messages a partir des donnees fournies par l'appelant.
+' EN: Builds the Data Sync Build Missing Predecessor Messages collection from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub DataSync_BuildMissingPredecessorMessages( _
     ByVal missingRefs As Collection, _
@@ -2023,6 +1873,11 @@ Private Sub DataSync_BuildMissingPredecessorMessages( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection Data Sync Build Missing Pred Inline a partir des donnees fournies par l'appelant.
+' EN: Builds the Data Sync Build Missing Pred Inline collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function DataSync_BuildMissingPredInline( _
     ByVal missingRefs As Collection, _
     ByVal fieldName As String, _
@@ -2063,6 +1918,11 @@ Private Function DataSync_BuildMissingPredInline( _
     DataSync_BuildMissingPredInline = result
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Data Sync Add Console Message a la structure cible fournie par l'appelant.
+' EN: Adds the Data Sync Add Console Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub DataSync_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _

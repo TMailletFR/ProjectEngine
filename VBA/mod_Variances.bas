@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_Variances"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_Variances
+' DOMAINE / DOMAIN : Shared Infrastructure
+'
+' FR
+' Calcule les references baseline, rollups parent et variances, puis ecrit leurs sorties WBS.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Calculates baseline references, parent rollups and variances, then writes their WBS outputs.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Compute_And_Push_Variances
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 ' ============================================================
 ' VARIANCE ENGINE – HYBRID BASELINE APPROACH
 '
@@ -65,6 +82,10 @@ Option Explicit
 ' ============================================================
 
 
+'------------------------------------------------------------------------------
+' FR: Calcule And Push Variances pour le moteur variance calculation.
+' EN: Computes And Push Variances for the variance calculation engine.
+'------------------------------------------------------------------------------
 Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collection)
 
     Dim perfScope As clsPerfScope
@@ -98,7 +119,7 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
 
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
 
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
+    Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
 
     requiredCols = Array( _
         "ID", _
@@ -157,6 +178,11 @@ ErrHandler:
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Variance Build WBS Indexes a partir des donnees fournies par l'appelant.
+' EN: Builds the Variance Build WBS Indexes map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Variance_BuildWbsIndexes( _
     ByVal tblWBS As ListObject, _
@@ -220,6 +246,11 @@ Private Sub Variance_BuildWbsIndexes( _
     Next r
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la collection Variance Build Leaf Baseline References a partir des donnees fournies par l'appelant.
+' EN: Builds the Variance Build Leaf Baseline References collection from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Variance_BuildLeafBaselineReferences( _
     ByVal tblWBS As ListObject, _
@@ -372,6 +403,11 @@ NextRemainingTask:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Propage ou agrege la map Variance Rollup Parent Baseline References selon les relations du reseau courant.
+' EN: Propagates or rolls up the Variance Rollup Parent Baseline References map through current network relations.
+'------------------------------------------------------------------------------
+
 Private Sub Variance_RollupParentBaselineReferences( _
     ByVal directChildrenRows As Object, _
     ByVal parentRows As Object, _
@@ -454,6 +490,11 @@ Private Sub Variance_RollupParentBaselineReferences( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Construit la map Variance Build Output Arrays a partir des donnees fournies par l'appelant.
+' EN: Builds the Variance Build Output Arrays map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Variance_BuildOutputArrays( _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object, _
@@ -501,6 +542,13 @@ Private Sub Variance_BuildOutputArrays( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Variance Write Output Arrays To WBS dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Variance Write Output Arrays To WBS in the store owned by the domain.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
+
 Private Sub Variance_WriteOutputArraysToWBS( _
     ByVal tblWBS As ListObject, _
     ByRef outSV() As Variant, _
@@ -508,6 +556,7 @@ Private Sub Variance_WriteOutputArraysToWBS( _
     ByRef outDV() As Variant)
 
     Dim allowedFields As Variant
+    Dim writeScopeToken As Long
 
     On Error GoTo ErrHandler
 
@@ -517,7 +566,8 @@ Private Sub Variance_WriteOutputArraysToWBS( _
         "Duration Variance" _
     )
 
-    BeginAuthorizedWBSWrite "Variance_WriteOutputArraysToWBS", allowedFields
+    writeScopeToken = OpenAuthorizedWBSWriteScope( _
+        "Variance_WriteOutputArraysToWBS", allowedFields)
 
     tblWBS.ListColumns("Start Variance").DataBodyRange.NumberFormat = "0"
     tblWBS.ListColumns("Finish Variance").DataBodyRange.NumberFormat = "0"
@@ -528,7 +578,9 @@ Private Sub Variance_WriteOutputArraysToWBS( _
     tblWBS.ListColumns("Duration Variance").DataBodyRange.value = outDV
 
 SafeExit:
-    EndAuthorizedWBSWrite
+    On Error Resume Next
+    CloseAuthorizedWBSWriteScope writeScopeToken
+    On Error GoTo 0
     Exit Sub
 
 ErrHandler:
@@ -536,6 +588,10 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise WBSCode dans un format exploitable.
+' EN: Normalizes WBSCode into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeWBSCode(ByVal value As String) As String
 
     value = Trim$(CStr(value))
@@ -544,6 +600,10 @@ Private Function NormalizeWBSCode(ByVal value As String) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Parent WBSCode depuis le contexte variance calculation.
+' EN: Returns Parent WBSCode from the variance calculation context.
+'------------------------------------------------------------------------------
 Private Function GetParentWBSCode(ByVal wbsCode As String) As String
 
     Dim p As Long
@@ -559,6 +619,10 @@ Private Function GetParentWBSCode(ByVal wbsCode As String) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Analyse Predecessor Wbs Tokens et extrait les informations utiles.
+' EN: Parses Predecessor Wbs Tokens and extracts useful information.
+'------------------------------------------------------------------------------
 Private Function ParsePredecessorWbsTokens(ByVal predText As String) As Collection
 
     Dim result As Collection
@@ -583,6 +647,10 @@ Private Function ParsePredecessorWbsTokens(ByVal predText As String) As Collecti
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Analyse Predecessor Token et extrait les informations utiles.
+' EN: Parses Predecessor Token and extracts useful information.
+'------------------------------------------------------------------------------
 Private Sub ParsePredecessorToken( _
     ByVal token As String, _
     ByRef predWbs As String, _
@@ -649,6 +717,11 @@ Private Sub ParsePredecessorToken( _
 End Sub
 
 
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Variance Add Or Show Console Message a la structure cible fournie par l'appelant.
+' EN: Adds the Variance Add Or Show Console Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Variance_AddOrShowConsoleMessage( _
     ByVal consoleMessages As Collection, _

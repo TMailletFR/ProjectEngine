@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_AnalyticsOnly"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_AnalyticsOnly
+' DOMAINE / DOMAIN : Analytics
+'
+' FR
+' Pilote l'activation des analytics, leur execution isolee et le nettoyage de leurs sorties.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Controls analytics enablement, standalone execution and output cleanup.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : IsAnalyticsEnabled, SetAnalyticsEnabled, Toggle_Analytics, Ensure_Analytics_Toggle, Refresh_Analytics_Toggle_Visual, Run_Analytics_Only, Clear_Analytics_Outputs
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 ' ============================================================
 ' mod_AnalyticsOnly
 ' ANALYTICS TOGGLE + ANALYTICS ONLY EXECUTION
@@ -53,6 +70,10 @@ Private Const ANALYTICS_LABEL_SHAPE As String = "lbl_WBS_Analytics_Toggle"
 Private Const ANALYTICS_BG_SHAPE As String = "shp_WBS_Analytics_BG"
 Private Const ANALYTICS_KNOB_SHAPE As String = "shp_WBS_Analytics_Knob"
 
+'------------------------------------------------------------------------------
+' FR: Indique si Analytics Enabled est vrai pour le contexte courant.
+' EN: Returns whether Analytics Enabled is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsAnalyticsEnabled() As Boolean
 
     If Not gAnalyticsStateInitialized Then
@@ -64,6 +85,10 @@ Public Function IsAnalyticsEnabled() As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Analytics Enabled dans le contexte analytics.
+' EN: Updates Analytics Enabled in the analytics context.
+'------------------------------------------------------------------------------
 Public Sub SetAnalyticsEnabled(ByVal enabledValue As Boolean)
 
     gAnalyticsEnabled = enabledValue
@@ -71,6 +96,10 @@ Public Sub SetAnalyticsEnabled(ByVal enabledValue As Boolean)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Analytics et met a jour les sorties associees.
+' EN: Toggles Analytics state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_Analytics()
 
     Dim enabledNow As Boolean
@@ -106,6 +135,10 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Analytics Toggle si necessaire.
+' EN: Ensures or creates Analytics Toggle when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_Analytics_Toggle()
 
     On Error GoTo SafeExit
@@ -116,6 +149,10 @@ Public Sub Ensure_Analytics_Toggle()
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Analytics Toggle Visual a partir de l'etat courant.
+' EN: Refreshes Analytics Toggle Visual from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_Analytics_Toggle_Visual()
 
     Dim ws As Worksheet
@@ -182,6 +219,10 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Lance le workflow Analytics Only.
+' EN: Runs the Analytics Only workflow.
+'------------------------------------------------------------------------------
 Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Nothing)
 
     Dim perfScope As clsPerfScope
@@ -218,7 +259,7 @@ Public Sub Run_Analytics_Only(Optional ByVal consoleMessages As Collection = Not
         Exit Sub
     End If
 
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
 
     CalcBridge_RunAnalyticsAndPush tblCalc, mapCalc, linksBySuccId, localConsole
@@ -249,6 +290,10 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise Analytics Outputs.
+' EN: Clears or resets Analytics Outputs.
+'------------------------------------------------------------------------------
 Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection = Nothing)
 
     Dim wsCalc As Worksheet
@@ -260,7 +305,8 @@ Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection 
     Dim allowedFields As Variant
     Dim localConsole As Collection
     Dim showLocalConsole As Boolean
-    Dim writeGuardStarted As Boolean
+    Dim writeScopeToken As Long
+    Dim errorDescription As String
 
     On Error GoTo ErrHandler
 
@@ -290,23 +336,24 @@ Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection 
 
     If Not tblWBS.DataBodyRange Is Nothing Then
 
-        BeginAuthorizedWBSWrite "Clear_Analytics_Outputs", allowedFields
-        writeGuardStarted = True
+        writeScopeToken = OpenAuthorizedWBSWriteScope( _
+            "Clear_Analytics_Outputs", allowedFields)
 
         For i = LBound(analyticsCols) To UBound(analyticsCols)
             ClearListColumnIfExists tblWBS, CStr(analyticsCols(i))
         Next i
 
-        EndAuthorizedWBSWrite
-        writeGuardStarted = False
+        CloseAuthorizedWBSWriteScope writeScopeToken
+        writeScopeToken = 0
 
     End If
 
     Exit Sub
 
 ErrHandler:
+    errorDescription = Err.Description
     On Error Resume Next
-    If writeGuardStarted Then EndAuthorizedWBSWrite
+    CloseAuthorizedWBSWriteScope writeScopeToken
     On Error GoTo 0
 
     If localConsole Is Nothing Then Set localConsole = New Collection
@@ -314,14 +361,19 @@ ErrHandler:
     CalcBridge_AddConsoleMessage localConsole, "STOP", _
         BiMsg( _
             "Erreur dans Clear_Analytics_Outputs" & vbCrLf & _
-            "-> " & Err.Description, _
+            "-> " & errorDescription, _
             "Error in Clear_Analytics_Outputs" & vbCrLf & _
-            "-> " & Err.Description)
+            "-> " & errorDescription)
 
     CalcBridge_ShowPlanningConsole localConsole
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Analytics Only Table Has Negative Float sans modifier les donnees d'entree.
+' EN: Returns the Analytics Only Table Has Negative Float map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function AnalyticsOnly_TableHasNegativeFloat( _
     ByVal tblCalc As ListObject, _
@@ -356,6 +408,11 @@ Private Function AnalyticsOnly_TableHasNegativeFloat( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Analytics Only Negative Float Warning Message sans modifier les donnees d'entree.
+' EN: Returns the Analytics Only Negative Float Warning Message value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function AnalyticsOnly_NegativeFloatWarningMessage() As String
 
     AnalyticsOnly_NegativeFloatWarningMessage = BiMsg( _
@@ -365,6 +422,11 @@ Private Function AnalyticsOnly_NegativeFloatWarningMessage() As String
         "-> check logic, dates, lags or forecasts")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Analytics Column Names sans modifier les donnees d'entree.
+' EN: Returns the Analytics Column Names value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function AnalyticsColumnNames() As Variant
 
@@ -381,6 +443,10 @@ Private Function AnalyticsColumnNames() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise List Column If Exists.
+' EN: Clears or resets List Column If Exists.
+'------------------------------------------------------------------------------
 Private Sub ClearListColumnIfExists(ByVal tbl As ListObject, ByVal columnName As String)
 
     Dim col As ListColumn
@@ -397,6 +463,10 @@ Private Sub ClearListColumnIfExists(ByVal tbl As ListObject, ByVal columnName As
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Analytics Toggle Shapes si necessaire.
+' EN: Ensures or creates Analytics Toggle Shapes when needed.
+'------------------------------------------------------------------------------
 Private Sub Ensure_Analytics_Toggle_Shapes()
 
     Dim ws As Worksheet

@@ -1,51 +1,52 @@
 Attribute VB_Name = "mod_CalcIncremental"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_CalcIncremental
+' DOMAINE / DOMAIN : Calculation / Data Sync
+'
+' FR
+' Compare les signatures courantes a CALC_STATE et construit le scope de recalcul incremental.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Compares current signatures with CALC_STATE and builds the incremental recalculation scope.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Get_Changed_TaskIds, Build_Impacted_TaskIds
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const CALC_SHEET_NAME_INC As String = "CALC"
 Private Const CALC_TABLE_NAME_INC As String = "tbl_CALC"
-Private Const CALC_STATE_SHEET_NAME_INC As String = "CALC_STATE"
-Private Const CALC_STATE_TABLE_NAME_INC As String = "tbl_CALC_STATE"
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne Changed Task Ids depuis le contexte incremental calculation.
+' EN: Returns Changed Task Ids from the incremental calculation context.
+'------------------------------------------------------------------------------
 Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
 
     Dim perfScope As clsPerfScope
-
     Dim wsCalc As Worksheet
-    Dim wsState As Worksheet
     Dim tblCalc As ListObject
-    Dim tblState As ListObject
-
     Dim mapCalc As Object
-    Dim mapState As Object
-
     Dim arrCalc As Variant
-    Dim arrState As Variant
-
     Dim stateSigById As Object
     Dim stateRunStatus As String
     Dim changedIds As Object
-
     Dim r As Long
     Dim idVal As String
     Dim currentSig As String
 
     Set perfScope = Profiler_BeginScope("Get_Changed_TaskIds", "Incremental")
-
     Set changedIds = CreateObject("Scripting.Dictionary")
     forceFullRecalc = False
 
     On Error GoTo ForceFull
-
     Set wsCalc = ThisWorkbook.Worksheets(CALC_SHEET_NAME_INC)
     Set tblCalc = wsCalc.ListObjects(CALC_TABLE_NAME_INC)
-
-    On Error Resume Next
-    Set wsState = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME_INC)
-    If Not wsState Is Nothing Then
-        Set tblState = wsState.ListObjects(CALC_STATE_TABLE_NAME_INC)
-    End If
-    On Error GoTo ForceFull
 
     If tblCalc Is Nothing Then GoTo ForceFull
     If tblCalc.DataBodyRange Is Nothing Then
@@ -54,97 +55,48 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
         Exit Function
     End If
 
-    If tblState Is Nothing Then GoTo ForceFull
-    If tblState.DataBodyRange Is Nothing Then GoTo ForceFull
-
-    Set mapCalc = BuildColumnMap_Incremental(tblCalc)
-    Set mapState = BuildColumnMap_Incremental(tblState)
-
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
     ValidateIncrementalCalcColumns mapCalc
-    ValidateIncrementalStateColumns mapState
-
     arrCalc = tblCalc.DataBodyRange.value
-    arrState = tblState.DataBodyRange.value
+    Set stateSigById = CalcState_GetSignatureByIdMap()
+    stateRunStatus = CalcState_GetRunStatus()
 
-    Set stateSigById = BuildStateSignatureMap(arrState, mapState)
-    stateRunStatus = GetStateRunStatus(arrState, mapState)
-
+    If stateSigById.Count = 0 Then GoTo ForceFull
     If UCase$(Trim$(stateRunStatus)) <> "OK" Then GoTo ForceFull
 
     For r = 1 To UBound(arrCalc, 1)
-
         idVal = Trim$(CStr(arrCalc(r, mapCalc("ID"))))
         If idVal = "" Then GoTo NextRow
-
-        currentSig = BuildCalcCurrentRowSignature(arrCalc, r, mapCalc)
-
+        currentSig = IncrementalSignature_BuildRow(arrCalc, r, mapCalc)
         If Not stateSigById.Exists(idVal) Then
             changedIds(idVal) = True
-            GoTo NextRow
-        End If
-
-        If CStr(stateSigById(idVal)) <> currentSig Then
+        ElseIf CStr(stateSigById(idVal)) <> currentSig Then
             changedIds(idVal) = True
         End If
-
 NextRow:
     Next r
 
     Debug.Print "INCREMENTAL CHECK - changed tasks count: " & changedIds.Count
-
     Set Get_Changed_TaskIds = changedIds
     Exit Function
 
 ForceFull:
     Debug.Print "INCREMENTAL CHECK - FULL FORCED: " & Err.Description
-
     forceFullRecalc = True
     Set changedIds = CreateObject("Scripting.Dictionary")
     Set Get_Changed_TaskIds = changedIds
 
 End Function
-
-
-
-Private Function BuildColumnMap_Incremental(ByVal tbl As ListObject) As Object
-
-    Dim d As Object
-    Dim i As Long
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    For i = 1 To tbl.ListColumns.Count
-        d(tbl.ListColumns(i).Name) = i
-    Next i
-
-    Set BuildColumnMap_Incremental = d
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Valide Incremental Calc Columns et signale les incoherences detectees.
+' EN: Validates Incremental Calc Columns and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Private Sub ValidateIncrementalCalcColumns(ByVal mapCalc As Object)
 
     Dim requiredCols As Variant
     Dim c As Variant
 
-    requiredCols = Array( _
-        "ID", _
-        "ParentID", _
-        "IsSummary", _
-        "Predecessors WBS", _
-        "Cal", _
-        "Baseline Start", _
-        "Baseline Duration", _
-        "Actual Start", _
-        "Actual Finish", _
-        "Forecast Start", _
-        "Forecast Finish", _
-        "Deadline", _
-        "Constraint Active", _
-        "Start Constraint Type", _
-        "Start Constraint Date", _
-        "Finish Constraint Type", _
-        "Finish Constraint Date" _
-    )
+    requiredCols = IncrementalSignature_RequiredColumns()
 
     For Each c In requiredCols
         If Not mapCalc.Exists(CStr(c)) Then
@@ -156,109 +108,14 @@ Private Sub ValidateIncrementalCalcColumns(ByVal mapCalc As Object)
 
 End Sub
 
-Private Sub ValidateIncrementalStateColumns(ByVal mapState As Object)
+'------------------------------------------------------------------------------
+' FR: Construit Calc Current Row Signature pour le traitement incremental calculation.
+' EN: Builds Calc Current Row Signature for incremental calculation processing.
 
-    Dim requiredCols As Variant
-    Dim c As Variant
-
-    requiredCols = Array( _
-        "ID", _
-        "ParentID", _
-        "IsSummary", _
-        "Predecessors WBS", _
-        "Cal", _
-        "Baseline Start", _
-        "Baseline Duration", _
-        "Actual Start", _
-        "Actual Finish", _
-        "Forecast Start", _
-        "Forecast Finish", _
-        "Deadline", _
-        "Constraint Active", _
-        "Start Constraint Type", _
-        "Start Constraint Date", _
-        "Finish Constraint Type", _
-        "Finish Constraint Date", _
-        "Row Signature", _
-        "Run Status" _
-    )
-
-    For Each c In requiredCols
-        If Not mapState.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 9202, _
-                "ValidateIncrementalStateColumns", _
-                "Missing required column in tbl_CALC_STATE: " & CStr(c)
-        End If
-    Next c
-
-End Sub
-
-
-Private Function BuildStateSignatureMap( _
-    ByRef arrState As Variant, _
-    ByVal mapState As Object) As Object
-
-    Dim d As Object
-    Dim r As Long
-    Dim idVal As String
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    For r = 1 To UBound(arrState, 1)
-        idVal = Trim$(CStr(arrState(r, mapState("ID"))))
-        If idVal <> "" Then
-            d(idVal) = Trim$(CStr(arrState(r, mapState("Row Signature"))))
-        End If
-    Next r
-
-    Set BuildStateSignatureMap = d
-
-End Function
-
-Private Function GetStateRunStatus( _
-    ByRef arrState As Variant, _
-    ByVal mapState As Object) As String
-
-    If UBound(arrState, 1) < 1 Then
-        GetStateRunStatus = ""
-        Exit Function
-    End If
-
-    GetStateRunStatus = Trim$(CStr(arrState(1, mapState("Run Status"))))
-
-End Function
-
-Private Function BuildCalcCurrentRowSignature( _
-    ByRef arrCalc As Variant, _
-    ByVal rowIdx As Long, _
-    ByVal mapCalc As Object) As String
-
-    Dim s As String
-
-    s = ""
-    s = s & "|ID=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("ID")), "TEXT")
-    s = s & "|ParentID=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("ParentID")), "TEXT")
-    s = s & "|IsSummary=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("IsSummary")), "BOOLEAN")
-    s = s & "|PredWBS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Predecessors WBS")), "PREDWBS")
-    s = s & "|Cal=" & NormalizeIncrementalSignatureValue(NormalizeCalendarType(arrCalc(rowIdx, mapCalc("Cal"))), "TEXT")
-
-    s = s & "|BS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Baseline Start")), "DATE")
-    s = s & "|BD=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Baseline Duration")), "NUMBER")
-    s = s & "|AS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Actual Start")), "DATE")
-    s = s & "|AF=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Actual Finish")), "DATE")
-    s = s & "|FS=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Forecast Start")), "DATE")
-    s = s & "|FF=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Forecast Finish")), "DATE")
-    s = s & "|DL=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Deadline")), "DATE")
-    s = s & "|CActive=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Constraint Active")), "BOOLEAN")
-    s = s & "|SCType=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Start Constraint Type")), "TEXT")
-    s = s & "|SCDate=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Start Constraint Date")), "DATE")
-    s = s & "|FCType=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Finish Constraint Type")), "TEXT")
-    s = s & "|FCDate=" & NormalizeIncrementalSignatureValue(arrCalc(rowIdx, mapCalc("Finish Constraint Date")), "DATE")
-
-    BuildCalcCurrentRowSignature = s
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Retourne Arr Val Incremental depuis le contexte incremental calculation.
+' EN: Returns Arr Val Incremental from the incremental calculation context.
+'------------------------------------------------------------------------------
 Private Function GetArrVal_Incremental( _
     ByRef arr As Variant, _
     ByVal rowIdx As Long, _
@@ -274,6 +131,10 @@ Private Function GetArrVal_Incremental( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Signature Token Incremental dans un format exploitable.
+' EN: Normalizes Signature Token Incremental into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizeSignatureToken_Incremental(ByVal v As Variant) As String
 
     If isError(v) Then
@@ -323,6 +184,11 @@ End Function
 '=====================================================
 
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection Impacted Task IDs a partir des donnees fournies par l'appelant.
+' EN: Builds the Impacted Task IDs collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Public Function Build_Impacted_TaskIds( _
     ByVal changedIds As Object, _
     ByVal childrenByPred As Object, _
@@ -368,6 +234,10 @@ Public Function Build_Impacted_TaskIds( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Descendants a la structure cible.
+' EN: Adds Descendants to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddDescendants( _
     ByVal rootId As String, _
     ByVal childrenByPred As Object, _
@@ -401,6 +271,10 @@ Private Sub AddDescendants( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Parents a la structure cible.
+' EN: Adds Parents to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddParents( _
     ByVal startId As String, _
     ByVal parentById As Object, _
@@ -426,6 +300,10 @@ Private Sub AddParents( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Descendants Incremental a la structure cible.
+' EN: Adds Descendants Incremental to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddDescendants_Incremental( _
     ByVal rootId As String, _
     ByVal childrenByPred As Object, _
@@ -460,6 +338,10 @@ Private Sub AddDescendants_Incremental( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute Parents Incremental a la structure cible.
+' EN: Adds Parents Incremental to the target structure.
+'------------------------------------------------------------------------------
 Private Sub AddParents_Incremental( _
     ByVal startId As String, _
     ByVal parentById As Object, _
@@ -486,5 +368,3 @@ Private Sub AddParents_Incremental( _
     Loop
 
 End Sub
-
-

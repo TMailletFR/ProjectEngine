@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_Dashboard"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_Dashboard
+' DOMAINE / DOMAIN : Dashboard Rendering
+'
+' FR
+' Construit et actualise les KPI, textes, graphiques et controles du Dashboard.
+' Ne possede pas les calculs Core ou S-Curve sources.
+'
+' EN
+' Builds and refreshes Dashboard KPIs, text, charts and controls.
+' Does not own source Core or S-Curve calculations.
+'
+' CONTRATS / CONTRACTS : Refresh_Dashboard, Refresh_Dashboard_FullBuild, Refresh_Dashboard_ContentOnly, Dashboard_SetLanguage, Dashboard_ApplyLanguage, Toggle_Dashboard_Language, Reset_Dashboard, Run_Dashboard_Update
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const DASHBOARD_SHEET As String = "DASHBOARD"
 Private Const DASHBOARD_SNAPSHOT_SHEET As String = "DASHBOARD_SNAPSHOTS"
 Private Const DASHBOARD_SNAPSHOT_TABLE As String = "tbl_DASHBOARD_SNAPSHOTS"
@@ -13,6 +30,10 @@ Private gDashboardLanguage As String
 Private gHotSpotHelper As String
 Private gHotSpotStep As String
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Dashboard a partir de l'etat courant.
+' EN: Refreshes Dashboard from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_Dashboard(Optional ByVal preserveSnapshotSelection As Boolean = False)
 
     If Dashboard_HasUsableLayout() Then
@@ -22,23 +43,19 @@ Public Sub Refresh_Dashboard(Optional ByVal preserveSnapshotSelection As Boolean
     End If
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Rafraichit Dashboard Full Build a partir de l'etat courant.
+' EN: Refreshes Dashboard Full Build from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection As Boolean = False)
 
     Dim ws As Worksheet
-    Dim tblWBS As ListObject
-    Dim tblCalc As ListObject
-    Dim tblSCurve As ListObject
-    Dim tblCalcSCurve As ListObject
-    Dim mapWBS As Object
-    Dim mapCalc As Object
-    Dim mapSCurve As Object
-    Dim mapCalcSCurve As Object
+    Dim readContext As clsDashboardReadContext
     Dim fromLabel As String
     Dim toLabel As String
     Dim langCode As String
 
     On Error GoTo ErrHandler
-
     Set ws = Dashboard_EnsureSheet()
     If preserveSnapshotSelection Then
         fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
@@ -48,45 +65,33 @@ Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection 
     Dashboard_Clear ws
     Dashboard_SetupCanvas ws
 
-    Set tblWBS = ThisWorkbook.Worksheets("WBS").ListObjects("tbl_WBS")
-    Set tblCalc = ThisWorkbook.Worksheets("CALC").ListObjects("tbl_CALC")
-    Set tblSCurve = ThisWorkbook.Worksheets("SCURVE").ListObjects("tbl_SCURVE")
-    Set tblCalcSCurve = ThisWorkbook.Worksheets("CALC_SCURVE").ListObjects("tbl_CALC_SCURVE")
-
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-    Set mapSCurve = Core_BuildColumnMap_FromListObject(tblSCurve)
-    Set mapCalcSCurve = Core_BuildColumnMap_FromListObject(tblCalcSCurve)
+    Set readContext = DashboardReadContext_Load()
 
     Dashboard_RenderHeader ws, fromLabel, toLabel
-    Dashboard_RenderExecutiveSummary ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
-    Dashboard_RenderSCurveChart ws, tblSCurve, mapSCurve
-    Dashboard_RenderPlanningOverview ws, tblWBS, mapWBS, tblCalc, mapCalc
-    Dashboard_RenderHotSpots ws, tblWBS, mapWBS, tblCalc, mapCalc
+    Dashboard_RenderExecutiveSummary ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
+    Dashboard_RenderSCurveChart ws, readContext.SCurveProjection
+    Dashboard_RenderPlanningOverview ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_RenderHotSpots ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
 
 SafeExit:
     Exit Sub
-
 ErrHandler:
     Debug.Print "Refresh_Dashboard_FullBuild error " & Err.Number & ": " & Err.Description
     Resume SafeExit
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Dashboard Content Only a partir de l'etat courant.
+' EN: Refreshes Dashboard Content Only from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelection As Boolean = False)
 
     Dim ws As Worksheet
-    Dim tblWBS As ListObject
-    Dim tblCalc As ListObject
-    Dim tblSCurve As ListObject
-    Dim tblCalcSCurve As ListObject
-    Dim mapWBS As Object
-    Dim mapCalc As Object
-    Dim mapSCurve As Object
-    Dim mapCalcSCurve As Object
+    Dim readContext As clsDashboardReadContext
     Dim fromLabel As String
     Dim toLabel As String
     Dim oldScreenUpdating As Boolean
-On Error GoTo ErrHandler
+    On Error GoTo ErrHandler
 
     If Not Dashboard_HasUsableLayout() Then
         Refresh_Dashboard_FullBuild preserveSnapshotSelection
@@ -98,38 +103,33 @@ On Error GoTo ErrHandler
         fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
         toLabel = CStr(ws.Range(DASH_TO_CELL).value)
     End If
-
     oldScreenUpdating = Application.ScreenUpdating
     Application.ScreenUpdating = False
 
-    Set tblWBS = ThisWorkbook.Worksheets("WBS").ListObjects("tbl_WBS")
-    Set tblCalc = ThisWorkbook.Worksheets("CALC").ListObjects("tbl_CALC")
-    Set tblSCurve = ThisWorkbook.Worksheets("SCURVE").ListObjects("tbl_SCURVE")
-    Set tblCalcSCurve = ThisWorkbook.Worksheets("CALC_SCURVE").ListObjects("tbl_CALC_SCURVE")
-
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-    Set mapSCurve = Core_BuildColumnMap_FromListObject(tblSCurve)
-    Set mapCalcSCurve = Core_BuildColumnMap_FromListObject(tblCalcSCurve)
+    Set readContext = DashboardReadContext_Load()
     Dashboard_UpdateHeaderTexts ws
     Dashboard_UpdateHeaderTimestamp ws
     Dashboard_SetupSnapshotControls ws, fromLabel, toLabel, False
     Dashboard_EnsureResetButton ws
     Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
-    Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
-    Dashboard_UpdateSCurveChartInPlace ws, tblSCurve, mapSCurve
-    Dashboard_UpdatePlanningOverviewContent ws, tblWBS, mapWBS, tblCalc, mapCalc
-    Dashboard_UpdateHotSpotsContent ws, tblWBS, mapWBS, tblCalc, mapCalc
+    Dashboard_UpdateKpiCardsInPlace ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
+    Dashboard_UpdateSCurveChartInPlace ws, readContext.SCurveProjection
+    Dashboard_UpdatePlanningOverviewContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_UpdateHotSpotsContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
 
 SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
     Exit Sub
-
 ErrHandler:
     Debug.Print "Refresh_Dashboard_ContentOnly error " & Err.Number & ": " & Err.Description
     Resume SafeExit
 End Sub
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Language dans l'etat runtime du composant.
+' EN: Activates or initializes Set Language in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Dashboard_SetLanguage(ByVal languageCode As String)
 
     Select Case UCase$(Trim$(languageCode))
@@ -143,6 +143,11 @@ Public Sub Dashboard_SetLanguage(ByVal languageCode As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Apply Language sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply Language without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Public Sub Dashboard_ApplyLanguage(Optional ByVal languageCode As String = "")
 
     If Trim$(languageCode) <> "" Then Dashboard_SetLanguage languageCode
@@ -150,6 +155,10 @@ Public Sub Dashboard_ApplyLanguage(Optional ByVal languageCode As String = "")
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Dashboard Language et met a jour les sorties associees.
+' EN: Toggles Dashboard Language state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_Dashboard_Language()
 
     If Dashboard_IsFrench() Then
@@ -161,6 +170,11 @@ Public Sub Toggle_Dashboard_Language()
     Refresh_Dashboard_TextsAndComparisonOnly
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Dashboard dans le perimetre possede par le composant.
+' EN: Resets Reset Dashboard within the state owned by the component.
+'------------------------------------------------------------------------------
 
 Public Sub Reset_Dashboard()
 
@@ -188,6 +202,10 @@ SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Lance le workflow Dashboard Update.
+' EN: Runs the Dashboard Update workflow.
+'------------------------------------------------------------------------------
 Public Sub Run_Dashboard_Update()
 
     Dim workflowStarted As Boolean
@@ -234,6 +252,11 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Cree ou remet en conformite la reference Sheet de maniere idempotente.
+' EN: Creates or restores the Sheet reference to a compliant state idempotently.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_EnsureSheet() As Worksheet
 
     Dim ws As Worksheet
@@ -250,6 +273,11 @@ Private Function Dashboard_EnsureSheet() As Worksheet
     Set Dashboard_EnsureSheet = ws
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la reference Usable Layout satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Usable Layout reference satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_HasUsableLayout() As Boolean
 
@@ -274,6 +302,13 @@ Private Function Dashboard_HasUsableLayout() As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Clear dans le perimetre possede par le composant.
+' EN: Resets Clear within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_Clear(ByVal ws As Worksheet)
 
     Dim i As Long
@@ -289,6 +324,11 @@ Private Sub Dashboard_Clear(ByVal ws As Worksheet)
     Next i
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Setup Canvas dans l'etat runtime du composant.
+' EN: Activates or initializes Setup Canvas in the component runtime state.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_SetupCanvas(ByVal ws As Worksheet)
 
@@ -322,6 +362,10 @@ Private Sub Dashboard_SetupCanvas(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Dashboard Comparison a partir de l'etat courant.
+' EN: Refreshes Dashboard Comparison from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_Dashboard_Comparison()
 
     On Error GoTo ErrHandler
@@ -335,35 +379,22 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Dashboard Texts And Comparison Only a partir de l'etat courant.
+' EN: Refreshes Dashboard Texts And Comparison Only from the current state.
+'------------------------------------------------------------------------------
 Private Sub Refresh_Dashboard_TextsAndComparisonOnly()
 
     Dim ws As Worksheet
-    Dim tblWBS As ListObject
-    Dim tblCalc As ListObject
-    Dim tblSCurve As ListObject
-    Dim tblCalcSCurve As ListObject
-    Dim mapWBS As Object
-    Dim mapCalc As Object
-    Dim mapSCurve As Object
-    Dim mapCalcSCurve As Object
+    Dim readContext As clsDashboardReadContext
     Dim fromLabel As String
     Dim toLabel As String
 
     On Error GoTo ErrHandler
-
     Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
     fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
     toLabel = CStr(ws.Range(DASH_TO_CELL).value)
-
-    Set tblWBS = ThisWorkbook.Worksheets("WBS").ListObjects("tbl_WBS")
-    Set tblCalc = ThisWorkbook.Worksheets("CALC").ListObjects("tbl_CALC")
-    Set tblSCurve = ThisWorkbook.Worksheets("SCURVE").ListObjects("tbl_SCURVE")
-    Set tblCalcSCurve = ThisWorkbook.Worksheets("CALC_SCURVE").ListObjects("tbl_CALC_SCURVE")
-
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-    Set mapSCurve = Core_BuildColumnMap_FromListObject(tblSCurve)
-    Set mapCalcSCurve = Core_BuildColumnMap_FromListObject(tblCalcSCurve)
+    Set readContext = DashboardReadContext_Load()
 
     Dashboard_UpdateHeaderTexts ws
     Dashboard_UpdateHeaderTimestamp ws
@@ -371,18 +402,24 @@ Private Sub Refresh_Dashboard_TextsAndComparisonOnly()
     Dashboard_EnsureResetButton ws
     Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
-    Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
-    Dashboard_UpdateSCurveChartInPlace ws, tblSCurve, mapSCurve
-    Dashboard_UpdatePlanningOverviewContent ws, tblWBS, mapWBS, tblCalc, mapCalc
-    Dashboard_UpdateHotSpotsContent ws, tblWBS, mapWBS, tblCalc, mapCalc
+    Dashboard_UpdateKpiCardsInPlace ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
+    Dashboard_UpdateSCurveChartInPlace ws, readContext.SCurveProjection
+    Dashboard_UpdatePlanningOverviewContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_UpdateHotSpotsContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
 
 SafeExit:
     Exit Sub
-
 ErrHandler:
     Debug.Print "Refresh_Dashboard_TextsAndComparisonOnly error " & Err.Number & ": " & Err.Description
     Resume SafeExit
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Clear Snapshots For Reset dans le perimetre possede par le composant.
+' EN: Resets Clear Snapshots For Reset within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_ClearSnapshotsForReset()
 
@@ -402,12 +439,22 @@ Private Sub Dashboard_ClearSnapshotsForReset()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Visual Caches dans le perimetre possede par le composant.
+' EN: Resets Reset Visual Caches within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_ResetVisualCaches()
 
     gHotSpotHelper = vbNullString
     gHotSpotStep = vbNullString
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Empty Shell sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Empty Shell without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderEmptyShell(ByVal ws As Worksheet)
 
@@ -418,6 +465,11 @@ Private Sub Dashboard_RenderEmptyShell(ByVal ws As Worksheet)
     Dashboard_RenderHotSpotsEmpty ws
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Executive Summary Empty sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Executive Summary Empty without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderExecutiveSummaryEmpty(ByVal ws As Worksheet)
 
@@ -466,6 +518,11 @@ Private Sub Dashboard_RenderExecutiveSummaryEmpty(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Render S Curve Empty sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render S Curve Empty without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderSCurveEmpty(ByVal ws As Worksheet)
 
     Dim leftPos As Double
@@ -484,6 +541,11 @@ Private Sub Dashboard_RenderSCurveEmpty(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Render Planning Overview Empty sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Planning Overview Empty without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderPlanningOverviewEmpty(ByVal ws As Worksheet)
 
     Dim leftPos As Double
@@ -501,6 +563,11 @@ Private Sub Dashboard_RenderPlanningOverviewEmpty(ByVal ws As Worksheet)
     Dashboard_WriteDashboardEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Hot Spots Empty sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Hot Spots Empty without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderHotSpotsEmpty(ByVal ws As Worksheet)
 
@@ -535,6 +602,13 @@ Private Sub Dashboard_RenderHotSpotsEmpty(ByVal ws As Worksheet)
     Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH, Dashboard_L("Activité critique", "Next Critical Activity")
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Actualise Update Header Texts sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Header Texts without changing the business rules that produce the data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_UpdateHeaderTexts(ByVal ws As Worksheet)
 
     With ws.Range("B1:P2")
@@ -552,6 +626,11 @@ Private Sub Dashboard_UpdateHeaderTexts(ByVal ws As Worksheet)
     On Error GoTo 0
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Header Timestamp sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Header Timestamp without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
 
@@ -580,6 +659,13 @@ Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
     End If
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Reinitialise Remove Legacy Language Toggle dans le perimetre possede par le composant.
+' EN: Resets Remove Legacy Language Toggle within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RemoveLegacyLanguageToggle(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
@@ -591,6 +677,13 @@ Private Sub Dashboard_RemoveLegacyLanguageToggle(ByVal ws As Worksheet)
     On Error GoTo 0
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Language Toggle sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Language Toggle without changing the business rules that produce the data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdateLanguageToggle(ByVal ws As Worksheet)
 
@@ -620,6 +713,13 @@ Private Sub Dashboard_UpdateLanguageToggle(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Clear Kpi Shapes dans le perimetre possede par le composant.
+' EN: Resets Clear Kpi Shapes within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_ClearKpiShapes(ByVal ws As Worksheet)
 
     Dim i As Long
@@ -643,6 +743,11 @@ Private Sub Dashboard_ClearKpiShapes(ByVal ws As Worksheet)
     Next i
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Known Shape Texts sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Known Shape Texts without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdateKnownShapeTexts(ByVal ws As Worksheet)
 
@@ -683,6 +788,11 @@ Private Sub Dashboard_UpdateKnownShapeTexts(ByVal ws As Worksheet)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Render Header sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Header without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selectedFromLabel As String = "", Optional ByVal selectedToLabel As String = "")
 
     With ws.Range("B1:P2")
@@ -712,6 +822,13 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Update Button a la structure cible fournie par l'appelant.
+' EN: Adds the Update Button reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim btn As Shape
@@ -737,6 +854,13 @@ Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal x As Double, 
     End With
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Language Toggle a la structure cible fournie par l'appelant.
+' EN: Adds the Language Toggle reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -787,6 +911,11 @@ Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Switch Label selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Switch Label according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_FormatSwitchLabel(ByVal shp As Shape, ByVal caption As String)
 
     With shp
@@ -807,6 +936,11 @@ Private Sub Dashboard_FormatSwitchLabel(ByVal shp As Shape, ByVal caption As Str
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Switch Track selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Switch Track according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_FormatSwitchTrack(ByVal shp As Shape, ByVal isOn As Boolean)
 
     With shp
@@ -823,6 +957,11 @@ Private Sub Dashboard_FormatSwitchTrack(ByVal shp As Shape, ByVal isOn As Boolea
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Switch Knob selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Switch Knob according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_FormatSwitchKnob(ByVal shp As Shape)
 
     With shp
@@ -833,6 +972,13 @@ Private Sub Dashboard_FormatSwitchKnob(ByVal shp As Shape)
     End With
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Refresh Comparison Button a la structure cible fournie par l'appelant.
+' EN: Adds the Refresh Comparison Button reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -860,6 +1006,13 @@ Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal x 
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Reset Button a la structure cible fournie par l'appelant.
+' EN: Adds the Reset Button reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim btn As Shape
@@ -886,6 +1039,11 @@ Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal x As Double, B
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Cree ou remet en conformite la reference Reset Button de maniere idempotente.
+' EN: Creates or restores the Reset Button reference to a compliant state idempotently.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_EnsureResetButton(ByVal ws As Worksheet)
 
     Dim btn As Shape
@@ -903,6 +1061,13 @@ Private Sub Dashboard_EnsureResetButton(ByVal ws As Worksheet)
     End If
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Setup Snapshot Controls dans l'etat runtime du composant.
+' EN: Activates or initializes Setup Snapshot Controls in the component runtime state.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selectedFromLabel As String, ByVal selectedToLabel As String, Optional ByVal recreateButton As Boolean = True)
 
     Dim tbl As ListObject
@@ -945,20 +1110,27 @@ Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selecte
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Render Executive Summary sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Executive Summary without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderExecutiveSummary( _
     ByVal ws As Worksheet, _
     ByVal tblWBS As ListObject, _
     ByVal mapWBS As Object, _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
-    ByVal tblSCurve As ListObject, _
-    ByVal mapSCurve As Object, _
-    ByVal tblCalcSCurve As ListObject, _
-    ByVal mapCalcSCurve As Object)
+    ByVal scurveProjection As Object)
 
-    Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve
+    Dashboard_UpdateKpiCardsInPlace ws, tblWBS, mapWBS, tblCalc, mapCalc, scurveProjection
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Kpi Cards In Place sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Kpi Cards In Place without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdateKpiCardsInPlace( _
     ByVal ws As Worksheet, _
@@ -966,10 +1138,7 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
     ByVal mapWBS As Object, _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
-    ByVal tblSCurve As ListObject, _
-    ByVal mapSCurve As Object, _
-    ByVal tblCalcSCurve As ListObject, _
-    ByVal mapCalcSCurve As Object)
+    ByVal scurveProjection As Object)
 
     Dim actualProgress As Double
     Dim plannedProgress As Double
@@ -1012,8 +1181,8 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
         Exit Sub
     End If
 
-    actualProgress = Dashboard_GetActualProgress(tblCalcSCurve, mapCalcSCurve)
-    plannedProgress = Dashboard_GetPlannedProgressToday(tblSCurve, mapSCurve)
+    actualProgress = CDbl(scurveProjection("ActualProgress"))
+    plannedProgress = CDbl(scurveProjection("PlannedProgress"))
     progressVar = actualProgress - plannedProgress
 
     baselineFinish = Dashboard_MaxDate(tblCalc, mapCalc, "Baseline Finish")
@@ -1099,7 +1268,14 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
 
 End Sub
 
-Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal tblSCurve As ListObject, ByVal mapSCurve As Object)
+'------------------------------------------------------------------------------
+' FR: Actualise Update S Curve Chart In Place sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update S Curve Chart In Place without changing the business rules that produce the data.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
+Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal scurveProjection As Object)
 
     Dim chartObj As ChartObject
     Dim ch As Chart
@@ -1108,16 +1284,22 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal tblS
     Dim widthVal As Double
     Dim heightVal As Double
     Dim xRange As Range
+    Dim baselineRange As Range
+    Dim actualRange As Range
+    Dim forecastRange As Range
 
-    If tblSCurve Is Nothing Then Exit Sub
-    If tblSCurve.DataBodyRange Is Nothing Then Exit Sub
-    If Not mapSCurve.Exists("Date") Then Exit Sub
+    If scurveProjection Is Nothing Then Exit Sub
+    If Not scurveProjection.Exists("DateRange") Then Exit Sub
+    Set xRange = scurveProjection("DateRange")
+    If scurveProjection.Exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
+    If scurveProjection.Exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
+    If scurveProjection.Exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
 
     On Error Resume Next
     Set chartObj = ws.ChartObjects(DASH_CHART_SCURVE)
     On Error GoTo 0
     If chartObj Is Nothing Then
-        Dashboard_RenderSCurveChart ws, tblSCurve, mapSCurve
+        Dashboard_RenderSCurveChart ws, scurveProjection
         Exit Sub
     End If
 
@@ -1125,7 +1307,6 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal tblS
     topPos = ws.Range("B13").Top
     widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
     heightVal = ws.Range("B13:I29").Height
-
     chartObj.Left = leftPos + 16
     chartObj.Top = topPos + 38
     chartObj.Width = widthVal - 24
@@ -1135,16 +1316,13 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal tblS
     Do While ch.SeriesCollection.Count > 0
         ch.SeriesCollection(1).Delete
     Loop
-
     ch.ChartType = xlLine
     ch.HasTitle = False
     ch.HasLegend = True
     ch.Legend.Position = xlLegendPositionBottom
-
-    Set xRange = tblSCurve.ListColumns("Date").DataBodyRange
-    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, tblSCurve, mapSCurve, "Cumulative Baseline", RGB(150, 150, 150), 1.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, tblSCurve, mapSCurve, "Cumulative Actual", RGB(0, 145, 112), 2.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, tblSCurve, mapSCurve, "Calculated Curve Dashed", RGB(43, 106, 176), 2.5, True
+    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
+    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, actualRange, RGB(0, 145, 112), 2.5, False
+    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
 
     On Error Resume Next
     ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
@@ -1156,33 +1334,39 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal tblS
     ch.ChartArea.Format.Fill.Visible = msoFalse
     ch.PlotArea.Format.Fill.Visible = msoFalse
     On Error GoTo 0
-
-    DrawSCurveTodayVerticalLine ch, ws, tblSCurve, DASH_SCURVE_TODAY_LINE
+    SCurve_DrawDashboardTodayLine ch, ws, DASH_SCURVE_TODAY_LINE
 
 End Sub
-Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal tblSCurve As ListObject, ByVal mapSCurve As Object)
+'------------------------------------------------------------------------------
+' FR: Actualise Render S Curve Chart sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render S Curve Chart without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
+Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal scurveProjection As Object)
 
     Dim chartObj As ChartObject
     Dim ch As Chart
     Dim xRange As Range
-    Dim yRange As Range
+    Dim baselineRange As Range
+    Dim actualRange As Range
+    Dim forecastRange As Range
     Dim leftPos As Double
     Dim topPos As Double
     Dim widthVal As Double
     Dim heightVal As Double
 
-    If tblSCurve Is Nothing Then Exit Sub
-    If tblSCurve.DataBodyRange Is Nothing Then Exit Sub
-    If Not mapSCurve.Exists("Date") Then Exit Sub
-
+    If scurveProjection Is Nothing Then Exit Sub
+    If Not scurveProjection.Exists("DateRange") Then Exit Sub
+    Set xRange = scurveProjection("DateRange")
+    If scurveProjection.Exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
+    If scurveProjection.Exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
+    If scurveProjection.Exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
     leftPos = ws.Range("B13").Left + 18
     topPos = ws.Range("B13").Top
     widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
     heightVal = ws.Range("B13:I29").Height
-
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
     Dashboard_AddCenteredSectionTitle ws, Dashboard_L("Snapshot S-Curve", "S-Curve Snapshot"), leftPos + 22, topPos + 10, widthVal - 44
-
     Set chartObj = ws.ChartObjects.Add(leftPos + 16, topPos + 38, widthVal - 24, heightVal - 56)
     chartObj.Name = DASH_CHART_SCURVE
     Set ch = chartObj.Chart
@@ -1190,13 +1374,9 @@ Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal tblSCurve A
     ch.HasTitle = False
     ch.HasLegend = True
     ch.Legend.Position = xlLegendPositionBottom
-
-    Set xRange = tblSCurve.ListColumns("Date").DataBodyRange
-
-    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, tblSCurve, mapSCurve, "Cumulative Baseline", RGB(150, 150, 150), 1.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, tblSCurve, mapSCurve, "Cumulative Actual", RGB(0, 145, 112), 2.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, tblSCurve, mapSCurve, "Calculated Curve Dashed", RGB(43, 106, 176), 2.5, True
-
+    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
+    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, actualRange, RGB(0, 145, 112), 2.5, False
+    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
     On Error Resume Next
     ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
     ch.Axes(xlCategory).TickLabels.NumberFormat = Dashboard_ChartDateNumberFormat(False)
@@ -1207,31 +1387,31 @@ Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal tblSCurve A
     ch.ChartArea.Format.Fill.Visible = msoFalse
     ch.PlotArea.Format.Fill.Visible = msoFalse
     On Error GoTo 0
-
-    DrawSCurveTodayVerticalLine ch, ws, tblSCurve, DASH_SCURVE_TODAY_LINE
+    SCurve_DrawDashboardTodayLine ch, ws, DASH_SCURVE_TODAY_LINE
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Line Series a la structure cible fournie par l'appelant.
+' EN: Adds the Line Series reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddLineSeries( _
     ByVal ch As Chart, _
     ByVal seriesName As String, _
     ByVal xRange As Range, _
-    ByVal tbl As ListObject, _
-    ByVal mapTbl As Object, _
-    ByVal colName As String, _
+    ByVal yRange As Range, _
     ByVal rgbColor As Long, _
     ByVal weightVal As Double, _
     ByVal dashed As Boolean)
 
     Dim s As Series
-
-    If Not mapTbl.Exists(colName) Then Exit Sub
-
+    If xRange Is Nothing Or yRange Is Nothing Then Exit Sub
     Set s = ch.SeriesCollection.NewSeries
     With s
         .Name = seriesName
         .XValues = xRange
-        .Values = tbl.ListColumns(colName).DataBodyRange
+        .Values = yRange
         .ChartType = xlLine
         .Format.Line.ForeColor.RGB = rgbColor
         .Format.Line.Weight = weightVal
@@ -1240,6 +1420,11 @@ Private Sub Dashboard_AddLineSeries( _
     End With
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Planning Overview Content sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Planning Overview Content without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdatePlanningOverviewContent(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal tblCalc As ListObject, ByVal mapCalc As Object)
 
@@ -1257,6 +1442,11 @@ Private Sub Dashboard_UpdatePlanningOverviewContent(ByVal ws As Worksheet, ByVal
     Dashboard_RenderPlanningOverview ws, tblWBS, mapWBS, tblCalc, mapCalc, False
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Actualise Render Planning Overview sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Planning Overview without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal tblCalc As ListObject, ByVal mapCalc As Object, Optional ByVal renderShell As Boolean = True)
 
     Dim leftPos As Double
@@ -1425,6 +1615,11 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Update Hot Spots Content sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Hot Spots Content without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_UpdateHotSpotsContent(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal tblCalc As ListObject, ByVal mapCalc As Object)
 
     Dim leftPos As Double
@@ -1441,6 +1636,11 @@ Private Sub Dashboard_UpdateHotSpotsContent(ByVal ws As Worksheet, ByVal tblWBS 
     Dashboard_RenderHotSpots ws, tblWBS, mapWBS, tblCalc, mapCalc, False
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Actualise Render Hot Spots sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Hot Spots without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal tblCalc As ListObject, ByVal mapCalc As Object, Optional ByVal renderShell As Boolean = True)
 
     Dim leftPos As Double
@@ -1474,6 +1674,11 @@ Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As List
     Dashboard_RenderNextCriticalActivity ws, tblCalc, mapCalc, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Top Delays sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Top Delays without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -1546,6 +1751,11 @@ RenderFailed:
     Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, "Top Delays"
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Deadline Health sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Deadline Health without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -1650,6 +1860,11 @@ RenderFailed:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise Render Next Milestone sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Next Milestone without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim arr As Variant
@@ -1739,6 +1954,11 @@ RenderFailed:
     Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, "Next Milestone"
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Next Critical Activity sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Next Critical Activity without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -1848,6 +2068,11 @@ RenderFailed:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Emet un checkpoint de diagnostic pour la construction des hot spots Dashboard lorsque la trace est active.
+' EN: Emits a diagnostic checkpoint for Dashboard hot-spot construction when tracing is enabled.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_HotSpotTrace(ByVal helperName As String, ByVal stepName As String)
 
     gHotSpotHelper = helperName
@@ -1855,6 +2080,11 @@ Private Sub Dashboard_HotSpotTrace(ByVal helperName As String, ByVal stepName As
     Debug.Print "Dashboard Hot Spots | " & helperName & " | " & stepName
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Hot Spot Runtime Error dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Hot Spot Runtime Error in the store owned by the domain.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_WriteHotSpotRuntimeError( _
     ByVal ws As Worksheet, _
@@ -1876,6 +2106,13 @@ Private Sub Dashboard_WriteHotSpotRuntimeError( _
     Dashboard_AddHotSpotText ws, msg, x, y, w, 28, RGB(192, 80, 77), 8, False, xlHAlignLeft
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Card a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Card reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotCard( _
     ByVal ws As Worksheet, _
@@ -1916,12 +2153,22 @@ Private Sub Dashboard_AddHotSpotCard( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Empty Hot Spot Card a la structure cible fournie par l'appelant.
+' EN: Adds the Empty Hot Spot Card reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddEmptyHotSpotCard(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal titleText As String)
 
     Dashboard_AddHotSpotCard ws, x, y, w, h, titleText, "", RGB(160, 170, 181)
     Dashboard_AddHotSpotText ws, Dashboard_NoProjectLoadedText(), x + 16, y + 58, w - 32, 18, RGB(96, 111, 128), 9, True, xlHAlignLeft
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Kpi Block a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Kpi Block reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotKpiBlock( _
     ByVal ws As Worksheet, _
@@ -1940,6 +2187,11 @@ Private Sub Dashboard_AddHotSpotKpiBlock( _
     Dashboard_AddHotSpotText ws, labelText, x + 12, y + 40, w - 24, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Insight Block a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Insight Block reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotInsightBlock( _
     ByVal ws As Worksheet, _
@@ -1963,6 +2215,11 @@ Private Sub Dashboard_AddHotSpotInsightBlock( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Ranking Item a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Ranking Item reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddHotSpotRankingItem( _
     ByVal ws As Worksheet, _
     ByVal x As Double, _
@@ -1984,6 +2241,11 @@ Private Sub Dashboard_AddHotSpotRankingItem( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Metric a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Metric reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddHotSpotMetric( _
     ByVal ws As Worksheet, _
     ByVal x As Double, _
@@ -1997,12 +2259,22 @@ Private Sub Dashboard_AddHotSpotMetric( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Label a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Label reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddHotSpotLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotLabel", "Add label text"
     Dashboard_AddHotSpotText ws, txt, x, y, w, 14, RGB(96, 111, 128), 8, True, xlHAlignLeft
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Hero a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Hero reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotHero( _
     ByVal ws As Worksheet, _
@@ -2018,6 +2290,11 @@ Private Sub Dashboard_AddHotSpotHero( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Hot Spot List Item a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot List Item collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddHotSpotListItem( _
     ByVal ws As Worksheet, _
     ByVal x As Double, _
@@ -2031,6 +2308,13 @@ Private Sub Dashboard_AddHotSpotListItem( _
     Dashboard_AddHotSpotRankingItem ws, x, y, w, 48, "", wbsText, nameText, metricText, metricColor
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Block a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Block reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotBlock( _
     ByVal ws As Worksheet, _
@@ -2050,6 +2334,13 @@ Private Sub Dashboard_AddHotSpotBlock( _
     shp.Line.ForeColor.RGB = Dashboard_LightenColor(lineColor, 0.7)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Pill a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Pill reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotPill( _
     ByVal ws As Worksheet, _
@@ -2073,6 +2364,13 @@ Private Sub Dashboard_AddHotSpotPill( _
     Dashboard_AddHotSpotText ws, txt, x, y + 1, w, h - 2, colorVal, fontSize, isBold, xlHAlignCenter
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Hot Spot Text a la structure cible fournie par l'appelant.
+' EN: Adds the Hot Spot Text reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddHotSpotText( _
     ByVal ws As Worksheet, _
@@ -2113,6 +2411,11 @@ Private Sub Dashboard_AddHotSpotText( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Lighten Color sans modifier les donnees d'entree.
+' EN: Returns the Lighten Color value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_LightenColor(ByVal colorVal As Long, ByVal ratio As Double) As Long
 
     Dim r As Long
@@ -2130,6 +2433,11 @@ Private Function Dashboard_LightenColor(ByVal colorVal As Long, ByVal ratio As D
     Dashboard_LightenColor = RGB(r, g, b)
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si la map Active Dashboard Task satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Active Dashboard Task map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_IsActiveDashboardTask(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
 
     Dim progressVal As Variant
@@ -2151,6 +2459,11 @@ Private Function Dashboard_IsActiveDashboardTask(ByRef arr As Variant, ByVal map
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si la map Milestone Row satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Milestone Row map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_IsMilestoneRow(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
 
     Dim taskTypeVal As String
@@ -2169,6 +2482,11 @@ Private Function Dashboard_IsMilestoneRow(ByRef arr As Variant, ByVal mapTbl As 
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Days Remaining Text sans modifier les donnees d'entree.
+' EN: Returns the Days Remaining Text value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_DaysRemainingText(ByVal daysVal As Long) As String
 
     If daysVal < 0 Then
@@ -2180,6 +2498,11 @@ Private Function Dashboard_DaysRemainingText(ByVal daysVal As Long) As String
     End If
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Actualise Render Forecast Issues sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Forecast Issues without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_RenderForecastIssues(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim arr As Variant
@@ -2215,58 +2538,10 @@ Private Sub Dashboard_RenderForecastIssues(ByVal ws As Worksheet, ByVal tblCalc 
 
 End Sub
 
-Private Function Dashboard_GetActualProgress(ByVal tblCalcSCurve As ListObject, ByVal mapCalcSCurve As Object) As Double
-
-    Dashboard_GetActualProgress = Dashboard_SumColumn(tblCalcSCurve, mapCalcSCurve, "SCurve Actualized Weight")
-
-End Function
-
-Private Function Dashboard_GetPlannedProgressToday(ByVal tblSCurve As ListObject, ByVal mapSCurve As Object) As Double
-
-    Dim arr As Variant
-    Dim r As Long
-    Dim todaySerial As Long
-    Dim bestVal As Double
-    Dim d As Variant
-
-    If tblSCurve Is Nothing Then Exit Function
-    If tblSCurve.DataBodyRange Is Nothing Then Exit Function
-    If Not mapSCurve.Exists("Date") Then Exit Function
-    If Not mapSCurve.Exists("Cumulative Baseline") Then Exit Function
-
-    arr = tblSCurve.DataBodyRange.value
-    todaySerial = CLng(Date)
-
-    For r = 1 To UBound(arr, 1)
-        d = GetCellValue(arr(r, mapSCurve("Date")))
-        If Dashboard_HasDateValue(d) Then
-            If CLng(Dashboard_DateNumber(d)) <= todaySerial Then
-                If IsNumeric(GetCellValue(arr(r, mapSCurve("Cumulative Baseline")))) Then bestVal = CDbl(GetCellValue(arr(r, mapSCurve("Cumulative Baseline"))))
-            End If
-        End If
-    Next r
-
-    Dashboard_GetPlannedProgressToday = bestVal
-
-End Function
-
-Private Function Dashboard_SumColumn(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String) As Double
-
-    Dim arr As Variant
-    Dim r As Long
-    Dim v As Variant
-
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists(colName) Then Exit Function
-
-    arr = tbl.DataBodyRange.value
-    For r = 1 To UBound(arr, 1)
-        v = GetCellValue(arr(r, mapTbl(colName)))
-        If IsNumeric(v) Then Dashboard_SumColumn = Dashboard_SumColumn + CDbl(v)
-    Next r
-
-End Function
+'------------------------------------------------------------------------------
+' FR: Retourne la map Max Date sans modifier les donnees d'entree.
+' EN: Returns the Max Date map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_MaxDate(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String) As Variant
 
@@ -2296,6 +2571,11 @@ Private Function Dashboard_MaxDate(ByVal tbl As ListObject, ByVal mapTbl As Obje
     If hasDate Then Dashboard_MaxDate = maxVal
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Min Date Across sans modifier les donnees d'entree.
+' EN: Returns the Min Date Across map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_MinDateAcross(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colNames As Variant) As Variant
 
@@ -2330,6 +2610,11 @@ Private Function Dashboard_MinDateAcross(ByVal tbl As ListObject, ByVal mapTbl A
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Max Date Across sans modifier les donnees d'entree.
+' EN: Returns the Max Date Across map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_MaxDateAcross(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colNames As Variant) As Variant
 
     Dim arr As Variant
@@ -2363,6 +2648,11 @@ Private Function Dashboard_MaxDateAcross(ByVal tbl As ListObject, ByVal mapTbl A
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Numeric Below sans exposer de mutateur sur l'etat source.
+' EN: Returns the Numeric Below map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_CountNumericBelow(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String, ByVal threshold As Double) As Long
 
     Dim arr As Variant
@@ -2383,6 +2673,11 @@ Private Function Dashboard_CountNumericBelow(ByVal tbl As ListObject, ByVal mapT
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Error Contains sans exposer de mutateur sur l'etat source.
+' EN: Returns the Error Contains map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_CountErrorContains(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal needle As String) As Long
 
     Dim arr As Variant
@@ -2398,6 +2693,11 @@ Private Function Dashboard_CountErrorContains(ByVal tbl As ListObject, ByVal map
     Next r
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Marker sans exposer de mutateur sur l'etat source.
+' EN: Returns the Marker map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_CountMarker(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String) As Long
 
@@ -2416,6 +2716,11 @@ Private Function Dashboard_CountMarker(ByVal tbl As ListObject, ByVal mapTbl As 
     Next r
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Marker Remaining sans exposer de mutateur sur l'etat source.
+' EN: Returns the Marker Remaining map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_CountMarkerRemaining(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String) As Long
 
@@ -2450,6 +2755,11 @@ Private Function Dashboard_CountMarkerRemaining(ByVal tbl As ListObject, ByVal m
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Contract Status sans modifier les donnees d'entree.
+' EN: Returns the Contract Status value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ContractStatus(ByVal driftDays As Variant, ByRef statusColor As Long) As String
 
     statusColor = RGB(96, 111, 128)
@@ -2469,13 +2779,15 @@ Private Function Dashboard_ContractStatus(ByVal driftDays As Variant, ByRef stat
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la map Metrics a partir des donnees fournies par l'appelant.
+' EN: Builds the Metrics map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_BuildMetrics( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
-    ByVal tblSCurve As ListObject, _
-    ByVal mapSCurve As Object, _
-    ByVal tblCalcSCurve As ListObject, _
-    ByVal mapCalcSCurve As Object) As Object
+    ByVal scurveProjection As Object) As Object
 
     Dim metrics As Object
     Dim baselineFinish As Variant
@@ -2484,42 +2796,41 @@ Private Function Dashboard_BuildMetrics( _
     Dim contractColor As Long
 
     Set metrics = CreateObject("Scripting.Dictionary")
-
-    metrics("ActualProgress") = Dashboard_GetActualProgress(tblCalcSCurve, mapCalcSCurve)
-    metrics("PlannedProgress") = Dashboard_GetPlannedProgressToday(tblSCurve, mapSCurve)
+    metrics("ActualProgress") = CDbl(scurveProjection("ActualProgress"))
+    metrics("PlannedProgress") = CDbl(scurveProjection("PlannedProgress"))
     metrics("ProgressVariance") = CDbl(metrics("ActualProgress")) - CDbl(metrics("PlannedProgress"))
-
     baselineFinish = Dashboard_MaxDate(tblCalc, mapCalc, "Baseline Finish")
     calcFinish = Dashboard_MaxDate(tblCalc, mapCalc, "Calculated Finish")
     metrics("BaselineFinish") = baselineFinish
     metrics("ForecastFinish") = calcFinish
-
     If Dashboard_HasDateValue(baselineFinish) And Dashboard_HasDateValue(calcFinish) Then
         driftDays = CLng(Dashboard_DateNumber(calcFinish) - Dashboard_DateNumber(baselineFinish))
         metrics("DriftDays") = driftDays
     Else
         metrics("DriftDays") = Empty
     End If
-
     metrics("DeadlineRiskCount") = Dashboard_CountNumericBelow(tblCalc, mapCalc, "Deadline Float", 0#)
     metrics("ForecastIssueCount") = Dashboard_CountErrorContains(tblCalc, mapCalc, "Forecast")
     metrics("LongestPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Longest Path")
     metrics("LongestPathRemaining") = Dashboard_CountMarkerRemaining(tblCalc, mapCalc, "Longest Path")
     metrics("CriticalPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Critical Path")
     metrics("ContractStatus") = Dashboard_ContractStatus(metrics("DriftDays"), contractColor)
-
     Set Dashboard_BuildMetrics = metrics
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la map Snapshot From Current Data a partir des donnees fournies par l'appelant.
+' EN: Builds the Snapshot From Current Data map from data supplied by the caller.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_CreateSnapshotFromCurrentData()
 
     Dim tblCalc As ListObject
-    Dim tblSCurve As ListObject
-    Dim tblCalcSCurve As ListObject
     Dim mapCalc As Object
-    Dim mapSCurve As Object
-    Dim mapCalcSCurve As Object
+    Dim scurveProjection As Object
     Dim metrics As Object
     Dim tblSnap As ListObject
     Dim newRow As ListRow
@@ -2527,18 +2838,12 @@ Private Sub Dashboard_CreateSnapshotFromCurrentData()
     Dim ts As Date
 
     Set tblCalc = ThisWorkbook.Worksheets("CALC").ListObjects("tbl_CALC")
-    Set tblSCurve = ThisWorkbook.Worksheets("SCURVE").ListObjects("tbl_SCURVE")
-    Set tblCalcSCurve = ThisWorkbook.Worksheets("CALC_SCURVE").ListObjects("tbl_CALC_SCURVE")
-
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-    Set mapSCurve = Core_BuildColumnMap_FromListObject(tblSCurve)
-    Set mapCalcSCurve = Core_BuildColumnMap_FromListObject(tblCalcSCurve)
-    Set metrics = Dashboard_BuildMetrics(tblCalc, mapCalc, tblSCurve, mapSCurve, tblCalcSCurve, mapCalcSCurve)
-
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
+    Set scurveProjection = SCurve_BuildDashboardProjection()
+    Set metrics = Dashboard_BuildMetrics(tblCalc, mapCalc, scurveProjection)
     Set tblSnap = Dashboard_EnsureSnapshotsTable()
     snapshotId = Dashboard_NextSnapshotId(tblSnap)
     ts = Now
-
     Set newRow = tblSnap.ListRows.Add
     With newRow.Range
         .Cells(1, tblSnap.ListColumns("SnapshotId").Index).value = snapshotId
@@ -2559,6 +2864,15 @@ Private Sub Dashboard_CreateSnapshotFromCurrentData()
     End With
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Cree ou remet en conformite la reference Snapshots Table de maniere idempotente.
+' EN: Creates or restores the Snapshots Table reference to a compliant state idempotently.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_EnsureSnapshotsTable() As ListObject
 
@@ -2600,6 +2914,11 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Next Snapshot ID sans modifier les donnees d'entree.
+' EN: Returns the Next Snapshot ID reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_NextSnapshotId(ByVal tbl As ListObject) As Long
 
     Dim arr As Variant
@@ -2623,11 +2942,21 @@ Private Function Dashboard_NextSnapshotId(ByVal tbl As ListObject) As Long
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Snapshot Label sans modifier les donnees d'entree.
+' EN: Returns the Snapshot Label value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_SnapshotLabel(ByVal snapshotId As Long, ByVal snapshotDate As Date) As String
 
     Dashboard_SnapshotLabel = "#" & CStr(snapshotId) & " - " & Format$(snapshotDate, "dd/mm/yyyy hh:nn")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Default Snapshot Labels sans exposer de mutateur sur l'etat source.
+' EN: Returns the Default Snapshot Labels reference without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_GetDefaultSnapshotLabels(ByVal tbl As ListObject, ByRef fromLabel As String, ByRef toLabel As String)
 
@@ -2648,6 +2977,11 @@ Private Sub Dashboard_GetDefaultSnapshotLabels(ByVal tbl As ListObject, ByRef fr
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Snapshot Label Exists sans modifier les donnees d'entree.
+' EN: Returns the Snapshot Label Exists reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_SnapshotLabelExists(ByVal tbl As ListObject, ByVal snapshotLabel As String) As Boolean
 
     Dim arr As Variant
@@ -2665,6 +2999,11 @@ Private Function Dashboard_SnapshotLabelExists(ByVal tbl As ListObject, ByVal sn
     Next r
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Momentum Status sans modifier les donnees d'entree.
+' EN: Returns the Momentum Status map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_MomentumStatus(ByVal fromLabel As String, ByVal toLabel As String, ByRef statusColor As Long, ByRef compareText As String, ByRef subText As String) As String
 
@@ -2716,6 +3055,11 @@ Private Function Dashboard_MomentumStatus(ByVal fromLabel As String, ByVal toLab
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Snapshot By Label sans exposer de mutateur sur l'etat source.
+' EN: Returns the Snapshot By Label map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_GetSnapshotByLabel(ByVal tbl As ListObject, ByVal snapshotLabel As String) As Object
 
     Dim snap As Object
@@ -2740,6 +3084,11 @@ Private Function Dashboard_GetSnapshotByLabel(ByVal tbl As ListObject, ByVal sna
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Comparison Rows sans exposer de mutateur sur l'etat source.
+' EN: Returns the Comparison Rows map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_GetComparisonRows(ByVal fromLabel As String, ByVal toLabel As String, ByRef fromRow As Object, ByRef toRow As Object)
 
     Dim tbl As ListObject
@@ -2755,6 +3104,11 @@ Private Sub Dashboard_GetComparisonRows(ByVal fromLabel As String, ByVal toLabel
     Set toRow = Dashboard_GetSnapshotByLabel(tbl, toLabel)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Comparison Text sans modifier les donnees d'entree.
+' EN: Returns the Comparison Text map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_ComparisonText(ByVal fromRow As Object, ByVal toRow As Object) As String
 
@@ -2774,6 +3128,11 @@ Private Function Dashboard_ComparisonText(ByVal fromRow As Object, ByVal toRow A
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Progress Delta Text sans modifier les donnees d'entree.
+' EN: Returns the Progress Delta Text map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ProgressDeltaText(ByVal fromRow As Object, ByVal toRow As Object) As String
 
     Dim deltaVal As Double
@@ -2787,6 +3146,11 @@ Private Function Dashboard_ProgressDeltaText(ByVal fromRow As Object, ByVal toRo
     Dashboard_ProgressDeltaText = Dashboard_FormatPercentSigned(deltaVal) & " " & Dashboard_L("vs Début", "vs From")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Behind Plan Text sans modifier les donnees d'entree.
+' EN: Returns the Behind Plan Text value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_BehindPlanText(ByVal plannedProgress As Double, ByVal actualProgress As Double, ByRef statusColor As Long) As String
 
@@ -2806,6 +3170,11 @@ Private Function Dashboard_BehindPlanText(ByVal plannedProgress As Double, ByVal
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Forecast Delta Text sans modifier les donnees d'entree.
+' EN: Returns the Forecast Delta Text map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_ForecastDeltaText(ByVal fromRow As Object, ByVal toRow As Object) As String
 
@@ -2831,6 +3200,11 @@ Private Function Dashboard_ForecastDeltaText(ByVal fromRow As Object, ByVal toRo
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Contract Drift Text sans modifier les donnees d'entree.
+' EN: Returns the Contract Drift Text value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ContractDriftText(ByVal driftDays As Variant, ByRef statusColor As Long) As String
 
     If Not HasValue(driftDays) Then
@@ -2848,6 +3222,11 @@ Private Function Dashboard_ContractDriftText(ByVal driftDays As Variant, ByRef s
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Critical Activities Hero sans modifier les donnees d'entree.
+' EN: Returns the Critical Activities Hero map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal toRow As Object, ByRef statusColor As Long, ByRef subText As String) As String
 
@@ -2886,6 +3265,11 @@ Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Schedule Momentum Status sans modifier les donnees d'entree.
+' EN: Returns the Schedule Momentum Status map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ScheduleMomentumStatus(ByVal fromRow As Object, ByVal toRow As Object, ByRef statusColor As Long, ByRef subText As String) As String
 
     Dim delayFrom As Double
@@ -2919,6 +3303,11 @@ Private Function Dashboard_ScheduleMomentumStatus(ByVal fromRow As Object, ByVal
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Local Contract Status sans modifier les donnees d'entree.
+' EN: Returns the Local Contract Status value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_LocalContractStatus(ByVal statusText As String) As String
 
     Select Case UCase$(Trim$(statusText))
@@ -2929,6 +3318,11 @@ Private Function Dashboard_LocalContractStatus(ByVal statusText As String) As St
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Local Momentum Status sans modifier les donnees d'entree.
+' EN: Returns the Local Momentum Status value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_LocalMomentumStatus(ByVal statusText As String) As String
 
@@ -2942,11 +3336,21 @@ Private Function Dashboard_LocalMomentumStatus(ByVal statusText As String) As St
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Array Val sans modifier les donnees d'entree.
+' EN: Returns the Array Val map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ArrayVal(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long, ByVal colName As String) As Variant
 
     If mapTbl.Exists(colName) Then Dashboard_ArrayVal = arr(r, mapTbl(colName))
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la map Summary Array Row satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Summary Array Row map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_IsSummaryArrayRow(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
 
@@ -2966,6 +3370,11 @@ Private Function Dashboard_IsSummaryArrayRow(ByRef arr As Variant, ByVal mapTbl 
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit l'index Progress By ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Progress By ID index from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_BuildProgressById(ByVal tblWBS As ListObject, ByVal mapWBS As Object) As Object
 
@@ -2991,6 +3400,11 @@ CleanExit:
     Set Dashboard_BuildProgressById = progressById
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Summary Progress sans modifier les donnees d'entree.
+' EN: Returns the Summary Progress map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_SummaryProgress(ByRef arr As Variant, ByVal mapTbl As Object, ByVal progressById As Object, ByVal r As Long) As Double
 
@@ -3035,6 +3449,11 @@ Private Function Dashboard_SummaryProgress(ByRef arr As Variant, ByVal mapTbl As
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Row Progress sans modifier les donnees d'entree.
+' EN: Returns the Row Progress map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_RowProgress(ByRef arr As Variant, ByVal mapTbl As Object, ByVal progressById As Object, ByVal r As Long, ByVal idVal As String) As Double
 
     Dim actualFinish As Variant
@@ -3055,6 +3474,11 @@ Private Function Dashboard_RowProgress(ByRef arr As Variant, ByVal mapTbl As Obj
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Normalize Progress selon le contrat canonique du composant.
+' EN: Normalizes or formats Normalize Progress according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_NormalizeProgress(ByVal progressVal As Variant) As Double
 
     If Not HasValue(progressVal) Or Not IsNumeric(progressVal) Then Exit Function
@@ -3065,6 +3489,11 @@ Private Function Dashboard_NormalizeProgress(ByVal progressVal As Variant) As Do
     If Dashboard_NormalizeProgress > 1# Then Dashboard_NormalizeProgress = 1#
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Wbs Level sans modifier les donnees d'entree.
+' EN: Returns the Wbs Level value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_WbsLevel(ByVal wbsValue As String) As Long
 
@@ -3081,6 +3510,11 @@ Private Function Dashboard_WbsLevel(ByVal wbsValue As String) As Long
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Date To X sans modifier les donnees d'entree.
+' EN: Returns the Date To X value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_DateToX(ByVal dateVal As Double, ByVal minDate As Double, ByVal maxDate As Double, ByVal leftPos As Double, ByVal widthVal As Double) As Double
 
     If maxDate <= minDate Then
@@ -3090,6 +3524,11 @@ Private Function Dashboard_DateToX(ByVal dateVal As Double, ByVal minDate As Dou
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Planning Overview Rows sans modifier les donnees d'entree.
+' EN: Returns the Planning Overview Rows collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_PlanningOverviewRows(ByRef arr As Variant, ByVal mapTbl As Object, ByRef minOut As Double, ByRef maxOut As Double) As Collection
 
@@ -3170,6 +3609,11 @@ Private Function Dashboard_PlanningOverviewRows(ByRef arr As Variant, ByVal mapT
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Traite la collection Insert Planning Candidate By Distance sans modifier les donnees d'entree.
+' EN: Handles the Insert Planning Candidate By Distance collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_InsertPlanningCandidateByDistance(ByVal rows As Collection, ByVal rowIndex As Long, ByVal distanceVal As Double)
 
     Dim item As Object
@@ -3205,6 +3649,11 @@ Private Sub Dashboard_InsertPlanningCandidateByDistance(ByVal rows As Collection
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Planning Candidates a la structure cible fournie par l'appelant.
+' EN: Adds the Planning Candidates collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddPlanningCandidates( _
     ByVal selected As Collection, _
     ByVal selectedRows As Object, _
@@ -3231,6 +3680,11 @@ Private Sub Dashboard_AddPlanningCandidates( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Planning Candidate Row sans modifier les donnees d'entree.
+' EN: Returns the Planning Candidate Row value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_PlanningCandidateRow(ByVal item As Variant) As Long
 
     If IsObject(item) Then
@@ -3240,6 +3694,11 @@ Private Function Dashboard_PlanningCandidateRow(ByVal item As Variant) As Long
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Order Planning Rows By Source Order sans modifier les donnees d'entree.
+' EN: Returns the Order Planning Rows By Source Order collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_OrderPlanningRowsBySourceOrder(ByVal rows As Collection) As Collection
 
@@ -3269,6 +3728,11 @@ Private Function Dashboard_OrderPlanningRowsBySourceOrder(ByVal rows As Collecti
     Set Dashboard_OrderPlanningRowsBySourceOrder = ordered
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si la map Planning Overview Visible Row satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Planning Overview Visible Row map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_IsPlanningOverviewVisibleRow(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
 
     Dim durationVal As Variant
@@ -3294,6 +3758,11 @@ Private Function Dashboard_IsPlanningOverviewVisibleRow(ByRef arr As Variant, By
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Planning Row Has Renderable Dates sans modifier les donnees d'entree.
+' EN: Returns the Planning Row Has Renderable Dates map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_PlanningRowHasRenderableDates(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
 
     Dim startVal As Variant
@@ -3304,6 +3773,11 @@ Private Function Dashboard_PlanningRowHasRenderableDates(ByRef arr As Variant, B
     Dashboard_PlanningRowHasRenderableDates = (Dashboard_HasDateValue(startVal) And Dashboard_HasDateValue(finishVal))
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Planning Axis Margin sans modifier les donnees d'entree.
+' EN: Returns the Planning Axis Margin value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_PlanningAxisMargin(ByVal minDate As Double, ByVal maxDate As Double) As Double
 
@@ -3321,6 +3795,11 @@ Private Function Dashboard_PlanningAxisMargin(ByVal minDate As Double, ByVal max
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Planning Axis Bounds sans exposer de mutateur sur l'etat source.
+' EN: Returns the Planning Axis Bounds map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_GetPlanningAxisBounds(ByRef arr As Variant, ByVal mapTbl As Object, ByRef minOut As Double, ByRef maxOut As Double)
 
@@ -3349,6 +3828,11 @@ Private Sub Dashboard_GetPlanningAxisBounds(ByRef arr As Variant, ByVal mapTbl A
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Traite la map Include Axis Date sans modifier les donnees d'entree.
+' EN: Handles the Include Axis Date map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_IncludeAxisDate(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long, ByVal colName As String, ByRef hasDate As Boolean, ByRef minOut As Double, ByRef maxOut As Double)
 
     Dim v As Variant
@@ -3369,6 +3853,11 @@ Private Sub Dashboard_IncludeAxisDate(ByRef arr As Variant, ByVal mapTbl As Obje
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Insere un candidat dans le classement borne des plus forts retards du Dashboard.
+' EN: Inserts a candidate into the Dashboard's bounded highest-delay ranking.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_InsertTopDelay( _
     ByRef topIds() As String, _
@@ -3401,6 +3890,11 @@ Private Sub Dashboard_InsertTopDelay( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Insere un candidat dans le classement borne des risques les plus faibles du Dashboard.
+' EN: Inserts a candidate into the Dashboard's bounded lowest-risk ranking.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_InsertLowestRisk( _
     ByRef ids() As String, _
     ByRef wbsVals() As String, _
@@ -3431,6 +3925,13 @@ Private Sub Dashboard_InsertLowestRisk( _
     Next i
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Update Kpi Card sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Update Kpi Card without changing the business rules that produce the data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_UpdateKpiCard(ByVal ws As Worksheet, ByVal kpiIndex As Long, ByVal titleText As String, ByVal valueText As String, ByVal subText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal accentColor As Long)
 
@@ -3491,6 +3992,13 @@ Private Sub Dashboard_UpdateKpiCard(ByVal ws As Worksheet, ByVal kpiIndex As Lon
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Shape sans exposer de mutateur sur l'etat source.
+' EN: Returns the Shape reference without exposing a mutator for source state.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_GetShape(ByVal ws As Worksheet, ByVal shapeName As String) As Shape
 
     On Error Resume Next
@@ -3498,6 +4006,11 @@ Private Function Dashboard_GetShape(ByVal ws As Worksheet, ByVal shapeName As St
     On Error GoTo 0
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Position Kpi Shape sans modifier les donnees d'entree.
+' EN: Handles the Position Kpi Shape reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_PositionKpiShape(ByVal shp As Shape, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -3507,6 +4020,13 @@ Private Sub Dashboard_PositionKpiShape(ByVal shp As Shape, ByVal x As Double, By
     shp.Height = h
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Delete Shapes In Rect dans le perimetre possede par le composant.
+' EN: Resets Delete Shapes In Rect within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_DeleteShapesInRect(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -3527,6 +4047,11 @@ Private Sub Dashboard_DeleteShapesInRect(ByVal ws As Worksheet, ByVal x As Doubl
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Stable Text Box selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Stable Text Box according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_FormatStableTextBox(ByVal shp As Shape, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
     shp.Fill.Visible = msoFalse
@@ -3544,12 +4069,24 @@ Private Sub Dashboard_FormatStableTextBox(ByVal shp As Shape, ByVal fontSize As 
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Stable Text dans l'etat runtime du composant.
+' EN: Activates or initializes Set Stable Text in the component runtime state.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_SetStableText(ByVal shp As Shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
     shp.TextFrame2.TextRange.Text = txt
     Dashboard_FormatStableTextBox shp, fontSize, colorVal, isBold
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Panel a la structure cible fournie par l'appelant.
+' EN: Adds the Panel reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddPanel(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long)
 
     Dim shp As Shape
@@ -3560,6 +4097,13 @@ Private Sub Dashboard_AddPanel(ByVal ws As Worksheet, ByVal x As Double, ByVal y
     shp.Line.ForeColor.RGB = RGB(224, 230, 237)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Slide Surface a la structure cible fournie par l'appelant.
+' EN: Adds the Slide Surface reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddSlideSurface(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
 
@@ -3573,6 +4117,13 @@ Private Sub Dashboard_AddSlideSurface(ByVal ws As Worksheet, ByVal x As Double, 
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Section Title a la structure cible fournie par l'appelant.
+' EN: Adds the Section Title reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
     Dim shp As Shape
@@ -3581,6 +4132,13 @@ Private Sub Dashboard_AddSectionTitle(ByVal ws As Worksheet, ByVal titleText As 
     Dashboard_FormatTextBox shp, titleText, 12, RGB(20, 34, 51), True
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Centered Section Title a la structure cible fournie par l'appelant.
+' EN: Adds the Centered Section Title reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddCenteredSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
@@ -3592,6 +4150,13 @@ Private Sub Dashboard_AddCenteredSectionTitle(ByVal ws As Worksheet, ByVal title
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Table Title a la structure cible fournie par l'appelant.
+' EN: Adds the Table Title reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddTableTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
     Dim shp As Shape
@@ -3601,6 +4166,11 @@ Private Sub Dashboard_AddTableTitle(ByVal ws As Worksheet, ByVal titleText As St
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Hotspot Header dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Hotspot Header in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_WriteHotspotHeader(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal headers As Variant)
 
     Dashboard_AddTinyText ws, CStr(headers(0)), x, y, 54, 14, RGB(96, 111, 128)
@@ -3609,6 +4179,11 @@ Private Sub Dashboard_WriteHotspotHeader(ByVal ws As Worksheet, ByVal x As Doubl
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Hotspot Row dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Hotspot Row in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_WriteHotspotRow(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal wbsVal As String, ByVal nameVal As String, ByVal metricText As String, ByVal metricColor As Long)
 
     Dashboard_AddTinyText ws, wbsVal, x, y, 54, 16, RGB(20, 34, 51)
@@ -3616,6 +4191,13 @@ Private Sub Dashboard_WriteHotspotRow(ByVal ws As Worksheet, ByVal x As Double, 
     Dashboard_AddTinyText ws, metricText, x + 202, y, 52, 16, metricColor
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Mini Gantt Label a la structure cible fournie par l'appelant.
+' EN: Adds the Mini Gantt Label reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddMiniGanttLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal fontSize As Double)
 
@@ -3627,6 +4209,11 @@ Private Sub Dashboard_AddMiniGanttLabel(ByVal ws As Worksheet, ByVal txt As Stri
     shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Truncate Text sans modifier les donnees d'entree.
+' EN: Returns the Truncate Text value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_TruncateText(ByVal txt As String, ByVal maxLen As Long) As String
 
@@ -3640,11 +4227,23 @@ Private Function Dashboard_TruncateText(ByVal txt As String, ByVal maxLen As Lon
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Tiny Label a la structure cible fournie par l'appelant.
+' EN: Adds the Tiny Label reference to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddTinyLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
     Dashboard_AddTinyText ws, txt, x, y, w, 14, RGB(96, 111, 128)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Tiny Text a la structure cible fournie par l'appelant.
+' EN: Adds the Tiny Text reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddTinyText(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
@@ -3654,6 +4253,13 @@ Private Sub Dashboard_AddTinyText(ByVal ws As Worksheet, ByVal txt As String, By
     Dashboard_FormatTextBox shp, txt, 8, colorVal, False
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Axis Tick Label a la structure cible fournie par l'appelant.
+' EN: Adds the Axis Tick Label reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddAxisTickLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
@@ -3665,11 +4271,23 @@ Private Sub Dashboard_AddAxisTickLabel(ByVal ws As Worksheet, ByVal txt As Strin
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Empty State dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Empty State in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_WriteEmptyState(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal txt As String)
 
     Dashboard_AddTinyText ws, Dashboard_L("OK - ", "OK - ") & txt, x, y, w, 16, RGB(0, 145, 112)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Dashboard Empty State dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Dashboard Empty State in the store owned by the domain.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_WriteDashboardEmptyState(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
@@ -3680,6 +4298,13 @@ Private Sub Dashboard_WriteDashboardEmptyState(ByVal ws As Worksheet, ByVal x As
     shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Badge a la structure cible fournie par l'appelant.
+' EN: Adds the Badge reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddBadge(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long, ByVal textColor As Long)
 
@@ -3697,6 +4322,13 @@ Private Sub Dashboard_AddBadge(ByVal ws As Worksheet, ByVal txt As String, ByVal
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Bar a la structure cible fournie par l'appelant.
+' EN: Adds the Bar reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddBar(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
     Dim shp As Shape
@@ -3708,6 +4340,13 @@ Private Sub Dashboard_AddBar(ByVal ws As Worksheet, ByVal x As Double, ByVal y A
     shp.Line.Visible = msoFalse
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Milestone Diamond a la structure cible fournie par l'appelant.
+' EN: Adds the Milestone Diamond reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddMilestoneDiamond(ByVal ws As Worksheet, ByVal centerX As Double, ByVal centerY As Double, ByVal sizeVal As Double, ByVal colorVal As Long)
 
@@ -3721,6 +4360,11 @@ Private Sub Dashboard_AddMilestoneDiamond(ByVal ws As Worksheet, ByVal centerX A
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Mini Gantt Current Color sans modifier les donnees d'entree.
+' EN: Returns the Mini Gantt Current Color value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_MiniGanttCurrentColor(ByVal progressVal As Double) As Long
 
     If progressVal >= 1# Then
@@ -3730,6 +4374,13 @@ Private Function Dashboard_MiniGanttCurrentColor(ByVal progressVal As Double) As
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Progress Bar a la structure cible fournie par l'appelant.
+' EN: Adds the Progress Bar reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddProgressBar(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal progressVal As Double, ByVal startVal As Variant, ByVal finishVal As Variant)
 
@@ -3759,6 +4410,11 @@ Private Sub Dashboard_AddProgressBar(ByVal ws As Worksheet, ByVal x As Double, B
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Progress Fill Color sans modifier les donnees d'entree.
+' EN: Returns the Progress Fill Color value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ProgressFillColor(ByVal startVal As Variant, ByVal finishVal As Variant, ByVal progressVal As Double) As Variant
 
     Dim durationVal As Double
@@ -3786,6 +4442,11 @@ Private Function Dashboard_ProgressFillColor(ByVal startVal As Variant, ByVal fi
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Actualise Render Time Axis sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Render Time Axis without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Double, ByVal maxDate As Double, ByVal x As Double, ByVal y As Double, ByVal w As Double)
 
@@ -3843,6 +4504,13 @@ Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Dou
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la reference Line a la structure cible fournie par l'appelant.
+' EN: Adds the Line reference to the target structure supplied by the caller.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
+
 Private Sub Dashboard_AddLine(ByVal ws As Worksheet, ByVal x1 As Double, ByVal y1 As Double, ByVal x2 As Double, ByVal y2 As Double, ByVal colorVal As Long, ByVal weightVal As Double)
 
     Dim shp As Shape
@@ -3854,6 +4522,11 @@ Private Sub Dashboard_AddLine(ByVal ws As Worksheet, ByVal x1 As Double, ByVal y
     shp.Line.DashStyle = msoLineDash
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Text Box selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Text Box according to the component contract.
+'------------------------------------------------------------------------------
 
 Private Sub Dashboard_FormatTextBox(ByVal shp As Shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
@@ -3872,6 +4545,11 @@ Private Sub Dashboard_FormatTextBox(ByVal shp As Shape, ByVal txt As String, ByV
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Date Short selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Date Short according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatDateShort(ByVal dateVal As Variant) As String
 
     If Dashboard_HasDateValue(dateVal) Then
@@ -3881,6 +4559,11 @@ Private Function Dashboard_FormatDateShort(ByVal dateVal As Variant) As String
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Date Value satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Date Value value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_HasDateValue(ByVal dateVal As Variant) As Boolean
 
@@ -3893,6 +4576,11 @@ Private Function Dashboard_HasDateValue(ByVal dateVal As Variant) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Date Number sans modifier les donnees d'entree.
+' EN: Returns the Date Number value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_DateNumber(ByVal dateVal As Variant) As Double
 
     If IsDate(dateVal) Then
@@ -3902,6 +4590,11 @@ Private Function Dashboard_DateNumber(ByVal dateVal As Variant) As Double
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Signed Days selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Signed Days according to the component contract.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_FormatSignedDays(ByVal dayVal As Variant) As String
 
@@ -3915,6 +4608,11 @@ Private Function Dashboard_FormatSignedDays(ByVal dayVal As Variant) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Signed Compact Days selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Signed Compact Days according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatSignedCompactDays(ByVal dayVal As Variant) As String
 
     If Not HasValue(dayVal) Then
@@ -3927,6 +4625,11 @@ Private Function Dashboard_FormatSignedCompactDays(ByVal dayVal As Variant) As S
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Signed Number selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Signed Number according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatSignedNumber(ByVal valueVal As Variant) As String
 
     If Not HasValue(valueVal) Then
@@ -3938,6 +4641,11 @@ Private Function Dashboard_FormatSignedNumber(ByVal valueVal As Variant) As Stri
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Momentum Delay Percent selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Momentum Delay Percent according to the component contract.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_FormatMomentumDelayPercent(ByVal valueVal As Double) As String
 
@@ -3953,6 +4661,11 @@ Private Function Dashboard_FormatMomentumDelayPercent(ByVal valueVal As Double) 
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Percent Signed selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Percent Signed according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatPercentSigned(ByVal valueVal As Double) As String
 
     If valueVal > 0 Then
@@ -3963,6 +4676,11 @@ Private Function Dashboard_FormatPercentSigned(ByVal valueVal As Double) As Stri
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Language sans exposer de mutateur sur l'etat source.
+' EN: Returns the Language value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function Dashboard_CurrentLanguage() As String
 
     If UCase$(Trim$(gDashboardLanguage)) <> "FR" And UCase$(Trim$(gDashboardLanguage)) <> "EN" Then
@@ -3972,11 +4690,21 @@ Public Function Dashboard_CurrentLanguage() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur French satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the French value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_IsFrench() As Boolean
 
     Dashboard_IsFrench = (Dashboard_CurrentLanguage() = "FR")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur L sans modifier les donnees d'entree.
+' EN: Returns the L value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_L(ByVal frText As String, ByVal enText As String) As String
 
@@ -3988,11 +4716,21 @@ Private Function Dashboard_L(ByVal frText As String, ByVal enText As String) As 
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur No Project Loaded Text sans modifier les donnees d'entree.
+' EN: Returns the No Project Loaded Text value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_NoProjectLoadedText() As String
 
     Dashboard_NoProjectLoadedText = Dashboard_L("Aucun projet chargé", "No project loaded")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur No Data Text sans modifier les donnees d'entree.
+' EN: Returns the No Data Text value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_NoDataText() As String
 
@@ -4000,11 +4738,21 @@ Private Function Dashboard_NoDataText() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Duration Suffix sans modifier les donnees d'entree.
+' EN: Returns the Duration Suffix value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_DurationSuffix() As String
 
     Dashboard_DurationSuffix = Dashboard_L("j", "d")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Month Short selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Month Short according to the component contract.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_FormatMonthShort(ByVal dateVal As Variant) As String
 
@@ -4024,6 +4772,11 @@ Private Function Dashboard_FormatMonthShort(ByVal dateVal As Variant) As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Date selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Date according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatDate(ByVal dateVal As Variant, Optional ByVal includeYear As Boolean = True) As String
 
     Dim d As Date
@@ -4039,17 +4792,32 @@ Private Function Dashboard_FormatDate(ByVal dateVal As Variant, Optional ByVal i
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Timestamp selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Timestamp according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_FormatTimestamp(ByVal dateVal As Date) As String
 
     Dashboard_FormatTimestamp = Dashboard_L("Mis à jour ", "Updated ") & Dashboard_FormatDate(dateVal, True) & " " & Format$(dateVal, "hh:nn")
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Timestamp Text satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Timestamp Text value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_IsTimestampText(ByVal txt As String) As Boolean
 
     Dashboard_IsTimestampText = (Left$(txt, 8) = "Updated " Or Left$(txt, 11) = "Mis à jour ")
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Chart Date Number Format sans modifier les donnees d'entree.
+' EN: Returns the Chart Date Number Format value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function Dashboard_ChartDateNumberFormat(Optional ByVal includeYear As Boolean = False) As String
 
@@ -4069,6 +4837,11 @@ Private Function Dashboard_ChartDateNumberFormat(Optional ByVal includeYear As B
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Progress Color sans modifier les donnees d'entree.
+' EN: Returns the Progress Color value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_ProgressColor(ByVal progressVar As Double) As Long
 
     If progressVar < -0.03 Then
@@ -4081,6 +4854,11 @@ Private Function Dashboard_ProgressColor(ByVal progressVar As Double) As Long
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Drift Color sans modifier les donnees d'entree.
+' EN: Returns the Drift Color value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function Dashboard_DriftColor(ByVal driftDays As Variant) As Long
 
     If Not HasValue(driftDays) Then
@@ -4092,13 +4870,3 @@ Private Function Dashboard_DriftColor(ByVal driftDays As Variant) As Long
     End If
 
 End Function
-
-
-
-
-
-
-
-
-
-

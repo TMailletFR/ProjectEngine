@@ -1,10 +1,27 @@
 Attribute VB_Name = "mod_GanttEvents"
-'=====================================================
-' mod_GanttEvents
-'=====================================================
-
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_GanttEvents
+' DOMAINE / DOMAIN : Gantt
+'
+' FR
+' Traite les changements de cellules Gantt et declenche les transactions de simulation appropriees.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Handles Gantt cell changes and triggers the appropriate simulation transactions.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Handle_Gantt_Change
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Handle_Gantt_Change
+'===============================================================================
+
+
+'------------------------------------------------------------------------------
+' FR: Traite un changement ou evenement pour Gantt Change.
+' EN: Handles a change or event for Gantt Change.
+'------------------------------------------------------------------------------
 Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     Dim cell As Range
@@ -131,6 +148,11 @@ SafeExit:
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Gantt Events Add Console Message a la structure cible fournie par l'appelant.
+' EN: Adds the Gantt Events Add Console Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub GanttEvents_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _

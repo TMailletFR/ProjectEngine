@@ -1,7 +1,28 @@
 Attribute VB_Name = "mod_CalcEngine"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_CalcEngine
+' DOMAINE / DOMAIN : Planning Analytics Engine
+'
+' FR
+' Calcule les chemins, floats et rollups analytiques apres le calcul Core.
+' Ne synchronise pas WBS/CALC et ne projette pas la console.
+'
+' EN
+' Computes path, float and analytical rollup outputs after Core calculation.
+' Does not synchronize WBS/CALC or project console messages.
+'
+' CONTRATS / CONTRACTS : Run_Calc_Engine, ComputeCurrentFloatAndCritical, ComputeLongestPath, ComputeCriticalPathREX, Push_CriticalPathREX_Back_To_WBS, Push_Analytics_Back_To_WBS, Validate_LogicLinksNetwork, Test_WBS_UnauthorizedWrite
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
 
+
+
+'------------------------------------------------------------------------------
+' FR: Lance le workflow Calc Engine.
+' EN: Runs the Calc Engine workflow.
+'------------------------------------------------------------------------------
 Public Sub Run_Calc_Engine(Optional ByVal forceFullRecalcOverride As Boolean = False)
 
     Dim perfScope As clsPerfScope
@@ -37,6 +58,13 @@ ErrHandler:
     CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Marque la map Errors In CALC dans la structure cible sans recalculer la condition source.
+' EN: Marks the Errors In CALC map in the target structure without recalculating the source condition.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
+
 Private Sub MarkErrorsInCalc( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -65,6 +93,10 @@ Private Sub MarkErrorsInCalc( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Affiche Calc Error Messages pour l'utilisateur ou le diagnostic.
+' EN: Shows Calc Error Messages for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowCalcErrorMessages( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
@@ -83,6 +115,11 @@ End Sub
 
 
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Grouped Message a partir des donnees fournies par l'appelant.
+' EN: Builds the Grouped Message map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildGroupedMessage( _
     ByVal idsDict As Object, _
@@ -112,6 +149,11 @@ Private Function BuildGroupedMessage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection Inline List a partir des donnees fournies par l'appelant.
+' EN: Builds the Inline List collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildInlineList(ByVal idsDict As Object, ByVal maxItems As Long) As String
 
     Dim result As String
@@ -140,6 +182,11 @@ Private Function BuildInlineList(ByVal idsDict As Object, ByVal maxItems As Long
     BuildInlineList = result
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit la collection Inline WBS List a partir des donnees fournies par l'appelant.
+' EN: Builds the Inline WBS List collection from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildInlineWBSList(ByVal idsDict As Object, ByVal idToWbs As Object, ByVal maxItems As Long) As String
 
@@ -178,6 +225,10 @@ Private Function BuildInlineWBSList(ByVal idsDict As Object, ByVal idToWbs As Ob
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Calcule Current Float And Critical pour le moteur calculation engine.
+' EN: Computes Current Float And Critical for the calculation engine engine.
+'------------------------------------------------------------------------------
 Public Sub ComputeCurrentFloatAndCritical( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -601,6 +652,10 @@ NextCurrentFreeFloatTask:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Calcule Longest Path pour le moteur calculation engine.
+' EN: Computes Longest Path for the calculation engine engine.
+'------------------------------------------------------------------------------
 Public Sub ComputeLongestPath( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -747,6 +802,11 @@ Public Sub ComputeLongestPath( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Longest Path Task a la structure cible fournie par l'appelant.
+' EN: Adds the Longest Path Task collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub CalcEngine_AddLongestPathTask( _
     ByVal taskId As String, _
     ByVal lpById As Object, _
@@ -765,6 +825,11 @@ Private Sub CalcEngine_AddLongestPathTask( _
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Indique si la map Driving Longest Path Link satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Driving Longest Path Link map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function CalcEngine_IsDrivingLongestPathLink( _
     ByRef dataArr As Variant, _
@@ -818,6 +883,11 @@ Private Function CalcEngine_IsDrivingLongestPathLink( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Dates Equal sans modifier les donnees d'entree.
+' EN: Returns the Dates Equal value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function CalcEngine_DatesEqual(ByVal leftVal As Variant, ByVal rightVal As Variant) As Boolean
 
     If Not HasValue(leftVal) Then Exit Function
@@ -826,6 +896,10 @@ Private Function CalcEngine_DatesEqual(ByVal leftVal As Variant, ByVal rightVal 
     CalcEngine_DatesEqual = (Abs(CDbl(leftVal) - CDbl(rightVal)) < 0.000001)
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Calcule Critical Path REX pour le moteur calculation engine.
+' EN: Computes Critical Path REX for the calculation engine engine.
+'------------------------------------------------------------------------------
 Public Sub ComputeCriticalPathREX( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
@@ -937,7 +1011,7 @@ Public Sub ComputeCriticalPathREX( _
         taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(baselineDuration) Then
-            If IsMilestoneTaskType(dataArr, mapCalc, rowIndex) Then
+            If TaskTypeRules_IsMilestoneRow(dataArr, mapCalc, rowIndex) Then
                 baselineDuration = 1
             End If
         End If
@@ -1055,7 +1129,7 @@ NextRexForward:
         taskCal = NormalizeCalendarType(dataArr(rowIndex, mapCalc("Cal")))
 
         If Not HasValue(baselineDuration) Then
-            If IsMilestoneTaskType(dataArr, mapCalc, rowIndex) Then
+            If TaskTypeRules_IsMilestoneRow(dataArr, mapCalc, rowIndex) Then
                 baselineDuration = 1
             End If
         End If
@@ -1245,6 +1319,10 @@ NextRexFreeFloatTask:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Pousse Critical Path REX Back To WBS vers sa table ou feuille cible.
+' EN: Pushes Critical Path REX Back To WBS to its target table or sheet.
+'------------------------------------------------------------------------------
 Public Sub Push_CriticalPathREX_Back_To_WBS()
 
     Dim wsWBS As Worksheet
@@ -1256,6 +1334,11 @@ Public Sub Push_CriticalPathREX_Back_To_WBS()
     Dim calcById As Object
     Dim r As Long
     Dim id As String
+    Dim writeScopeToken As Long
+    Dim errorNumber As Long
+    Dim errorDescription As String
+
+    On Error GoTo Fail
 
     Set wsWBS = ThisWorkbook.Worksheets("WBS")
     Set wsCalc = ThisWorkbook.Worksheets("CALC")
@@ -1290,7 +1373,8 @@ Public Sub Push_CriticalPathREX_Back_To_WBS()
         End If
     Next r
 
-    BeginAuthorizedWBSWrite "Push_CriticalPathREX_Back_To_WBS", Array("Critical Path REX")
+    writeScopeToken = OpenAuthorizedWBSWriteScope( _
+        "Push_CriticalPathREX_Back_To_WBS", Array("Critical Path REX"))
 
     For r = 1 To tblWBS.ListRows.Count
         id = Trim(CStr(tblWBS.DataBodyRange.Cells(r, mapWBS("ID")).value))
@@ -1303,10 +1387,25 @@ Public Sub Push_CriticalPathREX_Back_To_WBS()
         End If
     Next r
 
-    EndAuthorizedWBSWrite
+    CloseAuthorizedWBSWriteScope writeScopeToken
+    writeScopeToken = 0
+    Exit Sub
+
+Fail:
+    errorNumber = Err.Number
+    errorDescription = Err.Description
+    On Error Resume Next
+    CloseAuthorizedWBSWriteScope writeScopeToken
+    On Error GoTo 0
+    Err.Raise errorNumber, "Push_CriticalPathREX_Back_To_WBS", errorDescription
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Detecte la map Cycles DFS sans modifier le dataset analyse.
+' EN: Detects the Cycles DFS map without mutating the analyzed dataset.
+'------------------------------------------------------------------------------
 
 Private Sub DetectCyclesDFS(ByVal currentId As String, ByVal predsById As Object, ByVal idToRow As Object, ByVal state As Object, ByVal cycleNodes As Object)
 
@@ -1328,6 +1427,11 @@ Private Sub DetectCyclesDFS(ByVal currentId As String, ByVal predsById As Object
     state(currentId) = 2
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Propage ou agrege la collection Error To Children selon les relations du reseau courant.
+' EN: Propagates or rolls up the Error To Children collection through current network relations.
+'------------------------------------------------------------------------------
 
 Private Sub PropagateErrorToChildren(ByVal startId As String, ByVal childrenById As Object, ByVal errorDict As Object)
 
@@ -1354,6 +1458,11 @@ Private Sub PropagateErrorToChildren(ByVal startId As String, ByVal childrenById
     Loop
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Propage ou agrege la map Float To Parents selon les relations du reseau courant.
+' EN: Propagates or rolls up the Float To Parents map through current network relations.
+'------------------------------------------------------------------------------
 
 Private Sub RollupFloatToParents( _
     ByVal idToRow As Object, _
@@ -1435,6 +1544,10 @@ Private Sub RollupFloatToParents( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Pousse Analytics Back To WBS vers sa table ou feuille cible.
+' EN: Pushes Analytics Back To WBS to its target table or sheet.
+'------------------------------------------------------------------------------
 Public Sub Push_Analytics_Back_To_WBS()
 
     Dim perfScope As clsPerfScope
@@ -1462,6 +1575,9 @@ Public Sub Push_Analytics_Back_To_WBS()
     Dim pathStartCol As Long
     Dim floatStartCol As Long
     Dim analyticsBlockWrites As Long
+    Dim writeScopeToken As Long
+    Dim errorNumber As Long
+    Dim errorDescription As String
 
     Set perfScope = Profiler_BeginScope("Push_Analytics_Back_To_WBS", "Excel Table Write")
 
@@ -1476,8 +1592,8 @@ Public Sub Push_Analytics_Back_To_WBS()
     If tblWBS.DataBodyRange Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
 
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
+    Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
 
     If Not mapWBS.Exists("ID") Then Err.Raise vbObjectError + 1301, "Push_Analytics_Back_To_WBS", "Missing column in tbl_WBS: ID"
     If Not mapCalc.Exists("ID") Then Err.Raise vbObjectError + 1302, "Push_Analytics_Back_To_WBS", "Missing column in tbl_CALC: ID"
@@ -1497,7 +1613,8 @@ Public Sub Push_Analytics_Back_To_WBS()
 
     Application.EnableEvents = False
 
-    BeginAuthorizedWBSWrite "Push_Analytics_Back_To_WBS", Array( _
+    writeScopeToken = OpenAuthorizedWBSWriteScope( _
+        "Push_Analytics_Back_To_WBS", Array( _
         "Critical Path", _
         "Longest Path", _
         "Critical Path REX", _
@@ -1505,7 +1622,7 @@ Public Sub Push_Analytics_Back_To_WBS()
         "Free Float", _
         "Total Float REX", _
         "Free Float REX", _
-        "Deadline Float")
+        "Deadline Float"))
 
     If mapWBS.Exists("Critical Path") And mapWBS.Exists("Critical Path REX") And mapWBS.Exists("Longest Path") Then
         pathStartCol = CLng(mapWBS("Critical Path"))
@@ -1575,20 +1692,27 @@ Public Sub Push_Analytics_Back_To_WBS()
 
     Profiler_RecordOperation "PushAnalyticsWBSBlockWrite", analyticsBlockWrites, 0#
 
-    EndAuthorizedWBSWrite
+    CloseAuthorizedWBSWriteScope writeScopeToken
+    writeScopeToken = 0
 
 SafeExit:
     Application.EnableEvents = True
     Exit Sub
 
 ErrHandler:
+    errorNumber = Err.Number
+    errorDescription = Err.Description
     On Error Resume Next
-    EndAuthorizedWBSWrite
+    CloseAuthorizedWBSWriteScope writeScopeToken
     Application.EnableEvents = True
     On Error GoTo 0
-    Err.Raise Err.Number, "Push_Analytics_Back_To_WBS", Err.Description
+    Err.Raise errorNumber, "Push_Analytics_Back_To_WBS", errorDescription
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Pousse One Analytics Cell If Exists vers sa table ou feuille cible.
+' EN: Pushes One Analytics Cell If Exists to its target table or sheet.
+'------------------------------------------------------------------------------
 Private Sub PushOneAnalyticsCellIfExists( _
     ByVal tblWBS As ListObject, _
     ByRef arrCalc As Variant, _
@@ -1612,6 +1736,10 @@ Private Sub PushOneAnalyticsCellIfExists( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Vide ou reinitialise One Analytics Cell If Exists.
+' EN: Clears or resets One Analytics Cell If Exists.
+'------------------------------------------------------------------------------
 Private Sub ClearOneAnalyticsCellIfExists( _
     ByVal tblWBS As ListObject, _
     ByVal wbsRow As Long, _
@@ -1629,6 +1757,10 @@ Private Sub ClearOneAnalyticsCellIfExists( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si Allowed Analytics Push Field est vrai pour le contexte courant.
+' EN: Returns whether Allowed Analytics Push Field is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsAllowedAnalyticsPushField(ByVal fieldName As String) As Boolean
 
     Select Case fieldName
@@ -1648,6 +1780,10 @@ Private Function IsAllowedAnalyticsPushField(ByVal fieldName As String) As Boole
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Valide Logic Links Network et signale les incoherences detectees.
+' EN: Validates Logic Links Network and reports detected inconsistencies.
+'------------------------------------------------------------------------------
 Public Sub Validate_LogicLinksNetwork()
 
     Dim wsWBS As Worksheet
@@ -1656,7 +1792,8 @@ Public Sub Validate_LogicLinksNetwork()
     Dim tblLinks As ListObject
 
     Dim mapWBS As Object
-    Dim mapLinks As Object
+    Dim network As clsParsedPlanningNetwork
+    Dim link As clsParsedPlanningLink
     Dim taskInfoById As Object
     Dim childrenByPred As Object
     Dim incomingCount As Object
@@ -1682,7 +1819,6 @@ Public Sub Validate_LogicLinksNetwork()
     Dim taskTypeVal As String
 
     Dim arrWBS As Variant
-    Dim arrLinks As Variant
 
     Dim hasTaskType As Boolean
     Dim hasErrors As Boolean
@@ -1714,7 +1850,7 @@ Public Sub Validate_LogicLinksNetwork()
     End If
 
     Set mapWBS = CreateObject("Scripting.Dictionary")
-    Set mapLinks = CreateObject("Scripting.Dictionary")
+    Set network = ParsedPlanningNetwork_ParseTable(tblLinks)
     Set taskInfoById = CreateObject("Scripting.Dictionary")
     Set childrenByPred = CreateObject("Scripting.Dictionary")
     Set incomingCount = CreateObject("Scripting.Dictionary")
@@ -1734,12 +1870,6 @@ Public Sub Validate_LogicLinksNetwork()
         mapWBS(tblWBS.ListColumns(i).Name) = i
     Next i
 
-    If tblLinks.ListColumns.Count > 0 Then
-        For i = 1 To tblLinks.ListColumns.Count
-            mapLinks(tblLinks.ListColumns(i).Name) = i
-        Next i
-    End If
-
     If Not mapWBS.Exists("ID") Then Err.Raise vbObjectError + 801, , "Missing column in tbl_WBS: ID"
     If Not mapWBS.Exists("WBS") Then Err.Raise vbObjectError + 802, , "Missing column in tbl_WBS: WBS"
     If Not mapWBS.Exists("Baseline Start") Then Err.Raise vbObjectError + 803, , "Missing column in tbl_WBS: Baseline Start"
@@ -1748,8 +1878,8 @@ Public Sub Validate_LogicLinksNetwork()
 
     hasTaskType = mapWBS.Exists("Task Type")
 
-    If Not mapLinks.Exists("Succ ID") Then Err.Raise vbObjectError + 806, , "Missing column in tbl_LOGIC_LINKS: Succ ID"
-    If Not mapLinks.Exists("Pred ID") Then Err.Raise vbObjectError + 807, , "Missing column in tbl_LOGIC_LINKS: Pred ID"
+    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 806, , "Missing column in tbl_LOGIC_LINKS: Succ ID"
+    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 807, , "Missing column in tbl_LOGIC_LINKS: Pred ID"
 
     arrWBS = tblWBS.DataBodyRange.value
 
@@ -1811,14 +1941,13 @@ Public Sub Validate_LogicLinksNetwork()
 
     Next idVal
 
-    If Not tblLinks.DataBodyRange Is Nothing Then
+    If network.Count > 0 Then
 
-        arrLinks = tblLinks.DataBodyRange.value
+        For r = 1 To network.Count
 
-        For r = 1 To UBound(arrLinks, 1)
-
-            succId = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-            predId = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
+            Set link = network.Item(r)
+            succId = link.SuccId
+            predId = link.PredId
 
             If succId <> "" Then
                 If Not allTaskIds.Exists(succId) Then allTaskIds(succId) = True
@@ -1995,6 +2124,11 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Detecte la map Logic Cycles DFS sans modifier le dataset analyse.
+' EN: Detects the Logic Cycles DFS map without mutating the analyzed dataset.
+'------------------------------------------------------------------------------
+
 Private Sub DetectLogicCyclesDFS( _
     ByVal currentId As String, _
     ByVal childrenByPred As Object, _
@@ -2022,6 +2156,10 @@ Private Sub DetectLogicCyclesDFS( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Affiche Logic Links Error Messages pour l'utilisateur ou le diagnostic.
+' EN: Shows Logic Links Error Messages for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowLogicLinksErrorMessages( _
     ByVal idsDict As Object, _
     ByVal taskInfoById As Object, _
@@ -2058,6 +2196,11 @@ End Sub
 
 
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection Inline List Logic Links a partir des donnees fournies par l'appelant.
+' EN: Builds the Inline List Logic Links collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildInlineList_LogicLinks(ByVal idsDict As Object, ByVal maxItems As Long) As String
 
     Dim result As String
@@ -2087,6 +2230,11 @@ Private Function BuildInlineList_LogicLinks(ByVal idsDict As Object, ByVal maxIt
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Construit la collection Inline WBS List Logic Links a partir des donnees fournies par l'appelant.
+' EN: Builds the Inline WBS List Logic Links collection from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildInlineWBSList_LogicLinks( _
     ByVal idsDict As Object, _
@@ -2133,6 +2281,10 @@ End Function
 ' HELPER 2
 ' Build an inline message on IDs + WBS from current engine dictionaries.
 '=================================================
+'------------------------------------------------------------------------------
+' FR: Affiche Calc Unsupported Link Type Messages pour l'utilisateur ou le diagnostic.
+' EN: Shows Calc Unsupported Link Type Messages for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowCalcUnsupportedLinkTypeMessages( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object)
@@ -2156,6 +2308,10 @@ End Sub
 ' HELPER 3
 ' Validate presence of tbl_LOGIC_LINKS.
 '=================================================
+'------------------------------------------------------------------------------
+' FR: Retourne Logic Links Table depuis le contexte calculation engine.
+' EN: Returns Logic Links Table from the calculation engine context.
+'------------------------------------------------------------------------------
 Private Function GetLogicLinksTable() As ListObject
 
     Dim wsCalc As Worksheet
@@ -2177,6 +2333,10 @@ End Function
 ' Rebuild network messages for missing / unsupported link types
 ' before date calculation starts.
 '=================================================
+'------------------------------------------------------------------------------
+' FR: Affiche Logic Links Structural Messages Stage5A pour l'utilisateur ou le diagnostic.
+' EN: Shows Logic Links Structural Messages Stage5A for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowLogicLinksStructuralMessages_Stage5A( _
     ByVal errMissingPred As Object, _
     ByVal errUnsupportedLinkType As Object, _
@@ -2193,6 +2353,13 @@ Private Sub ShowLogicLinksStructuralMessages_Stage5A( _
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la collection Test WBS Unauthorized Write sans modifier les donnees d'entree.
+' EN: Handles the Test WBS Unauthorized Write collection without mutating input data.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
 
 Public Sub Test_WBS_UnauthorizedWrite()
 
@@ -2239,84 +2406,46 @@ SafeExit:
 
 End Sub
 
-'=================================================
-' HELPER
-' Build lag map from tbl_LOGIC_LINKS
-'
-' Key format:
-'   SuccID|PredID
-'
-' Temporary rule:
-' - FS supported
-' - blank lag = 0
-' - SS / FF ignored here because they are still blocked upstream
-'=================================================
+'------------------------------------------------------------------------------
+' FR: Construit la map Pred Lag Map From Logic Links a partir des donnees fournies par l'appelant.
+' EN: Builds the Pred Lag Map From Logic Links map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildPredLagMapFromLogicLinks() As Object
 
-    Dim wsCalc As Worksheet
-    Dim tblLinks As ListObject
-    Dim mapLinks As Object
-    Dim arrLinks As Variant
+    Dim network As clsParsedPlanningNetwork
+    Dim link As clsParsedPlanningLink
     Dim d As Object
-
     Dim r As Long
-    Dim i As Long
-
     Dim succId As String
     Dim predId As String
     Dim linkType As String
     Dim linkKey As String
-    Dim lagVal As Variant
 
     Set d = CreateObject("Scripting.Dictionary")
-    Set mapLinks = CreateObject("Scripting.Dictionary")
 
     On Error GoTo SafeExit
 
-    Set wsCalc = ThisWorkbook.Worksheets("CALC")
-    Set tblLinks = wsCalc.ListObjects("tbl_LOGIC_LINKS")
+    Set network = ParsedPlanningNetwork_LoadCanonical()
 
-    If tblLinks Is Nothing Then
-        Set BuildPredLagMapFromLogicLinks = d
-        Exit Function
-    End If
+    If Not network.HasColumn("Succ ID") Then GoTo SafeExit
+    If Not network.HasColumn("Pred ID") Then GoTo SafeExit
+    If Not network.HasColumn("Link Type") Then GoTo SafeExit
+    If Not network.HasColumn("Lag") Then GoTo SafeExit
 
-    For i = 1 To tblLinks.ListColumns.Count
-        mapLinks(tblLinks.ListColumns(i).Name) = i
-    Next i
+    For r = 1 To network.Count
 
-    If Not mapLinks.Exists("Succ ID") Then GoTo SafeExit
-    If Not mapLinks.Exists("Pred ID") Then GoTo SafeExit
-    If Not mapLinks.Exists("Link Type") Then GoTo SafeExit
-    If Not mapLinks.Exists("Lag") Then GoTo SafeExit
-
-    If tblLinks.DataBodyRange Is Nothing Then
-        Set BuildPredLagMapFromLogicLinks = d
-        Exit Function
-    End If
-
-    arrLinks = tblLinks.DataBodyRange.value
-
-    For r = 1 To UBound(arrLinks, 1)
-
-        succId = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-        predId = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
-        linkType = UCase$(Trim$(CStr(arrLinks(r, mapLinks("Link Type")))))
-        lagVal = arrLinks(r, mapLinks("Lag"))
+        Set link = network.Item(r)
+        succId = link.SuccId
+        predId = link.PredId
+        linkType = link.LinkType
 
         If succId = "" Or predId = "" Then GoTo NextRow
-
-        If linkType = "" Then linkType = "FS"
 
         Select Case linkType
             Case "FS", "SS", "FF"
                 linkKey = succId & "|" & predId
-
-                If IsNumeric(lagVal) Then
-                    d(linkKey) = CDbl(lagVal)
-                Else
-                    d(linkKey) = 0#
-                End If
+                d(linkKey) = link.Lag
         End Select
 
 NextRow:
@@ -2327,68 +2456,40 @@ SafeExit:
 
 End Function
 
-'=================================================
-' HELPER
-' Build link-type map from tbl_LOGIC_LINKS
-'
-' Key format:
-'   SuccID|PredID
-'
-' Default type:
-' - blank = FS
-'=================================================
+'------------------------------------------------------------------------------
+' FR: Construit la map Pred Type Map From Logic Links a partir des donnees fournies par l'appelant.
+' EN: Builds the Pred Type Map From Logic Links map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildPredTypeMapFromLogicLinks() As Object
 
-    Dim wsCalc As Worksheet
-    Dim tblLinks As ListObject
-    Dim mapLinks As Object
-    Dim arrLinks As Variant
+    Dim network As clsParsedPlanningNetwork
+    Dim link As clsParsedPlanningLink
     Dim d As Object
-
     Dim r As Long
-    Dim i As Long
-
     Dim succId As String
     Dim predId As String
     Dim linkType As String
     Dim linkKey As String
 
     Set d = CreateObject("Scripting.Dictionary")
-    Set mapLinks = CreateObject("Scripting.Dictionary")
 
     On Error GoTo SafeExit
 
-    Set wsCalc = ThisWorkbook.Worksheets("CALC")
-    Set tblLinks = wsCalc.ListObjects("tbl_LOGIC_LINKS")
+    Set network = ParsedPlanningNetwork_LoadCanonical()
 
-    If tblLinks Is Nothing Then
-        Set BuildPredTypeMapFromLogicLinks = d
-        Exit Function
-    End If
+    If Not network.HasColumn("Succ ID") Then GoTo SafeExit
+    If Not network.HasColumn("Pred ID") Then GoTo SafeExit
+    If Not network.HasColumn("Link Type") Then GoTo SafeExit
 
-    For i = 1 To tblLinks.ListColumns.Count
-        mapLinks(tblLinks.ListColumns(i).Name) = i
-    Next i
+    For r = 1 To network.Count
 
-    If Not mapLinks.Exists("Succ ID") Then GoTo SafeExit
-    If Not mapLinks.Exists("Pred ID") Then GoTo SafeExit
-    If Not mapLinks.Exists("Link Type") Then GoTo SafeExit
-
-    If tblLinks.DataBodyRange Is Nothing Then
-        Set BuildPredTypeMapFromLogicLinks = d
-        Exit Function
-    End If
-
-    arrLinks = tblLinks.DataBodyRange.value
-
-    For r = 1 To UBound(arrLinks, 1)
-
-        succId = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-        predId = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
-        linkType = UCase$(Trim$(CStr(arrLinks(r, mapLinks("Link Type")))))
+        Set link = network.Item(r)
+        succId = link.SuccId
+        predId = link.PredId
+        linkType = link.LinkType
 
         If succId = "" Or predId = "" Then GoTo NextRow
-        If linkType = "" Then linkType = "FS"
 
         Select Case linkType
             Case "FS", "SS", "FF"
@@ -2404,21 +2505,11 @@ SafeExit:
 
 End Function
 
-'=================================================
-' HELPER
-' Build predecessor collections from tbl_LOGIC_LINKS
-'
-' Stage FF:
-' - FS supported
-' - SS supported
-' - FF supported for dates
-'
-' Outputs:
-' - predsById
-' - childrenById
-' - predLagBySuccPred  : key = SuccID|PredID
-' - predTypeBySuccPred : key = SuccID|PredID
-'=================================================
+'------------------------------------------------------------------------------
+' FR: Construit la collection Preds From Logic Links FS SS FF With Lag And Type Expanded To Leafs a partir des donnees fournies par l'appelant.
+' EN: Builds the Preds From Logic Links FS SS FF With Lag And Type Expanded To Leafs collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeafs( _
     ByVal tblLinks As ListObject, _
     ByVal validIds As Object, _
@@ -2432,17 +2523,14 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
     ByVal errUnsupportedLinkType As Object, _
     ByRef hasStructuralError As Boolean) As Boolean
 
-    Dim mapLinks As Object
-    Dim arrLinks As Variant
+    Dim network As clsParsedPlanningNetwork
+    Dim link As clsParsedPlanningLink
     Dim r As Long
-    Dim i As Long
-
     Dim rawSuccId As String
     Dim rawPredId As String
     Dim linkType As String
-    Dim linkLag As Variant
+    Dim linkLag As Double
     Dim linkKey As String
-
     Dim expandedLeafPreds As Collection
     Dim expandedLeafSuccs As Collection
     Dim leafPredId As Variant
@@ -2450,50 +2538,45 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
 
     BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeafs = False
 
-    Set mapLinks = CreateObject("Scripting.Dictionary")
-
     If tblLinks Is Nothing Then
         hasStructuralError = True
         Exit Function
     End If
 
-    For i = 1 To tblLinks.ListColumns.Count
-        mapLinks(tblLinks.ListColumns(i).Name) = i
-    Next i
+    Set network = ParsedPlanningNetwork_ParseTable(tblLinks)
 
-    If Not mapLinks.Exists("Succ ID") Then
+    If Not network.HasColumn("Succ ID") Then
         hasStructuralError = True
         Exit Function
     End If
 
-    If Not mapLinks.Exists("Pred ID") Then
+    If Not network.HasColumn("Pred ID") Then
         hasStructuralError = True
         Exit Function
     End If
 
-    If Not mapLinks.Exists("Link Type") Then
+    If Not network.HasColumn("Link Type") Then
         hasStructuralError = True
         Exit Function
     End If
 
-    If Not mapLinks.Exists("Lag") Then
+    If Not network.HasColumn("Lag") Then
         hasStructuralError = True
         Exit Function
     End If
 
-    If tblLinks.DataBodyRange Is Nothing Then
+    If network.Count = 0 Then
         BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeafs = True
         Exit Function
     End If
 
-    arrLinks = tblLinks.DataBodyRange.value
+    For r = 1 To network.Count
 
-    For r = 1 To UBound(arrLinks, 1)
-
-        rawSuccId = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-        rawPredId = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
-        linkType = UCase$(Trim$(CStr(arrLinks(r, mapLinks("Link Type")))))
-        linkLag = arrLinks(r, mapLinks("Lag"))
+        Set link = network.Item(r)
+        rawSuccId = link.SuccId
+        rawPredId = link.PredId
+        linkType = link.LinkType
+        linkLag = link.Lag
 
         If rawSuccId = "" Then GoTo NextLinkRow
         If rawPredId = "" Then
@@ -2502,8 +2585,6 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
             hasStructuralError = True
             GoTo NextLinkRow
         End If
-
-        If linkType = "" Then linkType = "FS"
 
         If linkType <> "FS" And linkType <> "SS" And linkType <> "FF" Then
             structuralErrors(rawSuccId) = True
@@ -2550,13 +2631,7 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
                 childrenById(CStr(leafPredId)).Add CStr(leafSuccId)
 
                 linkKey = CStr(leafSuccId) & "|" & CStr(leafPredId)
-
-                If IsNumeric(linkLag) Then
-                    predLagBySuccPred(linkKey) = CDbl(linkLag)
-                Else
-                    predLagBySuccPred(linkKey) = 0#
-                End If
-
+                predLagBySuccPred(linkKey) = linkLag
                 predTypeBySuccPred(linkKey) = linkType
 
             Next leafPredId
@@ -2570,6 +2645,10 @@ NextLinkRow:
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne Leaf Descendants For Calc Network depuis le contexte calculation engine.
+' EN: Returns Leaf Descendants For Calc Network from the calculation engine context.
+'------------------------------------------------------------------------------
 Private Function GetLeafDescendantsForCalcNetwork( _
     ByVal startId As String, _
     ByVal directChildrenById As Object, _
@@ -2614,6 +2693,11 @@ Private Function GetLeafDescendantsForCalcNetwork( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la map Upstream Violation Messages a partir des donnees fournies par l'appelant.
+' EN: Builds the Upstream Violation Messages map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildUpstreamViolationMessages( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
@@ -2654,6 +2738,10 @@ Private Function BuildUpstreamViolationMessages( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Affiche Upstream Violation Messages pour l'utilisateur ou le diagnostic.
+' EN: Shows Upstream Violation Messages for the user or diagnostics.
+'------------------------------------------------------------------------------
 Private Sub ShowUpstreamViolationMessages( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
@@ -2687,6 +2775,11 @@ Private Sub ShowUpstreamViolationMessages( _
 
 End Sub
 
+
+'------------------------------------------------------------------------------
+' FR: Indique si CALC contient une erreur bloquante avant la persistance de CALC_STATE. La lecture est fail-closed : une source absente ou illisible est consideree bloquante.
+' EN: Returns whether CALC contains a blocking error before CALC_STATE persistence. The read is fail-closed: a missing or unreadable source is treated as blocking.
+'------------------------------------------------------------------------------
 
 Public Function CalcEngine_HasBlockingErrorsForState() As Boolean
 
@@ -2730,6 +2823,10 @@ FailSafe:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Actual Finished In Calc Array est vrai pour le contexte courant.
+' EN: Returns whether Actual Finished In Calc Array is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsActualFinishedInCalcArray( _
     ByRef dataArr As Variant, _
     ByVal rowIndex As Long, _
@@ -2742,6 +2839,10 @@ Private Function IsActualFinishedInCalcArray( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Usable Calc Dates est vrai pour le contexte courant.
+' EN: Returns whether Usable Calc Dates is true for the current context.
+'------------------------------------------------------------------------------
 Private Function HasUsableCalcDates( _
     ByRef dataArr As Variant, _
     ByVal rowIndex As Long, _
@@ -2757,6 +2858,11 @@ Private Function HasUsableCalcDates( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Projette la valeur Single Console Message vers l'interface autorisee par la politique runtime.
+' EN: Projects the Single Console Message value to the UI allowed by runtime policy.
+'------------------------------------------------------------------------------
+
 Private Sub CalcEngine_ShowSingleConsoleMessage( _
     ByVal msgType As String, _
     ByVal msgText As String)
@@ -2764,6 +2870,11 @@ Private Sub CalcEngine_ShowSingleConsoleMessage( _
     CalcBridge_AddOrShowRawConsoleMessage Nothing, msgType, msgText
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Or Show Console Message a la structure cible fournie par l'appelant.
+' EN: Adds the Or Show Console Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub CalcEngine_AddOrShowConsoleMessage( _
     ByVal consoleMessages As Collection, _
@@ -2773,6 +2884,11 @@ Private Sub CalcEngine_AddOrShowConsoleMessage( _
     CalcBridge_AddOrShowRawConsoleMessage consoleMessages, msgType, msgText
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit l'index Current Network Finish By ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Current Network Finish By ID index from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildCurrentNetworkFinishById( _
     ByRef dataArr As Variant, _
@@ -2827,6 +2943,11 @@ Private Function BuildCurrentNetworkFinishById( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit l'index Rex Network Finish By ID a partir des donnees fournies par l'appelant.
+' EN: Builds the Rex Network Finish By ID index from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function BuildRexNetworkFinishById( _
     ByVal rexFinishById As Object, _
     ByVal childrenById As Object, _
@@ -2873,6 +2994,10 @@ Private Function BuildRexNetworkFinishById( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Undirected Network Component depuis le contexte calculation engine.
+' EN: Returns Undirected Network Component from the calculation engine context.
+'------------------------------------------------------------------------------
 Private Function GetUndirectedNetworkComponent( _
     ByVal startId As String, _
     ByVal childrenById As Object, _
@@ -2925,6 +3050,11 @@ Private Function GetUndirectedNetworkComponent( _
     Set GetUndirectedNetworkComponent = componentIds
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Reverse Children Map a partir des donnees fournies par l'appelant.
+' EN: Builds the Reverse Children Map map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function BuildReverseChildrenMap( _
     ByVal childrenById As Object, _

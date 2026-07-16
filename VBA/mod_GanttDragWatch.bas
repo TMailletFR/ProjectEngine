@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_GanttDragWatch"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_GanttDragWatch
+' DOMAINE / DOMAIN : Gantt
+'
+' FR
+' Surveille les Shapes Gantt, convertit drag/resize en inputs TEST/SCENARIO et gere le timer Win32.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Watches Gantt Shapes, converts drag/resize into TEST/SCENARIO inputs and manages the Win32 timer.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : GanttDrag_StartWatch, GanttDrag_StopWatch, GanttDrag_RebuildWatchMaps, GanttDrag_IsWatching, GanttDrag_ReconcileWatchState, GanttDrag_PauseForLifecycle
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : GanttDrag_StartWatch, GanttDrag_StopWatch, GanttDrag_TimerProc, GanttDrag_TimerProc
+'===============================================================================
+
+
 #If VBA7 Then
     Private Declare PtrSafe Function SetTimer Lib "user32" ( _
         ByVal hwnd As LongPtr, _
@@ -54,6 +71,11 @@ Private gLastTransactionResult As String
 Private gLastWrittenCells As String
 Private gTransactionCount As Long
 
+'------------------------------------------------------------------------------
+' FR: Recoit le callback externe GanttDrag_StartWatch et le relaie vers le workflow proprietaire.
+' EN: Receives the external GanttDrag_StartWatch callback and routes it to the owning workflow.
+'------------------------------------------------------------------------------
+
 Public Sub GanttDrag_StartWatch()
 
     gWatchRequested = True
@@ -61,11 +83,21 @@ Public Sub GanttDrag_StartWatch()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Recoit le callback externe GanttDrag_StopWatch et le relaie vers le workflow proprietaire.
+' EN: Receives the external GanttDrag_StopWatch callback and routes it to the owning workflow.
+'------------------------------------------------------------------------------
+
 Public Sub GanttDrag_StopWatch(Optional ByVal showStatus As Boolean = False)
 
     GanttDrag_StopRuntime True, showStatus
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la map Rebuild Watch Maps sans modifier les donnees d'entree.
+' EN: Handles the Rebuild Watch Maps map without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Sub GanttDrag_RebuildWatchMaps()
 
@@ -90,42 +122,77 @@ Public Sub GanttDrag_RebuildWatchMaps()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Watching satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Watching value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Public Function GanttDrag_IsWatching() As Boolean
 
     GanttDrag_IsWatching = (gWatchEnabled And gTimerId <> 0)
 
 End Function
 
-Public Function GanttDrag_LastDebugStatus() As String
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Last Debug Status sans modifier les donnees d'entree.
+' EN: Returns the Last Debug Status value without mutating input data.
+'------------------------------------------------------------------------------
+
+Private Function GanttDrag_LastDebugStatus() As String
 
     GanttDrag_LastDebugStatus = gLastDebugStatus
 
 End Function
 
-Public Function GanttDrag_LastTransactionResult() As String
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Last Transaction Result sans modifier les donnees d'entree.
+' EN: Returns the Last Transaction Result value without mutating input data.
+'------------------------------------------------------------------------------
+
+Private Function GanttDrag_LastTransactionResult() As String
 
     GanttDrag_LastTransactionResult = gLastTransactionResult
 
 End Function
 
-Public Function GanttDrag_LastWrittenCells() As String
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Last Written Cells sans modifier les donnees d'entree.
+' EN: Returns the Last Written Cells value without mutating input data.
+'------------------------------------------------------------------------------
+
+Private Function GanttDrag_LastWrittenCells() As String
 
     GanttDrag_LastWrittenCells = gLastWrittenCells
 
 End Function
 
-Public Function GanttDrag_TransactionCount() As Long
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Transaction Count sans modifier les donnees d'entree.
+' EN: Returns the Transaction Count value without mutating input data.
+'------------------------------------------------------------------------------
+
+Private Function GanttDrag_TransactionCount() As Long
 
     GanttDrag_TransactionCount = gTransactionCount
 
 End Function
 
-Public Function GanttDrag_IsShapeWatched(ByVal shapeName As String) As Boolean
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Shape Watched satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Shape Watched value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
+Private Function GanttDrag_IsShapeWatched(ByVal shapeName As String) As Boolean
 
     If gShapeState Is Nothing Then Exit Function
     GanttDrag_IsShapeWatched = gShapeState.Exists(shapeName)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Aligne la valeur Reconcile Watch State avec le lifecycle courant sans perdre l'etat possede.
+' EN: Aligns the Reconcile Watch State value with the current lifecycle without losing owned state.
+'------------------------------------------------------------------------------
 
 Public Sub GanttDrag_ReconcileWatchState()
 
@@ -147,11 +214,23 @@ Public Sub GanttDrag_ReconcileWatchState()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Aligne la valeur Pause For Lifecycle avec le lifecycle courant sans perdre l'etat possede.
+' EN: Aligns the Pause For Lifecycle value with the current lifecycle without losing owned state.
+'------------------------------------------------------------------------------
+
 Public Sub GanttDrag_PauseForLifecycle()
 
     GanttDrag_StopRuntime False, False
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Start Runtime dans l'etat runtime du composant.
+' EN: Activates or initializes Start Runtime in the component runtime state.
+' FR - Contrat externe : callback timer ; le nom et la signature doivent rester stables.
+' EN - External contract: timer callback; name and signature must remain stable.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_StartRuntime()
 
@@ -184,6 +263,11 @@ Private Sub GanttDrag_StartRuntime()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Termine Stop Runtime et restaure l'etat runtime possede par le composant.
+' EN: Ends Stop Runtime and restores runtime state owned by the component.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_StopRuntime( _
     ByVal clearRequest As Boolean, _
     ByVal showStatus As Boolean)
@@ -210,12 +294,20 @@ Private Sub GanttDrag_StopRuntime( _
 End Sub
 
 #If VBA7 Then
+'------------------------------------------------------------------------------
+' FR: Callback Win32 du timer qui declenche la surveillance du drag Gantt.
+' EN: Win32 timer callback that triggers Gantt drag monitoring.
+'------------------------------------------------------------------------------
 Private Sub GanttDrag_TimerProc( _
     ByVal hwnd As LongPtr, _
     ByVal uMsg As Long, _
     ByVal idEvent As LongPtr, _
     ByVal dwTime As Long)
 #Else
+'------------------------------------------------------------------------------
+' FR: Callback Win32 du timer qui declenche la surveillance du drag Gantt.
+' EN: Win32 timer callback that triggers Gantt drag monitoring.
+'------------------------------------------------------------------------------
 Private Sub GanttDrag_TimerProc( _
     ByVal hwnd As Long, _
     ByVal uMsg As Long, _
@@ -245,6 +337,13 @@ StructuralError:
     Resume SafeExit
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Watch Tick sans modifier les donnees d'entree.
+' EN: Handles the Watch Tick reference without mutating input data.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_WatchTick()
 
@@ -308,6 +407,11 @@ Private Sub GanttDrag_WatchTick()
     Next shapeName
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la collection Handle Shape Change sans modifier les donnees d'entree.
+' EN: Handles the Handle Shape Change collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_HandleShapeChange( _
     ByVal ws As Worksheet, _
@@ -403,6 +507,11 @@ TransactionError:
     Resume CleanExit
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Construit la collection Test Inputs a partir des donnees fournies par l'appelant.
+' EN: Builds the Test Inputs collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_BuildTestInputs( _
     ByVal ws As Worksheet, _
     ByVal shp As Shape, _
@@ -484,6 +593,11 @@ Private Function GanttDrag_BuildTestInputs( _
 SafeExit:
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Date From X sans modifier les donnees d'entree.
+' EN: Returns the Date From X reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_DateFromX( _
     ByVal ws As Worksheet, _
     ByVal xPos As Double, _
@@ -500,6 +614,11 @@ Private Function GanttDrag_DateFromX( _
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Day Date From X sans modifier les donnees d'entree.
+' EN: Returns the Day Date From X reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_DayDateFromX( _
     ByVal ws As Worksheet, _
@@ -549,6 +668,11 @@ Private Function GanttDrag_DayDateFromX( _
     GanttDrag_DayDateFromX = foundDate
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Week Date From X sans modifier les donnees d'entree.
+' EN: Returns the Week Date From X reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_WeekDateFromX( _
     ByVal ws As Worksheet, _
@@ -619,6 +743,11 @@ Private Function GanttDrag_WeekDateFromX( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Timeline Week Start sans modifier les donnees d'entree.
+' EN: Returns the Timeline Week Start reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_TimelineWeekStart( _
     ByVal ws As Worksheet, _
     ByVal timelineCol As Long, _
@@ -648,6 +777,11 @@ Private Function GanttDrag_TimelineWeekStart( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Extract First Long sans modifier les donnees d'entree.
+' EN: Returns the Extract First Long value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_ExtractFirstLong(ByVal textValue As String) As Long
 
     Dim i As Long
@@ -667,6 +801,11 @@ Private Function GanttDrag_ExtractFirstLong(ByVal textValue As String) As Long
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Ceil Positive sans modifier les donnees d'entree.
+' EN: Returns the Ceil Positive value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_CeilPositive(ByVal value As Double) As Long
 
     If value <= 0# Then
@@ -676,6 +815,11 @@ Private Function GanttDrag_CeilPositive(ByVal value As Double) As Long
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Month Date From X sans modifier les donnees d'entree.
+' EN: Returns the Month Date From X reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_MonthDateFromX( _
     ByVal ws As Worksheet, _
@@ -719,6 +863,11 @@ Private Function GanttDrag_MonthDateFromX( _
     GanttDrag_MonthDateFromX = True
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Timeline Column From X sans modifier les donnees d'entree.
+' EN: Returns the Timeline Column From X reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_TimelineColumnFromX( _
     ByVal ws As Worksheet, _
@@ -766,6 +915,11 @@ Private Function GanttDrag_TimelineColumnFromX( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la reference Timeline Month Start sans modifier les donnees d'entree.
+' EN: Returns the Timeline Month Start reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_TimelineMonthStart( _
     ByVal ws As Worksheet, _
     ByVal timelineCol As Long, _
@@ -791,6 +945,11 @@ Private Function GanttDrag_TimelineMonthStart( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Month Number From Label sans modifier les donnees d'entree.
+' EN: Returns the Month Number From Label value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_MonthNumberFromLabel(ByVal monthLabel As String) As Long
 
     Dim normalizedLabel As String
@@ -813,6 +972,11 @@ Private Function GanttDrag_MonthNumberFromLabel(ByVal monthLabel As String) As L
     End Select
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Construit la map Drag Info a partir des donnees fournies par l'appelant.
+' EN: Builds the Drag Info map from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_CreateDragInfo( _
     ByVal ws As Worksheet, _
     ByVal ganttRow As Long, _
@@ -838,6 +1002,11 @@ Private Function GanttDrag_CreateDragInfo( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Written Cells Contain Column sans modifier les donnees d'entree.
+' EN: Returns the Written Cells Contain Column collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_WrittenCellsContainColumn( _
     ByVal writtenCells As Collection, _
     ByVal columnIndex As Long) As Boolean
@@ -855,12 +1024,22 @@ Private Function GanttDrag_WrittenCellsContainColumn( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Normalized Simulation Mode selon le contrat canonique du composant.
+' EN: Normalizes or formats Normalized Simulation Mode according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_NormalizedSimulationMode(ByVal simulationMode As String) As String
 
     GanttDrag_NormalizedSimulationMode = UCase$(Trim$(simulationMode))
     If GanttDrag_NormalizedSimulationMode = "" Then GanttDrag_NormalizedSimulationMode = "TEST"
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Supported Simulation Mode satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Supported Simulation Mode value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_IsSupportedSimulationMode(ByVal simulationMode As String) As Boolean
 
@@ -870,6 +1049,11 @@ Private Function GanttDrag_IsSupportedSimulationMode(ByVal simulationMode As Str
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Orchestre Run Simulation Transaction By Mode en preservant l'ordre contractuel des etapes du domaine.
+' EN: Orchestrates Run Simulation Transaction By Mode while preserving the domain's contractual step order.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_RunSimulationTransactionByMode( _
     ByVal simulationMode As String, _
@@ -885,6 +1069,11 @@ Private Function GanttDrag_RunSimulationTransactionByMode( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Set Drag Info Mode dans l'etat runtime du composant.
+' EN: Activates or initializes Set Drag Info Mode in the component runtime state.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_SetDragInfoMode( _
     ByVal dragInfo As Object, _
     ByVal simulationMode As String)
@@ -893,6 +1082,11 @@ Private Sub GanttDrag_SetDragInfoMode( _
     dragInfo("EngineMode") = UCase$(Trim$(simulationMode))
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Unsupported Mode Message a la structure cible fournie par l'appelant.
+' EN: Adds the Unsupported Mode Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_AddUnsupportedModeMessage( _
     ByVal consoleMessages As Collection, _
@@ -920,6 +1114,11 @@ Private Sub GanttDrag_AddUnsupportedModeMessage( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Drag Success Message a la structure cible fournie par l'appelant.
+' EN: Adds the Drag Success Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_AddDragSuccessMessage( _
     ByVal consoleMessages As Collection, _
     ByVal dragInfo As Object)
@@ -929,6 +1128,11 @@ Private Sub GanttDrag_AddDragSuccessMessage( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Drag Failure Message a la structure cible fournie par l'appelant.
+' EN: Adds the Drag Failure Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_AddDragFailureMessage( _
     ByRef consoleMessages As Collection, _
     ByVal dragInfo As Object)
@@ -937,6 +1141,11 @@ Private Sub GanttDrag_AddDragFailureMessage( _
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", GanttDrag_BuildDragMessage(dragInfo, False)
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la map Drag Message a partir des donnees fournies par l'appelant.
+' EN: Builds the Drag Message map from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_BuildDragMessage( _
     ByVal dragInfo As Object, _
@@ -978,6 +1187,11 @@ Private Function GanttDrag_BuildDragMessage( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la map Info Engine Label sans modifier les donnees d'entree.
+' EN: Returns the Info Engine Label map without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_InfoEngineLabel( _
     ByVal dragInfo As Object, _
     ByVal defaultLabel As String) As String
@@ -1001,6 +1215,11 @@ Private Function GanttDrag_InfoEngineLabel( _
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Info Task Label sans modifier les donnees d'entree.
+' EN: Returns the Info Task Label map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_InfoTaskLabel(ByVal dragInfo As Object) As String
 
@@ -1026,6 +1245,11 @@ Private Function GanttDrag_InfoTaskLabel(ByVal dragInfo As Object) As String
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Info Changes Text sans modifier les donnees d'entree.
+' EN: Returns the Info Changes Text map without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_InfoChangesText( _
     ByVal dragInfo As Object, _
@@ -1082,6 +1306,11 @@ Private Function GanttDrag_InfoChangesText( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Format Date Value selon le contrat canonique du composant.
+' EN: Normalizes or formats Format Date Value according to the component contract.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_FormatDateValue(ByVal value As Variant) As String
 
     If IsDate(value) Then
@@ -1093,6 +1322,11 @@ Private Function GanttDrag_FormatDateValue(ByVal value As Variant) As String
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Write Test Cell dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Write Test Cell in the store owned by the domain.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_WriteTestCell( _
     ByVal targetCell As Range, _
@@ -1121,6 +1355,13 @@ CleanExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Clear Written Cells dans le perimetre possede par le composant.
+' EN: Resets Clear Written Cells within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_ClearWrittenCells(ByVal writtenCells As Collection)
 
     Dim oldEnableEvents As Boolean
@@ -1146,6 +1387,11 @@ CleanExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Cell List sans modifier les donnees d'entree.
+' EN: Returns the Cell List collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_CellList(ByVal cells As Collection) As String
 
     Dim item As Variant
@@ -1161,6 +1407,11 @@ Private Function GanttDrag_CellList(ByVal cells As Collection) As String
     GanttDrag_CellList = result
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la reference Eligible Shape satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Eligible Shape reference satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_IsEligibleShape( _
     ByVal ws As Worksheet, _
@@ -1216,6 +1467,11 @@ Private Function GanttDrag_IsEligibleShape( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ecrit ou synchronise Save Shape State dans le stockage possede par le domaine.
+' EN: Writes or synchronizes Save Shape State in the store owned by the domain.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_SaveShapeState( _
     ByVal shp As Shape, _
     ByVal rowIndex As Long, _
@@ -1237,6 +1493,11 @@ Private Sub GanttDrag_SaveShapeState( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Shape State sans exposer de mutateur sur l'etat source.
+' EN: Returns the Shape State value without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_GetShapeState(ByVal shapeName As String) As Variant
 
     If gShapeState Is Nothing Then Exit Function
@@ -1246,11 +1507,21 @@ Private Function GanttDrag_GetShapeState(ByVal shapeName As String) As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Aligne la valeur Suspend avec le lifecycle courant sans perdre l'etat possede.
+' EN: Aligns the Suspend value with the current lifecycle without losing owned state.
+'------------------------------------------------------------------------------
+
 Private Sub GanttDrag_Suspend()
 
     gSuspendDepth = gSuspendDepth + 1
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Aligne la valeur Resume avec le lifecycle courant sans perdre l'etat possede.
+' EN: Aligns the Resume value with the current lifecycle without losing owned state.
+'------------------------------------------------------------------------------
 
 Private Sub GanttDrag_Resume()
 
@@ -1258,6 +1529,11 @@ Private Sub GanttDrag_Resume()
     If gSuspendDepth = 0 And GanttDrag_IsWatching() Then GanttDrag_RebuildWatchMaps
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Supported Timeline Scale satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Supported Timeline Scale value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_IsSupportedTimelineScale() As Boolean
 
@@ -1267,6 +1543,11 @@ Private Function GanttDrag_IsSupportedTimelineScale() As Boolean
     End Select
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si la reference Start Watch satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Start Watch reference satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function GanttDrag_CanStartWatch() As Boolean
 
     Dim ws As Worksheet
@@ -1280,6 +1561,11 @@ Private Function GanttDrag_CanStartWatch() As Boolean
     GanttDrag_CanStartWatch = True
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Indique si la reference Gantt Sheet Active satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Gantt Sheet Active reference satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Private Function GanttDrag_IsGanttSheetActive(ByRef ws As Worksheet) As Boolean
 

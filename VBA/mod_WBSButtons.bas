@@ -1,8 +1,30 @@
 Attribute VB_Name = "mod_WBSButtons"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_WBSButtons
+' DOMAINE / DOMAIN : WBS
+'
+' FR
+' Possede Reset/Armageddon, les boutons WBS, leur langue et la mise en forme des inputs.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Owns Reset/Armageddon, WBS buttons, their language and input formatting.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Armageddon, Reset_Planning, Ensure_WBS_Main_Buttons, WBS_ApplyLanguage, WBS_SetLanguage, WBS_CurrentLanguage
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const RESET_PLANNING_EMPTY_WBS_ROWS As Long = 5
 Private gWBSLanguage As String
+'------------------------------------------------------------------------------
+' FR: Traite la reference Armageddon sans modifier les donnees d'entree.
+' EN: Handles the Armageddon reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
 
     Dim ws As Worksheet
@@ -57,6 +79,11 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning dans le perimetre possede par le composant.
+' EN: Resets Reset Planning within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Public Sub Reset_Planning()
 
     Dim ws As Worksheet
@@ -110,6 +137,13 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning Prepare Empty WBS dans le perimetre possede par le composant.
+' EN: Resets Reset Planning Prepare Empty WBS within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
+
 Private Sub ResetPlanning_PrepareEmptyWBS( _
     ByVal ws As Worksheet, _
     ByVal tbl As ListObject)
@@ -132,6 +166,11 @@ Private Sub ResetPlanning_PrepareEmptyWBS( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning Apply WBS Input Setup dans le perimetre possede par le composant.
+' EN: Resets Reset Planning Apply WBS Input Setup within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Private Sub ResetPlanning_ApplyWBSInputSetup(ByVal tbl As ListObject)
 
     If tbl Is Nothing Then Exit Sub
@@ -152,6 +191,13 @@ Private Sub ResetPlanning_ApplyWBSInputSetup(ByVal tbl As ListObject)
     ResetPlanning_ApplyWBSFormats tbl
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning Apply List Validation dans le perimetre possede par le composant.
+' EN: Resets Reset Planning Apply List Validation within the state owned by the component.
+' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
+' EN - Side effect: clears only data or objects targeted by the contract.
+'------------------------------------------------------------------------------
 
 Private Sub ResetPlanning_ApplyListValidation( _
     ByVal tbl As ListObject, _
@@ -187,6 +233,11 @@ Private Sub ResetPlanning_ApplyListValidation( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Reset Planning Apply WBS Formats dans le perimetre possede par le composant.
+' EN: Resets Reset Planning Apply WBS Formats within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Private Sub ResetPlanning_ApplyWBSFormats(ByVal tbl As ListObject)
 
     If WBS_TableHasColumn(tbl, "WBS") Then tbl.ListColumns("WBS").DataBodyRange.NumberFormat = "@"
@@ -213,6 +264,10 @@ End Sub
 ' - les erreurs sont envoyées vers frmPlanningMessages
 '=====================================================
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree WBS Main Buttons si necessaire.
+' EN: Ensures or creates WBS Main Buttons when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_WBS_Main_Buttons()
 
     Dim ws As Worksheet
@@ -314,6 +369,11 @@ Public Sub Ensure_WBS_Main_Buttons()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Actualise WBS Apply Language sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes WBS Apply Language without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
+
 Public Sub WBS_ApplyLanguage(Optional ByVal languageCode As String = "")
 
     Dim ws As Worksheet
@@ -349,6 +409,11 @@ ErrHandler:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise WBS Set Language dans l'etat runtime du composant.
+' EN: Activates or initializes WBS Set Language in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub WBS_SetLanguage(ByVal languageCode As String)
 
     Select Case UCase$(Trim$(languageCode))
@@ -362,6 +427,11 @@ Public Sub WBS_SetLanguage(ByVal languageCode As String)
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur WBS Current Language sans modifier les donnees d'entree.
+' EN: Returns the WBS Current Language value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function WBS_CurrentLanguage() As String
 
     EnsureWBSLanguageInitialized
@@ -369,6 +439,10 @@ Public Function WBS_CurrentLanguage() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree WBSLanguage Initialized si necessaire.
+' EN: Ensures or creates WBSLanguage Initialized when needed.
+'------------------------------------------------------------------------------
 Private Sub EnsureWBSLanguageInitialized()
 
     If UCase$(Trim$(gWBSLanguage)) <> "FR" And UCase$(Trim$(gWBSLanguage)) <> "EN" Then
@@ -376,6 +450,11 @@ Private Sub EnsureWBSLanguageInitialized()
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur WBS L sans modifier les donnees d'entree.
+' EN: Returns the WBS L value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function WBS_L(ByVal frText As String, ByVal enText As String) As String
 
@@ -386,6 +465,13 @@ Private Function WBS_L(ByVal frText As String, ByVal enText As String) As String
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Active ou initialise WBS Set Shape Text dans l'etat runtime du composant.
+' EN: Activates or initializes WBS Set Shape Text in the component runtime state.
+' FR - Effet de bord : cree ou met a jour des shapes Excel.
+' EN - Side effect: creates or updates Excel shapes.
+'------------------------------------------------------------------------------
 
 Private Sub WBS_SetShapeText( _
     ByVal ws As Worksheet, _
@@ -405,6 +491,10 @@ Private Sub WBS_SetShapeText( _
     shp.TextFrame2.TextRange.Text = captionText
 
 End Sub
+'------------------------------------------------------------------------------
+' FR: Cree Or Update WBSFloating Button pour le domaine WBS buttons.
+' EN: Creates Or Update WBSFloating Button for the WBS buttons domain.
+'------------------------------------------------------------------------------
 Private Sub CreateOrUpdateWBSFloatingButton( _
     ByVal ws As Worksheet, _
     ByVal shpName As String, _
@@ -458,6 +548,10 @@ Private Sub CreateOrUpdateWBSFloatingButton( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree WBS Task Type Input Setup si necessaire.
+' EN: Ensures or creates WBS Task Type Input Setup when needed.
+'------------------------------------------------------------------------------
 Private Sub Ensure_WBS_TaskType_Input_Setup(ByVal ws As Worksheet)
 
     Dim tbl As ListObject
@@ -536,6 +630,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Normalise WBS Task Type Value dans un format exploitable.
+' EN: Normalizes WBS Task Type Value into a usable format.
+'------------------------------------------------------------------------------
 Private Function Normalize_WBS_TaskType_Value(ByVal rawValue As Variant) As String
 
     Dim s As String
@@ -559,6 +657,11 @@ Private Function Normalize_WBS_TaskType_Value(ByVal rawValue As Variant) As Stri
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la reference WBS Buttons Row Has Task IDentity sans modifier les donnees d'entree.
+' EN: Returns the WBS Buttons Row Has Task IDentity reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function WBSButtons_RowHasTaskIdentity( _
     ByVal tbl As ListObject, _
@@ -586,6 +689,11 @@ Private Function WBSButtons_RowHasTaskIdentity( _
 
 SafeExit:
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne la reference WBS Table Has Column sans modifier les donnees d'entree.
+' EN: Returns the WBS Table Has Column reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function WBS_TableHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
     Dim col As ListColumn
@@ -597,6 +705,11 @@ Private Function WBS_TableHasColumn(ByVal tbl As ListObject, ByVal columnName As
     WBS_TableHasColumn = Not col Is Nothing
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Projette la collection WBS Buttons Show Console Error vers l'interface autorisee par la politique runtime.
+' EN: Projects the WBS Buttons Show Console Error collection to the UI allowed by runtime policy.
+'------------------------------------------------------------------------------
 
 Private Sub WBSButtons_ShowConsoleError( _
     ByVal procName As String, _

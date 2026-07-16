@@ -1,9 +1,23 @@
 Attribute VB_Name = "mod_CalcCoreProdWrapper"
 Option Explicit
 
-'=====================================================
-' mod_CalcCoreProdWrapper
-'=====================================================
+'===============================================================================
+' MODULE : mod_CalcCoreProdWrapper
+' DOMAINE / DOMAIN : Core Calculation
+'
+' FR
+' Prepare le dataset CALC et le reseau canonique avant d'appeler le moteur Core en production.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Prepares the CALC dataset and canonical network before invoking the production Core engine.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Run_Calc_Core_PROD_Pilot, FillCalcParentAndSummaryFromWBS, BuildCoreLinksBySucc_FromLogicLinksTable_Expanded
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 ' Wrapper PROD pilote du nouveau cœur.
 '
 ' Cette version corrige le point critique identifié :
@@ -13,6 +27,10 @@ Option Explicit
 ' Le core reste inchangé.
 '=====================================================
 
+'------------------------------------------------------------------------------
+' FR: Lance le workflow Calc Core PROD Pilot.
+' EN: Runs the Calc Core PROD Pilot workflow.
+'------------------------------------------------------------------------------
 Public Sub Run_Calc_Core_PROD_Pilot()
 
     Dim wsCalc As Worksheet
@@ -58,7 +76,7 @@ Public Sub Run_Calc_Core_PROD_Pilot()
     Ensure_Calc_Infrastructure
     FillCalcParentAndSummaryFromWBS tblCalc, tblWBS
 
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
     dataArr = tblCalc.DataBodyRange.value
 
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
@@ -94,6 +112,13 @@ End Sub
 
 
 
+'------------------------------------------------------------------------------
+' FR: Alimente la map Calc Parent And Summary From WBS dans la structure cible fournie par l'appelant.
+' EN: Populates the Calc Parent And Summary From WBS map in the target structure supplied by the caller.
+' FR - Effet de bord : ecrit dans une table Excel detenue par le workflow.
+' EN - Side effect: writes to an Excel table owned by the workflow.
+'------------------------------------------------------------------------------
+
 Public Sub FillCalcParentAndSummaryFromWBS( _
     ByVal tblCalc As ListObject, _
     ByVal tblWBS As ListObject)
@@ -119,8 +144,8 @@ Public Sub FillCalcParentAndSummaryFromWBS( _
 
     Set perfScope = Profiler_BeginScope("FillCalcParentAndSummaryFromWBS", "Excel Table Write")
 
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-    Set mapWBS = Core_BuildColumnMap_FromListObject(tblWBS)
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
+    Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
 
     RequireColumn mapCalc, "ID", "tbl_CALC"
     RequireColumn mapCalc, "ParentID", "tbl_CALC"
@@ -193,87 +218,73 @@ Public Sub FillCalcParentAndSummaryFromWBS( _
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection Core Links By Succ From Logic Links Table Expanded a partir des donnees fournies par l'appelant.
+' EN: Builds the Core Links By Succ From Logic Links Table Expanded collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
     ByVal tblCalc As ListObject) As Object
 
     Dim perfScope As clsPerfScope
-
-    Dim wsCalc As Worksheet
-    Dim tblLinks As ListObject
-    Dim mapLinks As Object
     Dim mapCalc As Object
-    Dim arrLinks As Variant
     Dim arrCalc As Variant
-
+    Dim network As clsParsedPlanningNetwork
+    Dim link As clsParsedPlanningLink
     Dim linksBySuccId As Object
     Dim rowById As Object
     Dim directChildrenById As Object
     Dim leafDescCache As Object
     Dim dedupe As Object
-
     Dim r As Long
     Dim succIdRaw As String
     Dim predIdRaw As String
     Dim linkType As String
     Dim lagVal As Double
-
     Dim succLeafs As Collection
     Dim predLeafs As Collection
     Dim succLeaf As Variant
     Dim predLeaf As Variant
-
     Dim predRowIdx As Long
     Dim predIsSummary As Boolean
     Dim summarySourceId As String
-
     Dim key As String
 
     Set perfScope = Profiler_BeginScope("BuildCoreLinksBySucc_FromLogicLinksTable_Expanded", "Network Build")
-
     Set linksBySuccId = Core_CreateLinksBySucc()
     Set dedupe = CreateObject("Scripting.Dictionary")
+    Set network = ParsedPlanningNetwork_LoadCanonical()
+    Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
 
-    Set wsCalc = ThisWorkbook.Worksheets("CALC")
-    Set tblLinks = wsCalc.ListObjects("tbl_LOGIC_LINKS")
-    Set mapLinks = Core_BuildColumnMap_FromListObject(tblLinks)
-    Set mapCalc = Core_BuildColumnMap_FromListObject(tblCalc)
-
-    RequireColumn mapLinks, "Succ ID", "tbl_LOGIC_LINKS"
-    RequireColumn mapLinks, "Pred ID", "tbl_LOGIC_LINKS"
-    RequireColumn mapLinks, "Link Type", "tbl_LOGIC_LINKS"
-    RequireColumn mapLinks, "Lag", "tbl_LOGIC_LINKS"
+    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Succ ID"
+    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Pred ID"
+    If Not network.HasColumn("Link Type") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Link Type"
+    If Not network.HasColumn("Lag") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Lag"
 
     RequireColumn mapCalc, "ID", "tbl_CALC"
     RequireColumn mapCalc, "ParentID", "tbl_CALC"
     RequireColumn mapCalc, "IsSummary", "tbl_CALC"
 
-    If tblLinks.DataBodyRange Is Nothing Then
+    If network.Count = 0 Then
         Set BuildCoreLinksBySucc_FromLogicLinksTable_Expanded = linksBySuccId
         Exit Function
     End If
 
-    arrLinks = tblLinks.DataBodyRange.value
     arrCalc = tblCalc.DataBodyRange.value
 
     Set rowById = Core_BuildRowById(arrCalc, mapCalc)
     Set directChildrenById = Core_BuildDirectChildrenById(arrCalc, mapCalc, rowById)
     Set leafDescCache = CreateObject("Scripting.Dictionary")
 
-    For r = 1 To UBound(arrLinks, 1)
+    For r = 1 To network.Count
 
-        succIdRaw = Trim$(CStr(arrLinks(r, mapLinks("Succ ID"))))
-        predIdRaw = Trim$(CStr(arrLinks(r, mapLinks("Pred ID"))))
-        linkType = UCase$(Trim$(CStr(arrLinks(r, mapLinks("Link Type")))))
-
-        If IsNumeric(arrLinks(r, mapLinks("Lag"))) Then
-            lagVal = CDbl(arrLinks(r, mapLinks("Lag")))
-        Else
-            lagVal = 0#
-        End If
+        Set link = network.Item(r)
+        succIdRaw = link.SuccId
+        predIdRaw = link.PredId
+        linkType = link.LinkType
+        lagVal = link.Lag
 
         If succIdRaw <> "" And predIdRaw <> "" Then
-
-            If linkType = "" Then linkType = "FS"
 
             predIsSummary = False
             summarySourceId = ""
@@ -320,6 +331,10 @@ Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne Leaf Targets For Node depuis le contexte core bridge.
+' EN: Returns Leaf Targets For Node from the core bridge context.
+'------------------------------------------------------------------------------
 Private Function GetLeafTargetsForNode( _
     ByVal nodeId As String, _
     ByRef arrCalc As Variant, _
@@ -360,6 +375,11 @@ Private Function GetLeafTargetsForNode( _
 
 End Function
 
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Leaf Descendants From CALC sans exposer de mutateur sur l'etat source.
+' EN: Returns the Leaf Descendants From CALC collection without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Private Function CoreWrapper_GetLeafDescendantsFromCalc( _
     ByVal startId As String, _
@@ -412,6 +432,11 @@ Private Function CoreWrapper_GetLeafDescendantsFromCalc( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la collection String Collection a partir des donnees fournies par l'appelant.
+' EN: Builds the String Collection collection from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function CloneStringCollection(ByVal sourceCol As Collection) As Collection
 
     Dim result As Collection
@@ -428,46 +453,10 @@ Private Function CloneStringCollection(ByVal sourceCol As Collection) As Collect
 End Function
 
 
-Public Sub WriteCoreOutputsToCalc( _
-    ByVal tblCalc As ListObject, _
-    ByVal mapCalc As Object, _
-    ByRef dataArr As Variant)
-
-    Dim perfScope As clsPerfScope
-
-    Dim rowCount As Long
-    Dim outStart() As Variant
-    Dim outFinish() As Variant
-    Dim outDur() As Variant
-    Dim outErr() As Variant
-    Dim outErrMsg() As Variant
-    Dim r As Long
-
-    Set perfScope = Profiler_BeginScope("WriteCoreOutputsToCalc", "Excel Table Write")
-
-    rowCount = UBound(dataArr, 1)
-
-    ReDim outStart(1 To rowCount, 1 To 1)
-    ReDim outFinish(1 To rowCount, 1 To 1)
-    ReDim outDur(1 To rowCount, 1 To 1)
-    ReDim outErr(1 To rowCount, 1 To 1)
-    ReDim outErrMsg(1 To rowCount, 1 To 1)
-
-    For r = 1 To rowCount
-        outStart(r, 1) = dataArr(r, mapCalc("Calculated Start"))
-        outFinish(r, 1) = dataArr(r, mapCalc("Calculated Finish"))
-        outDur(r, 1) = dataArr(r, mapCalc("Calculated Duration"))
-        outErr(r, 1) = dataArr(r, mapCalc("Error flag"))
-        outErrMsg(r, 1) = dataArr(r, mapCalc("ErrorMsg"))
-    Next r
-
-    tblCalc.ListColumns("Calculated Start").DataBodyRange.value = outStart
-    tblCalc.ListColumns("Calculated Finish").DataBodyRange.value = outFinish
-    tblCalc.ListColumns("Calculated Duration").DataBodyRange.value = outDur
-    tblCalc.ListColumns("Error flag").DataBodyRange.value = outErr
-    tblCalc.ListColumns("ErrorMsg").DataBodyRange.value = outErrMsg
-
-End Sub
+'------------------------------------------------------------------------------
+' FR: Valide Require Column et applique la politique d'erreur definie par le composant.
+' EN: Validates Require Column and applies the component's defined failure policy.
+'------------------------------------------------------------------------------
 
 Private Sub RequireColumn( _
     ByVal mapCol As Object, _
@@ -481,6 +470,10 @@ Private Sub RequireColumn( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Retourne Single Column Array depuis le contexte core bridge.
+' EN: Returns Single Column Array from the core bridge context.
+'------------------------------------------------------------------------------
 Private Function GetSingleColumnArray( _
     ByRef dataArr As Variant, _
     ByVal colIdx As Long) As Variant
@@ -500,6 +493,10 @@ Private Function GetSingleColumnArray( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Dict Value As Long depuis le contexte core bridge.
+' EN: Returns Dict Value As Long from the core bridge context.
+'------------------------------------------------------------------------------
 Private Function GetDictValueAsLong( _
     ByVal dictObj As Object, _
     ByVal key As String) As Long
@@ -511,6 +508,11 @@ Private Function GetDictValueAsLong( _
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Projette la collection Calc Core Prod Show Console Message vers l'interface autorisee par la politique runtime.
+' EN: Projects the Calc Core Prod Show Console Message collection to the UI allowed by runtime policy.
+'------------------------------------------------------------------------------
 
 Private Sub CalcCoreProd_ShowConsoleMessage( _
     ByVal msgType As String, _

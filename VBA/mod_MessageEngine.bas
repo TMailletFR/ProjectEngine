@@ -1,8 +1,28 @@
 Attribute VB_Name = "mod_MessageEngine"
 Option Explicit
 
-' Message Engine = runtime event projection rules.
-' Producers build messages; this layer decides console ordering and visibility.
+'===============================================================================
+' MODULE : mod_MessageEngine
+' DOMAINE / DOMAIN : Message Engine
+'
+' FR
+' Prepare, filtre et regroupe les diagnostics destines a la console et a l'historique.
+' Ne produit pas les diagnostics metier et ne possede pas leur UI.
+'
+' EN
+' Prepares, filters and groups diagnostics for console and event history.
+' Does not produce business diagnostics or own their UI.
+'
+' CONTRATS / CONTRACTS : MessageEngine_PrepareConsoleMessages, MessageEngine_PrepareDisplayMessages, MessageEngine_ShouldShowConsole, MessageEngine_BuildCategoryProgressCaption
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Prepare Console Messages sans modifier les donnees d'entree.
+' EN: Returns the Prepare Console Messages collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function MessageEngine_PrepareConsoleMessages(ByVal messages As Collection) As Collection
 
     Dim result As Collection
@@ -34,6 +54,11 @@ Public Function MessageEngine_PrepareConsoleMessages(ByVal messages As Collectio
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Prepare Display Messages sans modifier les donnees d'entree.
+' EN: Returns the Prepare Display Messages collection without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function MessageEngine_PrepareDisplayMessages(ByVal messages As Collection) As Collection
 
     Dim included As Collection
@@ -56,6 +81,11 @@ Public Function MessageEngine_PrepareDisplayMessages(ByVal messages As Collectio
     Set MessageEngine_PrepareDisplayMessages = MessageEngine_GroupDisplayStops(included)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la collection Group Display Stops sans modifier les donnees d'entree.
+' EN: Returns the Group Display Stops collection without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) As Collection
 
@@ -116,6 +146,11 @@ Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) A
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si la valeur Include In Display satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Include In Display value satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Private Function MessageEngine_ShouldIncludeInDisplay(ByVal item As Variant) As Boolean
 
     Dim severity As String
@@ -142,6 +177,11 @@ SafeExit:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ajoute au message les metadonnees ACK calculees par EventHistory sans modifier son texte ni sa severite.
+' EN: Adds ACK metadata computed by EventHistory without changing message text or severity.
+'------------------------------------------------------------------------------
+
 Private Sub MessageEngine_AnnotateAcknowledgement(ByVal item As Variant)
 
     On Error GoTo SafeExit
@@ -156,6 +196,11 @@ Private Sub MessageEngine_AnnotateAcknowledgement(ByVal item As Variant)
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si la collection Show Console satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Show Console collection satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
+
 Public Function MessageEngine_ShouldShowConsole(ByVal messages As Collection) As Boolean
 
     If messages Is Nothing Then Exit Function
@@ -164,6 +209,11 @@ Public Function MessageEngine_ShouldShowConsole(ByVal messages As Collection) As
     MessageEngine_ShouldShowConsole = True
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit la collection Category Progress Caption a partir des donnees fournies par l'appelant.
+' EN: Builds the Category Progress Caption collection from data supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Function MessageEngine_BuildCategoryProgressCaption( _
     ByVal messages As Collection, _
@@ -223,7 +273,12 @@ Public Function MessageEngine_BuildCategoryProgressCaption( _
 
 End Function
 
-Public Function MessageEngine_NormalizeSeverity(ByVal msgType As String) As String
+'------------------------------------------------------------------------------
+' FR: Normalise ou formate Normalize Severity selon le contrat canonique du composant.
+' EN: Normalizes or formats Normalize Severity according to the component contract.
+'------------------------------------------------------------------------------
+
+Private Function MessageEngine_NormalizeSeverity(ByVal msgType As String) As String
 
     Select Case UCase$(Trim$(msgType))
         Case "ERROR", "STOP"

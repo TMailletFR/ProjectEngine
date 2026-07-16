@@ -1,6 +1,23 @@
 Attribute VB_Name = "mod_CalcInfrastructure"
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_CalcInfrastructure
+' DOMAINE / DOMAIN : Calculation / Data Sync
+'
+' FR
+' Cree et valide les feuilles, tables et colonnes techniques requises par le calcul.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Creates and validates the technical sheets, tables and columns required by calculation.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Ensure_Calc_Infrastructure
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 Private Const CALC_SHEET_NAME As String = "CALC"
 Private Const CALC_TABLE_NAME As String = "tbl_CALC"
 Private Const LOGIC_TABLE_NAME As String = "tbl_LOGIC_LINKS"
@@ -9,6 +26,10 @@ Private Const CALC_TABLE_TOP_LEFT As String = "A1"
 Private Const TABLE_GAP_COLS As Long = 3
 
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Calc Infrastructure si necessaire.
+' EN: Ensures or creates Calc Infrastructure when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_Calc_Infrastructure(Optional ByVal consoleMessages As Collection)
 
     Dim perfScope As clsPerfScope
@@ -69,6 +90,10 @@ End Sub
 
 
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Worksheet Exists si necessaire.
+' EN: Ensures or creates Worksheet Exists when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureWorksheetExists(ByVal sheetName As String, Optional ByRef wasCreated As Boolean = False) As Worksheet
 
     Dim ws As Worksheet
@@ -95,6 +120,10 @@ Private Function EnsureWorksheetExists(ByVal sheetName As String, Optional ByRef
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Logic Table Top Left depuis le contexte calculation infrastructure.
+' EN: Returns Logic Table Top Left from the calculation infrastructure context.
+'------------------------------------------------------------------------------
 Private Function GetLogicTableTopLeft(ByVal ws As Worksheet) As Range
 
     Dim calcHeaders As Variant
@@ -110,6 +139,10 @@ Private Function GetLogicTableTopLeft(ByVal ws As Worksheet) As Range
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Table With Headers si necessaire.
+' EN: Ensures or creates Table With Headers when needed.
+'------------------------------------------------------------------------------
 Private Function EnsureTableWithHeaders( _
     ByVal ws As Worksheet, _
     ByVal tableName As String, _
@@ -172,6 +205,10 @@ Private Function EnsureTableWithHeaders( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Calc Headers depuis le contexte calculation infrastructure.
+' EN: Returns Calc Headers from the calculation infrastructure context.
+'------------------------------------------------------------------------------
 Private Function GetCalcHeaders() As Variant
 
     Dim arr
@@ -189,6 +226,10 @@ Private Function GetCalcHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne Logic Links Headers depuis le contexte calculation infrastructure.
+' EN: Returns Logic Links Headers from the calculation infrastructure context.
+'------------------------------------------------------------------------------
 Private Function GetLogicLinksHeaders() As Variant
 
     Dim arr
@@ -198,6 +239,10 @@ Private Function GetLogicLinksHeaders() As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Cree tbl CALC pour le domaine calculation infrastructure.
+' EN: Creates tbl CALC for the calculation infrastructure domain.
+'------------------------------------------------------------------------------
 Private Function Create_tbl_CALC(ByVal wsCalc As Worksheet) As ListObject
 
     Dim headers1 As Variant
@@ -264,6 +309,11 @@ Private Function Create_tbl_CALC(ByVal wsCalc As Worksheet) As ListObject
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Join Arrays sans modifier les donnees d'entree.
+' EN: Returns the Join Arrays value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function JoinArrays(ParamArray arrs() As Variant) As Variant
 
     Dim totalCount As Long
@@ -294,6 +344,10 @@ Private Function JoinArrays(ParamArray arrs() As Variant) As Variant
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Ecrit Header Array To Range vers le stockage cible.
+' EN: Writes Header Array To Range to the target storage.
+'------------------------------------------------------------------------------
 Private Sub WriteHeaderArrayToRange(ByVal targetRow As Range, ByVal headers As Variant)
 
     Dim i As Long
@@ -303,6 +357,11 @@ Private Sub WriteHeaderArrayToRange(ByVal targetRow As Range, ByVal headers As V
     Next i
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Actualise Apply tbl CALC Column Formats sans modifier les regles metier qui produisent les donnees.
+' EN: Refreshes Apply tbl CALC Column Formats without changing the business rules that produce the data.
+'------------------------------------------------------------------------------
 
 Private Sub Apply_tbl_CALC_ColumnFormats(ByVal tblCalc As ListObject)
 
@@ -349,6 +408,11 @@ Private Sub Apply_tbl_CALC_ColumnFormats(ByVal tblCalc As ListObject)
 End Sub
 
 
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la collection Calc Infrastructure Add Or Show Console Message a la structure cible fournie par l'appelant.
+' EN: Adds the Calc Infrastructure Add Or Show Console Message collection to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Private Sub CalcInfrastructure_AddOrShowConsoleMessage( _
     ByVal consoleMessages As Collection, _

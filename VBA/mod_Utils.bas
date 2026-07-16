@@ -1,26 +1,28 @@
 Attribute VB_Name = "mod_Utils"
-'=====================================================
-' Module: mod_Utils
-'
-' Purpose:
-' Provide shared helper functions used across the
-' planning engine (WBS, CALC, Gantt, Live simulation).
-'
-' Scope:
-' - Generic value handling (HasValue, GetCellValue, etc.)
-' - WBS hierarchy utilities
-' - Predecessor manipulation and expansion
-' - Common comparison and formatting helpers
-'
-' Rules:
-' - No business logic specific to a module (Gantt / CALC)
-' - Functions must be reusable and side-effect free
-' - Keep implementations lightweight (used in loops)
-'=====================================================
-
 Option Explicit
 
+'===============================================================================
+' MODULE : mod_Utils
+' DOMAINE / DOMAIN : Shared Utilities
+'
+' FR
+' Fournit les primitives transversales de dates, WBS, valeurs et messages bilingues.
+' Ne possede aucun workflow metier ni table Excel.
+'
+' EN
+' Provides shared date, WBS, value and bilingual-message primitives.
+' Owns no business workflow or Excel table.
+'
+' CONTRATS / CONTRACTS : HasValue, GetCellValue, maxDate, GetParentWBS, BiMsg, NormalizePercentInput, ValuesDiffer, NormalizeWBS
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+
 ' Return True only when value is usable (not Error / Empty / blank).
+'------------------------------------------------------------------------------
+' FR: Indique si Value est vrai pour le contexte courant.
+' EN: Returns whether Value is true for the current context.
+'------------------------------------------------------------------------------
 Public Function HasValue(ByVal v As Variant) As Boolean
 
     If isError(v) Then
@@ -36,6 +38,10 @@ Public Function HasValue(ByVal v As Variant) As Boolean
 End Function
 
 ' Return value if usable, otherwise return Empty.
+'------------------------------------------------------------------------------
+' FR: Retourne Cell Value depuis le contexte utilities.
+' EN: Returns Cell Value from the utilities context.
+'------------------------------------------------------------------------------
 Public Function GetCellValue(ByVal v As Variant) As Variant
 
     If HasValue(v) Then
@@ -46,18 +52,12 @@ Public Function GetCellValue(ByVal v As Variant) As Variant
 
 End Function
 
-' Return numeric value if valid, otherwise return 0.
-Public Function GetNumericOrZero(ByVal v As Variant) As Double
 
-    If HasValue(v) And IsNumeric(v) Then
-        GetNumericOrZero = CDbl(v)
-    Else
-        GetNumericOrZero = 0
-    End If
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur max Date sans modifier les donnees d'entree.
+' EN: Returns the max Date value without mutating input data.
+'------------------------------------------------------------------------------
 
-End Function
-
-' Return the maximum of two Excel date values.
 Public Function maxDate(ByVal d1 As Variant, ByVal d2 As Variant) As Double
 
     If CDbl(d1) >= CDbl(d2) Then
@@ -68,66 +68,12 @@ Public Function maxDate(ByVal d1 As Variant, ByVal d2 As Variant) As Double
 
 End Function
 
-' Merge inherited and local predecessor strings without duplicates.
-Public Function MergePredStrings(ByVal inheritedPreds As String, ByVal localPreds As String) As String
-
-    Dim seen As Object
-    Dim ordered As Collection
-
-    Set seen = CreateObject("Scripting.Dictionary")
-    Set ordered = New Collection
-
-    AddPredTokensToOrdered inheritedPreds, seen, ordered
-    AddPredTokensToOrdered localPreds, seen, ordered
-
-    MergePredStrings = JoinCollectionWithSemicolon(ordered)
-
-End Function
-
-' Resolve full predecessor chain for an ID (including inherited WBS parents).
-Public Function ResolvePredsForId( _
-    ByVal id As String, _
-    ByVal idToWbs As Object, _
-    ByVal wbsToId As Object, _
-    ByVal rawPredById As Object, _
-    ByVal resolvedPredById As Object) As String
-
-    Dim currentWBS As String
-    Dim parentWbs As String
-    Dim parentId As String
-    Dim inheritedPreds As String
-    Dim localPreds As String
-
-    If resolvedPredById.Exists(id) Then
-        ResolvePredsForId = CStr(resolvedPredById(id))
-        Exit Function
-    End If
-
-    inheritedPreds = ""
-    localPreds = ""
-
-    If idToWbs.Exists(id) Then
-        currentWBS = CStr(idToWbs(id))
-        parentWbs = GetParentWBS(currentWBS)
-
-        If parentWbs <> "" Then
-            If wbsToId.Exists(parentWbs) Then
-                parentId = CStr(wbsToId(parentWbs))
-                inheritedPreds = ResolvePredsForId(parentId, idToWbs, wbsToId, rawPredById, resolvedPredById)
-            End If
-        End If
-    End If
-
-    If rawPredById.Exists(id) Then
-        localPreds = CStr(rawPredById(id))
-    End If
-
-    ResolvePredsForId = MergePredStrings(inheritedPreds, localPreds)
-    resolvedPredById(id) = ResolvePredsForId
-
-End Function
 
 ' Return parent WBS code from a given WBS string.
+'------------------------------------------------------------------------------
+' FR: Retourne Parent WBS depuis le contexte utilities.
+' EN: Returns Parent WBS from the utilities context.
+'------------------------------------------------------------------------------
 Public Function GetParentWBS(ByVal wbs As String) As String
 
     Dim lastDotPos As Long
@@ -143,148 +89,12 @@ Public Function GetParentWBS(ByVal wbs As String) As String
 
 End Function
 
-' Add unique predecessor tokens into an ordered collection.
-Public Sub AddPredTokensToOrdered(ByVal predText As String, ByVal seen As Object, ByVal ordered As Collection)
 
-    Dim arr As Variant
-    Dim i As Long
-    Dim token As String
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Bi Msg sans modifier les donnees d'entree.
+' EN: Returns the Bi Msg value without mutating input data.
+'------------------------------------------------------------------------------
 
-    predText = Trim(CStr(predText))
-    If predText = "" Then Exit Sub
-
-    arr = Split(predText, ";")
-
-    For i = LBound(arr) To UBound(arr)
-        token = Trim(CStr(arr(i)))
-
-        If token <> "" Then
-            If Not seen.Exists(token) Then
-                seen(token) = True
-                ordered.Add token
-            End If
-        End If
-    Next i
-
-End Sub
-
-' Join a collection of items into a semicolon-separated string.
-Public Function JoinCollectionWithSemicolon(ByVal items As Collection) As String
-
-    Dim i As Long
-    Dim result As String
-
-    result = ""
-
-    For i = 1 To items.Count
-        If result <> "" Then result = result & ";"
-        result = result & CStr(items(i))
-    Next i
-
-    JoinCollectionWithSemicolon = result
-
-End Function
-
-' Expand predecessor list by replacing parent IDs with all their leaf descendants.
-Public Function ExpandPredsToLeafIds( _
-    ByVal predText As String, _
-    ByVal parentIds As Object, _
-    ByVal directChildrenById As Object, _
-    ByVal leafDescCache As Object) As String
-
-    Dim seen As Object
-    Dim ordered As Collection
-    Dim arr As Variant
-    Dim i As Long
-    Dim token As String
-    Dim leafs As Collection
-    Dim leafId As Variant
-
-    Set seen = CreateObject("Scripting.Dictionary")
-    Set ordered = New Collection
-
-    predText = Trim(CStr(predText))
-    If predText = "" Then
-        ExpandPredsToLeafIds = ""
-        Exit Function
-    End If
-
-    arr = Split(predText, ";")
-
-    For i = LBound(arr) To UBound(arr)
-        token = Trim(CStr(arr(i)))
-
-        If token <> "" Then
-
-            If parentIds.Exists(token) Then
-                Set leafs = GetLeafDescendants(token, directChildrenById, leafDescCache)
-
-                For Each leafId In leafs
-                    If Not seen.Exists(CStr(leafId)) Then
-                        seen(CStr(leafId)) = True
-                        ordered.Add CStr(leafId)
-                    End If
-                Next leafId
-            Else
-                If Not seen.Exists(token) Then
-                    seen(token) = True
-                    ordered.Add token
-                End If
-            End If
-
-        End If
-    Next i
-
-    ExpandPredsToLeafIds = JoinCollectionWithSemicolon(ordered)
-
-End Function
-
-' Recursively retrieve all leaf descendants of a given parent ID.
-Public Function GetLeafDescendants( _
-    ByVal parentId As String, _
-    ByVal directChildrenById As Object, _
-    ByVal leafDescCache As Object) As Collection
-
-    Dim result As Collection
-    Dim childId As Variant
-    Dim childLeafs As Collection
-    Dim leafId As Variant
-
-    If leafDescCache.Exists(parentId) Then
-        Set GetLeafDescendants = leafDescCache(parentId)
-        Exit Function
-    End If
-
-    Set result = New Collection
-
-    If Not directChildrenById.Exists(parentId) Then
-        result.Add parentId
-        Set leafDescCache(parentId) = result
-        Set GetLeafDescendants = result
-        Exit Function
-    End If
-
-    If directChildrenById(parentId).Count = 0 Then
-        result.Add parentId
-        Set leafDescCache(parentId) = result
-        Set GetLeafDescendants = result
-        Exit Function
-    End If
-
-    For Each childId In directChildrenById(parentId)
-        Set childLeafs = GetLeafDescendants(CStr(childId), directChildrenById, leafDescCache)
-
-        For Each leafId In childLeafs
-            result.Add CStr(leafId)
-        Next leafId
-    Next childId
-
-    Set leafDescCache(parentId) = result
-    Set GetLeafDescendants = result
-
-End Function
-
-' Return bilingual message with explicit FR/EN sections for console language rendering.
 Public Function BiMsg(ByVal frText As String, ByVal enText As String) As String
 
     BiMsg = _
@@ -296,6 +106,10 @@ Public Function BiMsg(ByVal frText As String, ByVal enText As String) As String
 End Function
 
 ' Normalize percent input (accept 0-1 or 0-100 scale).
+'------------------------------------------------------------------------------
+' FR: Normalise Percent Input dans un format exploitable.
+' EN: Normalizes Percent Input into a usable format.
+'------------------------------------------------------------------------------
 Public Function NormalizePercentInput(ByVal v As Variant) As Variant
 
     Dim x As Double
@@ -322,7 +136,11 @@ Public Function NormalizePercentInput(ByVal v As Variant) As Variant
 
 End Function
 
-' Compare two values with tolerance for numeric values.
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Values Differ sans modifier les donnees d'entree.
+' EN: Returns the Values Differ value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function ValuesDiffer(ByVal v1 As Variant, ByVal v2 As Variant) As Boolean
 
     If Not HasValue(v1) And Not HasValue(v2) Then Exit Function
@@ -341,6 +159,10 @@ Public Function ValuesDiffer(ByVal v1 As Variant, ByVal v2 As Variant) As Boolea
 End Function
 
 ' Normalize WBS string format (trim + replace comma with dot).
+'------------------------------------------------------------------------------
+' FR: Normalise WBS dans un format exploitable.
+' EN: Normalizes WBS into a usable format.
+'------------------------------------------------------------------------------
 Public Function NormalizeWBS(ByVal rawValue As Variant) As String
 
     Dim s As String
@@ -402,6 +224,10 @@ End Function
 ' - True if token parsed successfully
 ' - False if token is invalid
 '=================================================
+'------------------------------------------------------------------------------
+' FR: Analyse Predecessor Token et extrait les informations utiles.
+' EN: Parses Predecessor Token and extracts useful information.
+'------------------------------------------------------------------------------
 Public Function ParsePredecessorToken( _
     ByVal token As String, _
     ByRef predWbs As String, _
@@ -540,6 +366,11 @@ Public Function ParsePredecessorToken( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Contains Forbidden Whitespace sans modifier les donnees d'entree.
+' EN: Returns the Contains Forbidden Whitespace value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function ContainsForbiddenWhitespace(ByVal textValue As String) As Boolean
 
     ContainsForbiddenWhitespace = _
@@ -548,6 +379,10 @@ Private Function ContainsForbiddenWhitespace(ByVal textValue As String) As Boole
         (InStr(1, textValue, Chr$(160), vbBinaryCompare) > 0)
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Pure WBS est vrai pour le contexte courant.
+' EN: Returns whether Valid Pure WBS is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidPureWBS(ByVal wbsText As String) As Boolean
 
     Dim reWBS As Object
@@ -579,6 +414,10 @@ End Function
 ' NOTE
 ' - empty cell = valid, zero link
 '=================================================
+'------------------------------------------------------------------------------
+' FR: Analyse Predecessors Text et extrait les informations utiles.
+' EN: Parses Predecessors Text and extracts useful information.
+'------------------------------------------------------------------------------
 Public Function ParsePredecessorsText( _
     ByVal succId As String, _
     ByVal succWBS As String, _
@@ -652,60 +491,3 @@ Public Function ParsePredecessorsText( _
     ParsePredecessorsText = True
 
 End Function
-
-
-'=================================================
-' Build WBS -> ID map from tbl_WBS.
-' Dedicated helper for parser/testing.
-'=================================================
-Public Function BuildWbsToIdMapFromTable( _
-    ByVal tblWBS As ListObject, _
-    ByVal mapWBS As Object) As Object
-
-    Dim perfScope As clsPerfScope
-
-    Dim d As Object
-    Dim arr As Variant
-    Dim r As Long
-    Dim wbsVal As String
-    Dim idVal As String
-
-    Set perfScope = Profiler_BeginScope("BuildWbsToIdMapFromTable", "Dictionary")
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    If tblWBS.DataBodyRange Is Nothing Then
-        Set BuildWbsToIdMapFromTable = d
-        Exit Function
-    End If
-
-    arr = tblWBS.DataBodyRange.value
-
-    For r = 1 To UBound(arr, 1)
-        wbsVal = NormalizeWBS(CStr(arr(r, mapWBS("WBS"))))
-        idVal = Trim$(CStr(arr(r, mapWBS("ID"))))
-
-        If wbsVal <> "" And idVal <> "" Then
-            d(wbsVal) = idVal
-        End If
-    Next r
-
-    Set BuildWbsToIdMapFromTable = d
-
-End Function
-
-Private Sub Utils_AddConsoleMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
-
-    If consoleMessages Is Nothing Then Exit Sub
-
-    CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
-
-End Sub
-
-
-

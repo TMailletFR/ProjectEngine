@@ -1,4 +1,21 @@
 Attribute VB_Name = "mod_WBSEvents"
+
+'===============================================================================
+' MODULE : mod_WBSEvents
+' DOMAINE / DOMAIN : WBS
+'
+' FR
+' Valide les edits WBS, restaure les formules gerees et route les changements autorises.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Validates WBS edits, restores managed formulas and routes authorized changes.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Handle_WBS_Change
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Handle_WBS_Change
+'===============================================================================
+
 '=================================================
 ' WBS EVENT HANDLER – INPUT / OUTPUT CONTROL
 '
@@ -24,6 +41,10 @@ Attribute VB_Name = "mod_WBSEvents"
 ' - all other engine writes trigger macro abort
 '=================================================
 
+'------------------------------------------------------------------------------
+' FR: Traite un changement ou evenement pour WBS Change.
+' EN: Handles a change or event for WBS Change.
+'------------------------------------------------------------------------------
 Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
     Dim tbl As ListObject
@@ -364,6 +385,10 @@ SafeExit:
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Indique si WBSFormula Column Autofill Event est vrai pour le contexte courant.
+' EN: Returns whether WBSFormula Column Autofill Event is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsWBSFormulaColumnAutofillEvent( _
     ByVal tbl As ListObject, _
     ByVal Target As Range, _
@@ -402,6 +427,10 @@ Private Function IsWBSFormulaColumnAutofillEvent( _
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si WBSFormula Managed Column est vrai pour le contexte courant.
+' EN: Returns whether WBSFormula Managed Column is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsWBSFormulaManagedColumn(ByVal columnName As String) As Boolean
 
     Select Case CStr(columnName)
@@ -410,6 +439,11 @@ Private Function IsWBSFormulaManagedColumn(ByVal columnName As String) As Boolea
     End Select
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur WBS Formula Column Has Expected Formula sans modifier les donnees d'entree.
+' EN: Returns the WBS Formula Column Has Expected Formula value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function WBSFormulaColumnHasExpectedFormula(ByVal col As ListColumn) As Boolean
 
@@ -431,6 +465,11 @@ Private Function WBSFormulaColumnHasExpectedFormula(ByVal col As ListColumn) As 
 SafeExit:
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Expected WBS Formula Local sans modifier les donnees d'entree.
+' EN: Returns the Expected WBS Formula Local value without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function ExpectedWBSFormulaLocal(ByVal columnName As String) As String
 
     Select Case CStr(columnName)
@@ -443,6 +482,10 @@ Private Function ExpectedWBSFormulaLocal(ByVal columnName As String) As String
     End Select
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne WBSUser Editable Range depuis le contexte WBS events.
+' EN: Returns WBSUser Editable Range from the WBS events context.
+'------------------------------------------------------------------------------
 Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
 
     Dim rng As Range
@@ -478,6 +521,11 @@ Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
     )
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne la reference WBS Has Column sans modifier les donnees d'entree.
+' EN: Returns the WBS Has Column reference without mutating input data.
+'------------------------------------------------------------------------------
+
 Private Function WBSHasColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
     Dim col As ListColumn
@@ -489,6 +537,10 @@ Private Function WBSHasColumn(ByVal tbl As ListObject, ByVal columnName As Strin
     WBSHasColumn = Not col Is Nothing
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Retourne WBSLocked Range depuis le contexte WBS events.
+' EN: Returns WBSLocked Range from the WBS events context.
+'------------------------------------------------------------------------------
 Private Function GetWBSLockedRange(ByVal tbl As ListObject) As Range
 
     Set GetWBSLockedRange = Union( _
@@ -512,6 +564,10 @@ Private Function GetWBSLockedRange(ByVal tbl As ListObject) As Range
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Normalise Predecessors WBSLive Input dans un format exploitable.
+' EN: Normalizes Predecessors WBSLive Input into a usable format.
+'------------------------------------------------------------------------------
 Private Function NormalizePredecessorsWBSLiveInput(ByVal inputText As String) As String
 
     Dim cleaned As String
@@ -544,6 +600,11 @@ Private Function NormalizePredecessorsWBSLiveInput(ByVal inputText As String) As
     NormalizePredecessorsWBSLiveInput = result
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Construit la valeur WBS Build Predecessors Format Message FR a partir des donnees fournies par l'appelant.
+' EN: Builds the WBS Build Predecessors Format Message FR value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function WBS_BuildPredecessorsFormatMessageFR() As String
 
     WBS_BuildPredecessorsFormatMessageFR = _
@@ -566,6 +627,11 @@ Private Function WBS_BuildPredecessorsFormatMessageFR() As String
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Construit la valeur WBS Build Predecessors Format Message EN a partir des donnees fournies par l'appelant.
+' EN: Builds the WBS Build Predecessors Format Message EN value from data supplied by the caller.
+'------------------------------------------------------------------------------
+
 Private Function WBS_BuildPredecessorsFormatMessageEN() As String
 
     WBS_BuildPredecessorsFormatMessageEN = _
@@ -587,6 +653,10 @@ Private Function WBS_BuildPredecessorsFormatMessageEN() As String
         "* empty tokens are not allowed"
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Predecessors WBSInput est vrai pour le contexte courant.
+' EN: Returns whether Valid Predecessors WBSInput is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidPredecessorsWBSInput(ByVal inputText As String) As Boolean
 
     Dim tokens As Variant
@@ -632,6 +702,10 @@ Private Function IsValidPredecessorsWBSInput(ByVal inputText As String) As Boole
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Predecessor Token est vrai pour le contexte courant.
+' EN: Returns whether Valid Predecessor Token is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidPredecessorToken(ByVal tokenText As String) As Boolean
 
     Dim predWbs As String
@@ -650,6 +724,10 @@ Private Function IsValidPredecessorToken(ByVal tokenText As String) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Task Type Input est vrai pour le contexte courant.
+' EN: Returns whether Valid Task Type Input is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidTaskTypeInput(ByVal inputText As String) As Boolean
 
     Select Case UCase$(Trim$(CStr(inputText)))
@@ -664,6 +742,10 @@ Private Function IsValidTaskTypeInput(ByVal inputText As String) As Boolean
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Summary Display Input est vrai pour le contexte courant.
+' EN: Returns whether Valid Summary Display Input is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidSummaryDisplayInput(ByVal inputText As String) As Boolean
 
     Select Case UCase$(Trim$(CStr(inputText)))
@@ -677,6 +759,10 @@ Private Function IsValidSummaryDisplayInput(ByVal inputText As String) As Boolea
     End Select
 
 End Function
+'------------------------------------------------------------------------------
+' FR: Indique si Valid Duration Input est vrai pour le contexte courant.
+' EN: Returns whether Valid Duration Input is true for the current context.
+'------------------------------------------------------------------------------
 Private Function IsValidDurationInput(ByVal inputText As String) As Boolean
 
     Dim durationValue As Double
@@ -694,6 +780,11 @@ Private Function IsValidDurationInput(ByVal inputText As String) As Boolean
     IsValidDurationInput = (durationValue > 0)
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Projette la collection WBS Show Console Message vers l'interface autorisee par la politique runtime.
+' EN: Projects the WBS Show Console Message collection to the UI allowed by runtime policy.
+'------------------------------------------------------------------------------
 
 Private Sub WBS_ShowConsoleMessage( _
     ByVal boxStyle As VbMsgBoxStyle, _
@@ -717,6 +808,11 @@ Private Sub WBS_ShowConsoleMessage( _
     CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur WBS Message Type From Msg Box Style sans modifier les donnees d'entree.
+' EN: Returns the WBS Message Type From Msg Box Style value without mutating input data.
+'------------------------------------------------------------------------------
 
 Private Function WBS_MessageTypeFromMsgBoxStyle(ByVal boxStyle As VbMsgBoxStyle) As String
 

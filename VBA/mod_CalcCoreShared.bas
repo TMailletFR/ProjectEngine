@@ -1,21 +1,26 @@
 Attribute VB_Name = "mod_CalcCoreShared"
 Option Explicit
 
-'=====================================================
-' mod_CalcCoreShared
-'=====================================================
-' Rôle :
-' - socle partagé du futur cœur de calcul
-' - helpers dataset mémoire (array 2D + mapCol)
-' - helpers erreurs techniques minimales
-' - helpers summary / duration
+'===============================================================================
+' MODULE : mod_CalcCoreShared
+' DOMAINE / DOMAIN : Core Calculation
 '
-' IMPORTANT :
-' - ce module ne modifie aucune feuille Excel
-' - ce module ne change aucun comportement existant tant
-'   qu'il n'est pas encore appelé par les wrappers
-' - il sert de base sûre pour les prochaines étapes
-'=====================================================
+' FR
+' Fournit les primitives partagees du Core pour dates, valeurs, task types et acces aux colonnes.
+' Ne doit pas contourner les contrats publics des autres domaines.
+'
+' EN
+' Provides shared Core primitives for dates, values, task types and column access.
+' Must not bypass public contracts owned by other domains.
+'
+' CONTRATS / CONTRACTS : Core_GetVal, Core_SetVal, Core_HasVal, Core_ClearCalcOutputs_Row, Core_ClearAllCalcOutputs, Core_IsSummaryRow, Core_CalcInclusiveDuration, Core_SetCalcTriplet
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
+'------------------------------------------------------------------------------
+' FR: Retourne la map Val sans exposer de mutateur sur l'etat source.
+' EN: Returns the Val map without exposing a mutator for source state.
+'------------------------------------------------------------------------------
 
 Public Function Core_GetVal( _
     ByRef dataArr As Variant, _
@@ -37,6 +42,11 @@ Public Function Core_GetVal( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Core Set Val dans l'etat runtime du composant.
+' EN: Activates or initializes Core Set Val in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Core_SetVal( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -50,6 +60,11 @@ Public Sub Core_SetVal( _
     dataArr(rowIdx, mapCol(colName)) = newValue
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Indique si la map Val satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Val map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Public Function Core_HasVal( _
     ByRef dataArr As Variant, _
@@ -67,6 +82,11 @@ Public Function Core_HasVal( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Core Clear Calc Outputs Row dans le perimetre possede par le composant.
+' EN: Resets Core Clear Calc Outputs Row within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Public Sub Core_ClearCalcOutputs_Row( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -79,6 +99,11 @@ Public Sub Core_ClearCalcOutputs_Row( _
     Core_SetVal dataArr, rowIdx, mapCol, "ErrorMsg", ""
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Reinitialise Core Clear All Calc Outputs dans le perimetre possede par le composant.
+' EN: Resets Core Clear All Calc Outputs within the state owned by the component.
+'------------------------------------------------------------------------------
 
 Public Sub Core_ClearAllCalcOutputs( _
     ByRef dataArr As Variant, _
@@ -93,6 +118,11 @@ Public Sub Core_ClearAllCalcOutputs( _
     Next r
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Indique si la map Summary Row satisfait la condition attendue, sans modifier les donnees source.
+' EN: Returns whether the Summary Row map satisfies the expected condition without mutating source data.
+'------------------------------------------------------------------------------
 
 Public Function Core_IsSummaryRow( _
     ByRef dataArr As Variant, _
@@ -127,6 +157,11 @@ Public Function Core_IsSummaryRow( _
 End Function
 
 
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Calc Inclusive Duration sans modifier les donnees d'entree.
+' EN: Returns the Calc Inclusive Duration value without mutating input data.
+'------------------------------------------------------------------------------
+
 Public Function Core_CalcInclusiveDuration( _
     ByVal startVal As Variant, _
     ByVal finishVal As Variant, _
@@ -150,6 +185,11 @@ Public Function Core_CalcInclusiveDuration( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Core Set Calc Triplet dans l'etat runtime du composant.
+' EN: Activates or initializes Core Set Calc Triplet in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Core_SetCalcTriplet( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -168,6 +208,11 @@ Public Sub Core_SetCalcTriplet( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Active ou initialise Core Set Error Flag Row dans l'etat runtime du composant.
+' EN: Activates or initializes Core Set Error Flag Row in the component runtime state.
+'------------------------------------------------------------------------------
+
 Public Sub Core_SetErrorFlag_Row( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -181,6 +226,11 @@ Public Sub Core_SetErrorFlag_Row( _
     End If
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Ajoute la map Error Message Row a la structure cible fournie par l'appelant.
+' EN: Adds the Error Message Row map to the target structure supplied by the caller.
+'------------------------------------------------------------------------------
 
 Public Sub Core_AddErrorMessage_Row( _
     ByRef dataArr As Variant, _
@@ -207,6 +257,11 @@ Public Sub Core_AddErrorMessage_Row( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Reinitialise Core Clear Error State Row dans le perimetre possede par le composant.
+' EN: Resets Core Clear Error State Row within the state owned by the component.
+'------------------------------------------------------------------------------
+
 Public Sub Core_ClearErrorState_Row( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -216,6 +271,11 @@ Public Sub Core_ClearErrorState_Row( _
     Core_SetVal dataArr, rowIdx, mapCol, "ErrorMsg", ""
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Max Date If Both sans modifier les donnees d'entree.
+' EN: Returns the Max Date If Both value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function Core_MaxDateIfBoth( _
     ByVal leftVal As Variant, _
@@ -232,6 +292,11 @@ Public Function Core_MaxDateIfBoth( _
     End If
 
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne la valeur Min Date If Both sans modifier les donnees d'entree.
+' EN: Returns the Min Date If Both value without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Function Core_MinDateIfBoth( _
     ByVal leftVal As Variant, _
@@ -253,6 +318,11 @@ Public Function Core_MinDateIfBoth( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la date de debut source applicable a la tache sans exposer de mutateur sur l'etat source.
+' EN: Returns the source start date applicable to the task without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function Core_GetSourceStart( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -270,6 +340,11 @@ Public Function Core_GetSourceStart( _
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Retourne la date de fin source applicable a la tache sans exposer de mutateur sur l'etat source.
+' EN: Returns the source finish date applicable to the task without exposing a mutator for source state.
+'------------------------------------------------------------------------------
+
 Public Function Core_GetSourceFinish( _
     ByRef dataArr As Variant, _
     ByVal rowIdx As Long, _
@@ -284,26 +359,10 @@ Public Function Core_GetSourceFinish( _
     End If
 
 End Function
-
-
-Public Function Core_BuildColumnMap_FromListObject(ByVal tbl As ListObject) As Object
-
-    Dim perfScope As clsPerfScope
-
-    Dim mapCol As Object
-    Dim i As Long
-
-    Set perfScope = Profiler_BeginScope("Core_BuildColumnMap_FromListObject", "Excel Metadata")
-
-    Set mapCol = CreateObject("Scripting.Dictionary")
-
-    For i = 1 To tbl.ListColumns.Count
-        mapCol(tbl.ListColumns(i).Name) = i
-    Next i
-
-    Set Core_BuildColumnMap_FromListObject = mapCol
-
-End Function
+'------------------------------------------------------------------------------
+' FR: Valide Core Require Columns et applique la politique d'erreur definie par le composant.
+' EN: Validates Core Require Columns and applies the component's defined failure policy.
+'------------------------------------------------------------------------------
 
 Public Sub Core_RequireColumns( _
     ByVal mapCol As Object, _

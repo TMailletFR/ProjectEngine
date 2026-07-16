@@ -1,44 +1,27 @@
 Attribute VB_Name = "mod_CriticalPathModeToggle"
 Option Explicit
 
-'============================================================
-' mod_CriticalPathModeToggle
+'===============================================================================
+' MODULE : mod_CriticalPathModeToggle
+' DOMAINE / DOMAIN : Shared Infrastructure
 '
-' Critical Path mode switch.
+' FR
+' Possede le toggle Critical/Longest Path partage par Settings et Gantt.
+' Ne doit pas contourner les contrats publics des autres domaines.
 '
-' Objectif :
-' - Même philosophie que le toggle Analytics.
-' - L'utilisateur pilote le mode depuis WBS.
-' - Le moteur analytics lit une fonction publique, jamais une cellule en dur.
+' EN
+' Owns the Critical/Longest Path toggle shared by Settings and Gantt.
+' Must not bypass public contracts owned by other domains.
 '
-' Backend / fallback cellule :
-' - WBS!AD1 : label visible
-' - WBS!AE1 : état texte du mode
-'
-' Valeurs reconnues :
-' - GLOBAL
-' - MULTI NETWORK
-'
-' Shapes UI dans WBS :
-' - lbl_WBS_CPMode_Toggle
-' - shp_WBS_CPMode_BG
-' - shp_WBS_CPMode_Knob
-'
-' Comportement :
-' - GLOBAL = comportement actuel : un seul project finish global.
-' - MULTI NETWORK = chaque réseau indépendant porte son propre critical path.
-'
-' Important :
-' - Changer le toggle invalide tbl_CALC_STATE en passant Run Status à DIRTY.
-' - Le Run_Calc_Engine lancé ensuite force donc un recalcul complet.
-'============================================================
+' CONTRATS / CONTRACTS : IsCriticalPathMultiNetworkEnabled, Toggle_CriticalPathMode, Toggle_CriticalPathMode_FromGantt, Ensure_CriticalPathMode_Toggle, SetCriticalPathModeVisualState, Refresh_CriticalPathMode_Toggle_Visual, Cleanup_CriticalPathMode_Gantt_Legacy_Shapes
+' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
+'===============================================================================
+
 
 Private Const CP_MODE_WS As String = "WBS"
 Private Const CP_MODE_LABEL_CELL As String = "AD1"
 Private Const CP_MODE_STATE_CELL As String = "AE1"
 
-Private Const CP_STATE_WS As String = "CALC_STATE"
-Private Const CP_STATE_TABLE As String = "tbl_CALC_STATE"
 
 Private Const CP_MODE_GLOBAL As String = "GLOBAL"
 Private Const CP_MODE_MULTI As String = "MULTI NETWORK"
@@ -53,6 +36,10 @@ Private Const CP_GANTT_LABEL_SHAPE As String = "lbl_GANTT_CPMode_Toggle"
 Private Const CP_GANTT_BG_SHAPE As String = "shp_GANTT_CPMode_BG"
 Private Const CP_GANTT_KNOB_SHAPE As String = "shp_GANTT_CPMode_Knob"
 
+'------------------------------------------------------------------------------
+' FR: Indique si Critical Path Multi Network Enabled est vrai pour le contexte courant.
+' EN: Returns whether Critical Path Multi Network Enabled is true for the current context.
+'------------------------------------------------------------------------------
 Public Function IsCriticalPathMultiNetworkEnabled() As Boolean
 
     Dim ws As Worksheet
@@ -92,18 +79,30 @@ SafeExit:
 
 End Function
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Critical Path Mode et met a jour les sorties associees.
+' EN: Toggles Critical Path Mode state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_CriticalPathMode()
 
     Toggle_CriticalPathMode_Core False
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Critical Path Mode From Gantt et met a jour les sorties associees.
+' EN: Toggles Critical Path Mode From Gantt state and updates related outputs.
+'------------------------------------------------------------------------------
 Public Sub Toggle_CriticalPathMode_FromGantt()
 
     Toggle_CriticalPathMode_Core True
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Critical Path Mode Toggle si necessaire.
+' EN: Ensures or creates Critical Path Mode Toggle when needed.
+'------------------------------------------------------------------------------
 Public Sub Ensure_CriticalPathMode_Toggle()
 
     Dim ws As Worksheet
@@ -127,6 +126,10 @@ Public Sub Ensure_CriticalPathMode_Toggle()
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Critical Path Mode Visual State dans le contexte critical path mode.
+' EN: Updates Critical Path Mode Visual State in the critical path mode context.
+'------------------------------------------------------------------------------
 Public Sub SetCriticalPathModeVisualState(ByVal multiNetworkEnabled As Boolean)
 
     Dim ws As Worksheet
@@ -167,6 +170,10 @@ Public Sub SetCriticalPathModeVisualState(ByVal multiNetworkEnabled As Boolean)
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Rafraichit Critical Path Mode Toggle Visual a partir de l'etat courant.
+' EN: Refreshes Critical Path Mode Toggle Visual from the current state.
+'------------------------------------------------------------------------------
 Public Sub Refresh_CriticalPathMode_Toggle_Visual()
 
     Dim ws As Worksheet
@@ -223,6 +230,10 @@ SafeExit:
 End Sub
 
 
+'------------------------------------------------------------------------------
+' FR: Verifie ou cree Critical Path Mode Shapes si necessaire.
+' EN: Ensures or creates Critical Path Mode Shapes when needed.
+'------------------------------------------------------------------------------
 Private Sub Ensure_CriticalPathMode_Shapes()
 
     Dim ws As Worksheet
@@ -348,6 +359,11 @@ Private Sub Ensure_CriticalPathMode_Shapes()
 SafeExit:
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Invalide l'etat incremental apres un changement Critical/Longest Path afin d'imposer un recalcul complet coherent.
+' EN: Invalidates incremental state after a Critical/Longest Path change so the next calculation is coherently full.
+'------------------------------------------------------------------------------
+
 Private Sub ForceFullRecalcAfterCriticalPathModeChange()
 
     'On invalide le snapshot incrémental.
@@ -357,49 +373,20 @@ Private Sub ForceFullRecalcAfterCriticalPathModeChange()
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Met a jour Calc State Run Status Dirty dans le contexte critical path mode.
+' EN: Updates Calc State Run Status Dirty in the critical path mode context.
+'------------------------------------------------------------------------------
 Private Sub SetCalcStateRunStatusDirty()
 
-    Dim wsState As Worksheet
-    Dim tblState As ListObject
-    Dim mapState As Object
+    CalcState_MarkDirty
 
-    On Error GoTo SafeExit
-
-    Set wsState = ThisWorkbook.Worksheets(CP_STATE_WS)
-    Set tblState = wsState.ListObjects(CP_STATE_TABLE)
-
-    If tblState Is Nothing Then Exit Sub
-    If tblState.DataBodyRange Is Nothing Then Exit Sub
-
-    Set mapState = BuildColumnMap_CriticalPathMode(tblState)
-
-    If Not mapState.Exists("Run Status") Then Exit Sub
-
-    tblState.ListColumns("Run Status").DataBodyRange.value = "DIRTY"
-
-SafeExit:
 End Sub
 
-Private Function BuildColumnMap_CriticalPathMode(ByVal tbl As ListObject) As Object
-
-    Dim d As Object
-    Dim i As Long
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    If tbl Is Nothing Then
-        Set BuildColumnMap_CriticalPathMode = d
-        Exit Function
-    End If
-
-    For i = 1 To tbl.ListColumns.Count
-        d(tbl.ListColumns(i).Name) = i
-    Next i
-
-    Set BuildColumnMap_CriticalPathMode = d
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Formate Critical Path Mode Toggle Track pour l'affichage ou l'ecriture.
+' EN: Formats Critical Path Mode Toggle Track for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatCriticalPathModeToggleTrack( _
     ByVal shp As Shape, _
     ByVal leftPos As Double, _
@@ -429,6 +416,10 @@ Private Sub FormatCriticalPathModeToggleTrack( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Critical Path Mode Toggle Knob pour l'affichage ou l'ecriture.
+' EN: Formats Critical Path Mode Toggle Knob for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatCriticalPathModeToggleKnob( _
     ByVal shp As Shape, _
     ByVal leftPos As Double, _
@@ -450,6 +441,10 @@ Private Sub FormatCriticalPathModeToggleKnob( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Formate Critical Path Mode Toggle Label pour l'affichage ou l'ecriture.
+' EN: Formats Critical Path Mode Toggle Label for display or writing.
+'------------------------------------------------------------------------------
 Private Sub FormatCriticalPathModeToggleLabel( _
     ByVal shp As Shape, _
     ByVal leftPos As Double, _
@@ -488,6 +483,10 @@ Private Sub FormatCriticalPathModeToggleLabel( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Supprime Shape If Exists Critical Path Mode du contexte critical path mode.
+' EN: Removes Shape If Exists Critical Path Mode from the critical path mode context.
+'------------------------------------------------------------------------------
 Private Sub DeleteShapeIfExists_CriticalPathMode( _
     ByVal ws As Worksheet, _
     ByVal shapeName As String)
@@ -502,6 +501,10 @@ Private Sub DeleteShapeIfExists_CriticalPathMode( _
 
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Bascule l'etat Critical Path Mode Core et met a jour les sorties associees.
+' EN: Toggles Critical Path Mode Core state and updates related outputs.
+'------------------------------------------------------------------------------
 Private Sub Toggle_CriticalPathMode_Core(ByVal refreshGanttAfterCalc As Boolean)
 
     Dim enabledNext As Boolean
@@ -546,6 +549,11 @@ ErrHandler:
         "Error in Toggle_CriticalPathMode: " & Err.Description
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Traite la reference Cleanup Critical Path Mode Gantt Legacy Shapes sans modifier les donnees d'entree.
+' EN: Handles the Cleanup Critical Path Mode Gantt Legacy Shapes reference without mutating input data.
+'------------------------------------------------------------------------------
 
 Public Sub Cleanup_CriticalPathMode_Gantt_Legacy_Shapes()
 
