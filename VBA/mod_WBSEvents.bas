@@ -483,8 +483,25 @@ Private Function ExpectedWBSFormulaLocal(ByVal columnName As String) As String
 
 End Function
 '------------------------------------------------------------------------------
-' FR: Retourne WBSUser Editable Range depuis le contexte WBS events.
-' EN: Returns WBSUser Editable Range from the WBS events context.
+' FR: Resout Project et accepte l'ancien nom Package jusqu'a la migration d'onboarding.
+' EN: Resolves Project and accepts the legacy Package name until onboarding migration.
+'------------------------------------------------------------------------------
+Private Function WBSProjectColumnName(ByVal tbl As ListObject) As String
+
+    If WBSHasColumn(tbl, "Project") Then
+        WBSProjectColumnName = "Project"
+    ElseIf WBSHasColumn(tbl, "Package") Then
+        WBSProjectColumnName = "Package"
+    Else
+        Err.Raise vbObjectError + 2340, "WBSProjectColumnName", _
+            "Missing canonical WBS column: Project (legacy alias: Package)."
+    End If
+
+End Function
+
+'------------------------------------------------------------------------------
+' FR: Retourne l'union des colonnes WBS que l'utilisateur peut modifier.
+' EN: Returns the union of WBS columns that the user may edit.
 '------------------------------------------------------------------------------
 Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
 
@@ -496,7 +513,7 @@ Private Function GetWBSUserEditableRange(ByVal tbl As ListObject) As Range
         tbl.ListColumns("Task Description").DataBodyRange, _
         tbl.ListColumns("Discipline").DataBodyRange, _
         tbl.ListColumns("Supplier").DataBodyRange, _
-        tbl.ListColumns("Package").DataBodyRange, _
+        tbl.ListColumns(WBSProjectColumnName(tbl)).DataBodyRange, _
         tbl.ListColumns("Task Type").DataBodyRange)
 
     If WBSHasColumn(tbl, "Cal") Then
