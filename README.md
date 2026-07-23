@@ -20,6 +20,14 @@
 
 <img src="Screenshots/dashboard.png" alt="ProjectEngine executive dashboard showing schedule status, forecast finish, critical activities, S-Curve and planning overview" width="100%">
 
+<br><br>
+
+### See the schedule react
+
+<img src="Screenshots/projectengine-live-simulation.gif" alt="ProjectEngine live Gantt simulation showing task drag, schedule propagation, critical path recalculation and safe reset" width="100%">
+
+*Drag a task. See the schedule propagate, the critical path change, and the calculated plan return with Reset.*
+
 </div>
 
 ---
