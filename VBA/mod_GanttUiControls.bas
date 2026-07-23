@@ -13,7 +13,7 @@ Option Explicit
 ' Creates and refreshes Gantt buttons and toggles while preserving their OnAction names.
 ' Must not bypass public contracts owned by other domains.
 '
-' CONTRATS / CONTRACTS : Ensure_Gantt_Test_Buttons, RefreshFixedHeaderToggleVisuals
+' CONTRATS / CONTRACTS : GanttUiControls_EnsureCanonical, Ensure_Gantt_Test_Buttons, RefreshFixedHeaderToggleVisuals
 ' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
 '===============================================================================
 
@@ -44,12 +44,15 @@ Private Const BTN_SCALE_BG_NAME As String = "btn_Gantt_Scale_BG"
 Private Const BTN_SCALE_KNOB_NAME As String = "btn_Gantt_Scale_Knob"
 Private Const BTN_SCALE_LEFT_NAME As String = "btn_Gantt_Scale_Left"
 Private Const BTN_SCALE_RIGHT_NAME As String = "btn_Gantt_Scale_Right"
+Private Const BTN_RESET_NAME As String = "btn_Gantt_Reset"
+Private Const BTN_RESET_CAPTION As String = "Reset"
 Private Const BTN_SCENARIO_NAME As String = "btn_Gantt_Scenario"
 Private Const BTN_SCENARIO_CAPTION As String = "Scenario"
 Private Const BTN_TEST_NAME As String = "btn_Gantt_Test"
 Private Const BTN_LOCK_NAME As String = "btn_Gantt_Lock"
 Private Const BTN_TEST_CAPTION As String = "Test"
 Private Const BTN_LOCK_CAPTION As String = "Lock"
+Private Const GANTT_COMMAND_BUTTON_GAP As Double = 4
 Private Const GANTT_SCALE_DAY As String = "DAY"
 Private Const GANTT_SCALE_WEEK As String = "WEEK"
 Private Const GANTT_SCALE_MONTH As String = "MONTH"
@@ -57,6 +60,7 @@ Private Const GANTT_VIEW_SUMMARY As String = "SUMMARY"
 Private Const GANTT_ANALYTICS_PATH_NONE As String = "NONE"
 Private Const GANTT_ANALYTICS_PATH_CP As String = "CP"
 Private Const GANTT_ANALYTICS_PATH_LP As String = "LP"
+Private Const GANTT_UI_GEOMETRY_TOLERANCE As Double = 0.01
 
 '------------------------------------------------------------------------------
 ' FR:
@@ -75,56 +79,75 @@ Private Const GANTT_ANALYTICS_PATH_LP As String = "LP"
 ' - Setup/static layout, ApplyGanttUiState, Gantt_SafeEmptyState.
 '
 ' Notes:
-' - Expose des entry points OnAction vers GanttLive et les toggles.
+' - Wrapper historique conserve pour les appels existants et les harnais.
+' - Historical wrapper retained for existing callers and harnesses.
 '------------------------------------------------------------------------------
 Public Sub Ensure_Gantt_Test_Buttons()
 
     Dim ws As Worksheet
-    Dim scenarioCell As Range
-    Dim testCell As Range
-    Dim lockCell As Range
 
     Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
+    GanttUiControls_EnsureCanonical ws
 
-    With ws.Range("A1:H3")
-        .Interior.Color = RGB(255, 255, 255)
-        .Borders.LineStyle = xlNone
-    End With
+End Sub
+
+'------------------------------------------------------------------------------
+' FR:
+' Garantit differentiellement la geometrie, l'etat visuel et la langue des
+' controles du header GANTT. Les shapes conformes sont conservees sans recreation.
+'
+' EN:
+' Differentially ensures GANTT header control geometry, visual state and language.
+' Compliant shapes are preserved without recreation.
+'------------------------------------------------------------------------------
+Public Sub GanttUiControls_EnsureCanonical(ByVal ws As Worksheet)
+
+    Dim scenarioCell As Range
+    Dim lockCell As Range
+    Dim buttonWidth As Double
+    Dim buttonHeight As Double
+    Dim buttonTop As Double
+    Dim buttonRight As Double
+    Dim resetLeft As Double
+    Dim scenarioLeft As Double
+    Dim testLeft As Double
+    Dim lockLeft As Double
+
+    If ws Is Nothing Then Exit Sub
 
     EnsureGanttViewInitialized
 
     Set scenarioCell = ws.Range("B1")
-    Set testCell = ws.Range("C1")
     Set lockCell = ws.Range("D1")
 
-    CreateOrUpdateGanttButton ws, BTN_SCENARIO_NAME, BTN_SCENARIO_CAPTION, "Run_Gantt_Scenario_Engine", scenarioCell, 0.34, True
-    CreateOrUpdateGanttButton ws, BTN_TEST_NAME, BTN_TEST_CAPTION, "Run_Gantt_Test_Engine", testCell, 1, False
-    CreateOrUpdateGanttButton ws, BTN_LOCK_NAME, BTN_LOCK_CAPTION, "Run_Gantt_Lock_Changes", lockCell, 1, False
+    buttonWidth = (scenarioCell.Width - 4) * 0.34
+    If buttonWidth < 36 Then buttonWidth = 36
 
-    DeleteShapeIfExists ws, BTN_VIEW_BG_NAME
-    DeleteShapeIfExists ws, BTN_VIEW_KNOB_NAME
-    DeleteShapeIfExists ws, BTN_VIEW_LEFT_NAME
+    buttonHeight = lockCell.Height - 4
+    buttonTop = lockCell.Top + 2
+    buttonRight = lockCell.Left + lockCell.Width - 2
+
+    lockLeft = buttonRight - buttonWidth
+    testLeft = lockLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
+    scenarioLeft = testLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
+    resetLeft = scenarioLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
+
+    CreateOrUpdateGanttButton ws, BTN_RESET_NAME, BTN_RESET_CAPTION, _
+        "GanttSimulation_ResetToNormal", resetLeft, buttonTop, buttonWidth, buttonHeight
+    CreateOrUpdateGanttButton ws, BTN_SCENARIO_NAME, BTN_SCENARIO_CAPTION, _
+        "Run_Gantt_Scenario_Engine", scenarioLeft, buttonTop, buttonWidth, buttonHeight
+    CreateOrUpdateGanttButton ws, BTN_TEST_NAME, BTN_TEST_CAPTION, _
+        "Run_Gantt_Test_Engine", testLeft, buttonTop, buttonWidth, buttonHeight
+    CreateOrUpdateGanttButton ws, BTN_LOCK_NAME, BTN_LOCK_CAPTION, _
+        "Run_Gantt_Lock_Changes", lockLeft, buttonTop, buttonWidth, buttonHeight
+
+    'Legacy right-side labels are not part of the current control contract.
     DeleteShapeIfExists ws, BTN_VIEW_RIGHT_NAME
-
-    DeleteShapeIfExists ws, BTN_CP_BG_NAME
-    DeleteShapeIfExists ws, BTN_CP_KNOB_NAME
-    DeleteShapeIfExists ws, BTN_CP_LEFT_NAME
     DeleteShapeIfExists ws, BTN_CP_RIGHT_NAME
-
-    DeleteShapeIfExists ws, BTN_SCALE_BG_NAME
-    DeleteShapeIfExists ws, BTN_SCALE_KNOB_NAME
-    DeleteShapeIfExists ws, BTN_SCALE_LEFT_NAME
     DeleteShapeIfExists ws, BTN_SCALE_RIGHT_NAME
 
-    DeleteShapeIfExists ws, BTN_CP_MULTI_BG_NAME
-    DeleteShapeIfExists ws, BTN_CP_MULTI_KNOB_NAME
-    DeleteShapeIfExists ws, BTN_CP_MULTI_LEFT_NAME
-
-    DeleteShapeIfExists ws, BTN_CONSTRAINT_BG_NAME
-    DeleteShapeIfExists ws, BTN_CONSTRAINT_KNOB_NAME
-    DeleteShapeIfExists ws, BTN_CONSTRAINT_LEFT_NAME
-
     BuildFixedHeaderToggles ws
+    RefreshFixedHeaderToggleVisuals ws
     Gantt_ApplyLanguage
 
 End Sub
@@ -143,10 +166,11 @@ End Sub
 ' - Shapes track/knob/label avec OnAction vers les macros de toggle.
 '
 ' Appele par / Called by:
-' - Ensure_Gantt_Test_Buttons.
+' - GanttUiControls_EnsureCanonical.
 '
 ' Notes:
-' - Couple UI GANTT, CriticalPathModeToggle et etat interne du module.
+' - Assure differentiellement la geometrie statique des toggles sans les recreer.
+' - Differentially ensures static toggle geometry without recreating the shapes.
 '------------------------------------------------------------------------------
 Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
@@ -197,7 +221,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         BTN_VIEW_LEFT_NAME, BTN_VIEW_BG_NAME, BTN_VIEW_KNOB_NAME, _
         x, y, labelW1, "Detail / Summary", _
         x + labelW1 + trackGap, y + 2, trackW, trackH, knobSize, _
-        (GetGanttViewMode() = GANTT_VIEW_SUMMARY), "Toggle_Gantt_View"
+        "Toggle_Gantt_View"
 
     x = x + labelW1 + trackGap + trackW + groupGap
 
@@ -205,7 +229,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         BTN_SCALE_LEFT_NAME, BTN_SCALE_BG_NAME, BTN_SCALE_KNOB_NAME, _
         x, y, labelW3, "Day / Week / Month", _
         x + labelW3 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
-        GetGanttTimelineScaleMode(), "Toggle_Gantt_Scale"
+        "Toggle_Gantt_Scale"
 
     x = x + labelW3 + trackGap + analyticsTrackW + groupGap
 
@@ -213,7 +237,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         BTN_CONSTRAINT_LEFT_NAME, BTN_CONSTRAINT_BG_NAME, BTN_CONSTRAINT_KNOB_NAME, _
         x, y, labelW5, "Constraint", _
         x + labelW5 + trackGap, y + 2, trackW, trackH, knobSize, _
-        GetGanttShowConstraints(), "Toggle_Gantt_Constraints"
+        "Toggle_Gantt_Constraints"
 
     x = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Left + 5
     y = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Top + 3
@@ -222,7 +246,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         BTN_CP_LEFT_NAME, BTN_CP_BG_NAME, BTN_CP_KNOB_NAME, _
         x, y, labelW2, "None / Critical Path / Longest Path", _
         x + labelW2 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
-        GetGanttAnalyticsPathMode(), "Toggle_Gantt_CriticalPath"
+        "Toggle_Gantt_CriticalPath"
 
     x = x + labelW2 + trackGap + analyticsTrackW + groupGap
 
@@ -230,7 +254,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
         BTN_CP_MULTI_LEFT_NAME, BTN_CP_MULTI_BG_NAME, BTN_CP_MULTI_KNOB_NAME, _
         x, y, labelW4, "Single / Multiple Project", _
         x + labelW4 + trackGap, y + 2, trackW, trackH, knobSize, _
-        IsCriticalPathMultiNetworkEnabled(), "Toggle_CriticalPathMode_FromGantt"
+        "Toggle_CriticalPathMode_FromGantt"
 
 End Sub
 
@@ -252,80 +276,73 @@ Private Sub CreateFixedHeaderToggle( _
     ByVal trackWidth As Double, _
     ByVal trackHeight As Double, _
     ByVal knobSize As Double, _
-    ByVal isOn As Boolean, _
     ByVal macroName As String)
 
     Dim shpLabel As Shape
     Dim shpBg As Shape
     Dim shpKnob As Shape
-    Dim knobLeft As Double
     Dim knobTop As Double
-    Dim onColor As Long
+    Dim labelCreated As Boolean
 
-    onColor = RGB(68, 114, 196)
+    Set shpLabel = GetShapeIfExists(ws, labelName)
+    Set shpBg = GetShapeIfExists(ws, bgName)
+    Set shpKnob = GetShapeIfExists(ws, knobName)
 
-    DeleteShapeIfExists ws, labelName
-    DeleteShapeIfExists ws, bgName
-    DeleteShapeIfExists ws, knobName
-
-    Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
-    shpLabel.Name = labelName
+    If shpLabel Is Nothing Then
+        Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
+        shpLabel.Name = labelName
+        labelCreated = True
+    End If
 
     With shpLabel
-        .Line.Visible = msoFalse
-        .Fill.Visible = msoFalse
-        .OnAction = ""
-        .Placement = xlMoveAndSize
-        .TextFrame2.VerticalAnchor = msoAnchorMiddle
-        .TextFrame2.MarginLeft = 0
-        .TextFrame2.MarginRight = 0
-        .TextFrame2.MarginTop = 0
-        .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = labelText
-        .TextFrame2.TextRange.Font.Size = 9.5
-        .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
-        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
+        GanttUiControls_SetShapeGeometry shpLabel, labelLeft, labelTop, labelWidth, trackHeight + 4
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
+        If .Fill.Visible <> msoFalse Then .Fill.Visible = msoFalse
+        If CStr(.OnAction) <> "" Then .OnAction = ""
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .TextFrame2.VerticalAnchor <> msoAnchorMiddle Then .TextFrame2.VerticalAnchor = msoAnchorMiddle
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginLeft, 0) Then .TextFrame2.MarginLeft = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginRight, 0) Then .TextFrame2.MarginRight = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginTop, 0) Then .TextFrame2.MarginTop = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginBottom, 0) Then .TextFrame2.MarginBottom = 0
+        If labelCreated Then .TextFrame2.TextRange.Text = labelText
+        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.Font.Size, 9.5) Then .TextFrame2.TextRange.Font.Size = 9.5
+        If .TextFrame2.TextRange.Font.Bold <> msoTrue Then .TextFrame2.TextRange.Font.Bold = msoTrue
+        If .TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+        If .TextFrame2.TextRange.ParagraphFormat.alignment <> msoAlignLeft Then .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
-    Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
-    shpBg.Name = bgName
+    If shpBg Is Nothing Then
+        Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
+        shpBg.Name = bgName
+    End If
 
     With shpBg
-        .Adjustments.item(1) = 0.5
-        .OnAction = macroName
-        .Placement = xlMoveAndSize
-        .Line.Weight = 1
-        .Shadow.Visible = msoFalse
+        GanttUiControls_SetShapeGeometry shpBg, trackLeft, trackTop, trackWidth, trackHeight
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.5) Then .Adjustments.item(1) = 0.5
+        If CStr(.OnAction) <> macroName Then .OnAction = macroName
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
     knobTop = trackTop + ((trackHeight - knobSize) / 2)
 
-    If isOn Then
-        knobLeft = trackLeft + trackWidth - knobSize - 2
-    Else
-        knobLeft = trackLeft + 2
+    If shpKnob Is Nothing Then
+        Set shpKnob = ws.Shapes.AddShape(msoShapeOval, trackLeft + 2, knobTop, knobSize, knobSize)
+        shpKnob.Name = knobName
     End If
-
-    Set shpKnob = ws.Shapes.AddShape(msoShapeOval, knobLeft, knobTop, knobSize, knobSize)
-    shpKnob.Name = knobName
 
     With shpKnob
-        .OnAction = macroName
-        .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .Line.ForeColor.RGB = RGB(150, 150, 150)
-        .Line.Weight = 0.75
-        .Shadow.Visible = msoFalse
+        GanttUiControls_SetShapeGeometry shpKnob, .Left, knobTop, knobSize, knobSize
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If CStr(.OnAction) <> macroName Then .OnAction = macroName
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
-
-    If isOn Then
-        shpBg.Fill.ForeColor.RGB = onColor
-        shpBg.Line.ForeColor.RGB = onColor
-    Else
-        shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
-        shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
-    End If
 
 End Sub
 
@@ -347,94 +364,73 @@ Private Sub CreateFixedHeaderTriToggle( _
     ByVal trackWidth As Double, _
     ByVal trackHeight As Double, _
     ByVal knobSize As Double, _
-    ByVal modeValue As String, _
     ByVal macroName As String)
 
     Dim shpLabel As Shape
     Dim shpBg As Shape
     Dim shpKnob As Shape
-    Dim knobLeft As Double
     Dim knobTop As Double
-    Dim normalizedMode As String
-    Dim onColor As Long
+    Dim labelCreated As Boolean
 
-    onColor = RGB(68, 114, 196)
-    normalizedMode = UCase$(Trim$(modeValue))
-    If bgName = BTN_SCALE_BG_NAME Then
-        If normalizedMode <> GANTT_SCALE_WEEK And normalizedMode <> GANTT_SCALE_MONTH Then
-            normalizedMode = GANTT_SCALE_DAY
-        End If
-    Else
-        If normalizedMode <> GANTT_ANALYTICS_PATH_CP And normalizedMode <> GANTT_ANALYTICS_PATH_LP Then
-            normalizedMode = GANTT_ANALYTICS_PATH_NONE
-        End If
+    Set shpLabel = GetShapeIfExists(ws, labelName)
+    Set shpBg = GetShapeIfExists(ws, bgName)
+    Set shpKnob = GetShapeIfExists(ws, knobName)
+
+    If shpLabel Is Nothing Then
+        Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
+        shpLabel.Name = labelName
+        labelCreated = True
     End If
 
-    DeleteShapeIfExists ws, labelName
-    DeleteShapeIfExists ws, bgName
-    DeleteShapeIfExists ws, knobName
-
-    Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
-    shpLabel.Name = labelName
-
     With shpLabel
-        .Line.Visible = msoFalse
-        .Fill.Visible = msoFalse
-        .OnAction = ""
-        .Placement = xlMoveAndSize
-        .TextFrame2.VerticalAnchor = msoAnchorMiddle
-        .TextFrame2.MarginLeft = 0
-        .TextFrame2.MarginRight = 0
-        .TextFrame2.MarginTop = 0
-        .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = labelText
-        .TextFrame2.TextRange.Font.Size = 9
-        .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
-        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
+        GanttUiControls_SetShapeGeometry shpLabel, labelLeft, labelTop, labelWidth, trackHeight + 4
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
+        If .Fill.Visible <> msoFalse Then .Fill.Visible = msoFalse
+        If CStr(.OnAction) <> "" Then .OnAction = ""
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .TextFrame2.VerticalAnchor <> msoAnchorMiddle Then .TextFrame2.VerticalAnchor = msoAnchorMiddle
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginLeft, 0) Then .TextFrame2.MarginLeft = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginRight, 0) Then .TextFrame2.MarginRight = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginTop, 0) Then .TextFrame2.MarginTop = 0
+        If GanttUiControls_DoubleDiffers(.TextFrame2.MarginBottom, 0) Then .TextFrame2.MarginBottom = 0
+        If labelCreated Then .TextFrame2.TextRange.Text = labelText
+        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.Font.Size, 9) Then .TextFrame2.TextRange.Font.Size = 9
+        If .TextFrame2.TextRange.Font.Bold <> msoTrue Then .TextFrame2.TextRange.Font.Bold = msoTrue
+        If .TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+        If .TextFrame2.TextRange.ParagraphFormat.alignment <> msoAlignLeft Then .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
-    Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
-    shpBg.Name = bgName
+    If shpBg Is Nothing Then
+        Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
+        shpBg.Name = bgName
+    End If
 
     With shpBg
-        .Adjustments.item(1) = 0.5
-        .OnAction = macroName
-        .Placement = xlMoveAndSize
-        .Line.Weight = 1
-        .Shadow.Visible = msoFalse
+        GanttUiControls_SetShapeGeometry shpBg, trackLeft, trackTop, trackWidth, trackHeight
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.5) Then .Adjustments.item(1) = 0.5
+        If CStr(.OnAction) <> macroName Then .OnAction = macroName
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
     knobTop = trackTop + ((trackHeight - knobSize) / 2)
 
-    Select Case normalizedMode
-        Case GANTT_ANALYTICS_PATH_LP, GANTT_SCALE_MONTH
-            knobLeft = trackLeft + trackWidth - knobSize - 2
-        Case GANTT_ANALYTICS_PATH_CP, GANTT_SCALE_WEEK
-            knobLeft = trackLeft + ((trackWidth - knobSize) / 2)
-        Case Else
-            knobLeft = trackLeft + 2
-    End Select
-
-    Set shpKnob = ws.Shapes.AddShape(msoShapeOval, knobLeft, knobTop, knobSize, knobSize)
-    shpKnob.Name = knobName
+    If shpKnob Is Nothing Then
+        Set shpKnob = ws.Shapes.AddShape(msoShapeOval, trackLeft + 2, knobTop, knobSize, knobSize)
+        shpKnob.Name = knobName
+    End If
 
     With shpKnob
-        .OnAction = macroName
-        .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .Line.ForeColor.RGB = RGB(150, 150, 150)
-        .Line.Weight = 0.75
-        .Shadow.Visible = msoFalse
+        GanttUiControls_SetShapeGeometry shpKnob, .Left, knobTop, knobSize, knobSize
+        If .Visible <> msoTrue Then .Visible = msoTrue
+        If CStr(.OnAction) <> macroName Then .OnAction = macroName
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
-
-    If normalizedMode = GANTT_ANALYTICS_PATH_NONE Or normalizedMode = GANTT_SCALE_DAY Then
-        shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
-        shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
-    Else
-        shpBg.Fill.ForeColor.RGB = onColor
-        shpBg.Line.ForeColor.RGB = onColor
-    End If
 
 End Sub
 
@@ -471,6 +467,7 @@ Private Sub RefreshFixedHeaderToggleVisual( _
     Dim shpBg As Shape
     Dim shpKnob As Shape
     Dim knobLeft As Double
+    Dim knobTop As Double
     Dim onColor As Long
 
     onColor = RGB(68, 114, 196)
@@ -484,23 +481,24 @@ Private Sub RefreshFixedHeaderToggleVisual( _
     If shpKnob Is Nothing Then Exit Sub
 
     If isOn Then
-        shpBg.Fill.ForeColor.RGB = onColor
-        shpBg.Line.ForeColor.RGB = onColor
+        If shpBg.Fill.ForeColor.RGB <> onColor Then shpBg.Fill.ForeColor.RGB = onColor
+        If shpBg.Line.ForeColor.RGB <> onColor Then shpBg.Line.ForeColor.RGB = onColor
         knobLeft = shpBg.Left + shpBg.Width - shpKnob.Width - 2
     Else
-        shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
-        shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
+        If shpBg.Fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        If shpBg.Line.ForeColor.RGB <> RGB(170, 170, 170) Then shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
         knobLeft = shpBg.Left + 2
     End If
 
-    shpBg.Line.Weight = 1
-    shpBg.Shadow.Visible = msoFalse
-    shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
-    shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
-    shpKnob.Line.Weight = 0.75
-    shpKnob.Shadow.Visible = msoFalse
-    shpKnob.Left = knobLeft
-    shpKnob.Top = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
+    If GanttUiControls_DoubleDiffers(shpBg.Line.Weight, 1) Then shpBg.Line.Weight = 1
+    If shpBg.Shadow.Visible <> msoFalse Then shpBg.Shadow.Visible = msoFalse
+    If shpKnob.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    If shpKnob.Line.ForeColor.RGB <> RGB(150, 150, 150) Then shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
+    If GanttUiControls_DoubleDiffers(shpKnob.Line.Weight, 0.75) Then shpKnob.Line.Weight = 0.75
+    If shpKnob.Shadow.Visible <> msoFalse Then shpKnob.Shadow.Visible = msoFalse
+    If GanttUiControls_DoubleDiffers(shpKnob.Left, knobLeft) Then shpKnob.Left = knobLeft
+    knobTop = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
+    If GanttUiControls_DoubleDiffers(shpKnob.Top, knobTop) Then shpKnob.Top = knobTop
 
 End Sub
 
@@ -518,6 +516,7 @@ Private Sub RefreshFixedHeaderTriToggleVisual( _
     Dim shpKnob As Shape
     Dim normalizedMode As String
     Dim knobLeft As Double
+    Dim knobTop As Double
     Dim onColor As Long
 
     onColor = RGB(68, 114, 196)
@@ -550,21 +549,22 @@ Private Sub RefreshFixedHeaderTriToggleVisual( _
     End Select
 
     If normalizedMode = GANTT_ANALYTICS_PATH_NONE Or normalizedMode = GANTT_SCALE_DAY Then
-        shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
-        shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
+        If shpBg.Fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        If shpBg.Line.ForeColor.RGB <> RGB(170, 170, 170) Then shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
     Else
-        shpBg.Fill.ForeColor.RGB = onColor
-        shpBg.Line.ForeColor.RGB = onColor
+        If shpBg.Fill.ForeColor.RGB <> onColor Then shpBg.Fill.ForeColor.RGB = onColor
+        If shpBg.Line.ForeColor.RGB <> onColor Then shpBg.Line.ForeColor.RGB = onColor
     End If
 
-    shpBg.Line.Weight = 1
-    shpBg.Shadow.Visible = msoFalse
-    shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
-    shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
-    shpKnob.Line.Weight = 0.75
-    shpKnob.Shadow.Visible = msoFalse
-    shpKnob.Left = knobLeft
-    shpKnob.Top = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
+    If GanttUiControls_DoubleDiffers(shpBg.Line.Weight, 1) Then shpBg.Line.Weight = 1
+    If shpBg.Shadow.Visible <> msoFalse Then shpBg.Shadow.Visible = msoFalse
+    If shpKnob.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    If shpKnob.Line.ForeColor.RGB <> RGB(150, 150, 150) Then shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
+    If GanttUiControls_DoubleDiffers(shpKnob.Line.Weight, 0.75) Then shpKnob.Line.Weight = 0.75
+    If shpKnob.Shadow.Visible <> msoFalse Then shpKnob.Shadow.Visible = msoFalse
+    If GanttUiControls_DoubleDiffers(shpKnob.Left, knobLeft) Then shpKnob.Left = knobLeft
+    knobTop = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
+    If GanttUiControls_DoubleDiffers(shpKnob.Top, knobTop) Then shpKnob.Top = knobTop
 
 End Sub
 
@@ -593,81 +593,100 @@ Private Sub CreateOrUpdateGanttButton( _
     ByVal shpName As String, _
     ByVal captionText As String, _
     ByVal macroName As String, _
-    ByVal topLeftCell As Range, _
-    Optional ByVal widthRatio As Double = 1, _
-    Optional ByVal alignRightInCell As Boolean = False)
+    ByVal leftPos As Double, _
+    ByVal topPos As Double, _
+    ByVal widthVal As Double, _
+    ByVal heightVal As Double)
 
     Dim shp As Shape
-    Dim leftPos As Double
-    Dim topPos As Double
-    Dim widthVal As Double
-    Dim heightVal As Double
-    Dim availableWidth As Double
+    Dim shapeCreated As Boolean
 
     Set shp = GetShapeIfExists(ws, shpName)
 
-    If widthRatio <= 0 Then widthRatio = 1
-    If widthRatio > 1 Then widthRatio = 1
-
-    availableWidth = topLeftCell.Width - 4
-    widthVal = availableWidth * widthRatio
-    heightVal = topLeftCell.Height - 4
-
     If widthVal < 36 Then widthVal = 36
-
-    If alignRightInCell Then
-        leftPos = topLeftCell.Left + 2 + (availableWidth - widthVal)
-    Else
-        leftPos = topLeftCell.Left + 2
-    End If
-
-    topPos = topLeftCell.Top + 2
 
     If shp Is Nothing Then
         Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, widthVal, heightVal)
         shp.Name = shpName
+        shapeCreated = True
     End If
 
-    shp.Left = leftPos
-    shp.Top = topPos
-    shp.Width = widthVal
-    shp.Height = heightVal
-    shp.OnAction = macroName
+    GanttUiControls_SetShapeGeometry shp, leftPos, topPos, widthVal, heightVal
+    If shp.Visible <> msoTrue Then shp.Visible = msoTrue
+    If CStr(shp.OnAction) <> macroName Then shp.OnAction = macroName
 
     With shp
-        .Adjustments.item(1) = 0.25
-        .Placement = xlMoveAndSize
-        .Line.Visible = msoFalse
-        .Shadow.Visible = msoTrue
-        .Shadow.Blur = 6
-        .Shadow.OffsetX = 0
-        .Shadow.OffsetY = 1.5
-        .Shadow.Transparency = 0.45
+        If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.25) Then .Adjustments.item(1) = 0.25
+        If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
+        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
+        If .Shadow.Visible <> msoTrue Then .Shadow.Visible = msoTrue
+        If GanttUiControls_DoubleDiffers(.Shadow.Blur, 6) Then .Shadow.Blur = 6
+        If GanttUiControls_DoubleDiffers(.Shadow.OffsetX, 0) Then .Shadow.OffsetX = 0
+        If GanttUiControls_DoubleDiffers(.Shadow.OffsetY, 1.5) Then .Shadow.OffsetY = 1.5
+        If GanttUiControls_DoubleDiffers(.Shadow.Transparency, 0.45) Then .Shadow.Transparency = 0.45
     End With
 
     With shp.TextFrame2
-        .TextRange.Text = captionText
-        .TextRange.Font.Size = 10
-        .TextRange.Font.Bold = msoTrue
-        .VerticalAnchor = msoAnchorMiddle
-        .MarginLeft = 0
-        .MarginRight = 0
-        .MarginTop = 0
-        .MarginBottom = 0
-        .TextRange.ParagraphFormat.alignment = msoAlignCenter
+        If shapeCreated Then .TextRange.Text = captionText
+        If GanttUiControls_DoubleDiffers(.TextRange.Font.Size, 10) Then .TextRange.Font.Size = 10
+        If .TextRange.Font.Bold <> msoTrue Then .TextRange.Font.Bold = msoTrue
+        If .VerticalAnchor <> msoAnchorMiddle Then .VerticalAnchor = msoAnchorMiddle
+        If GanttUiControls_DoubleDiffers(.MarginLeft, 0) Then .MarginLeft = 0
+        If GanttUiControls_DoubleDiffers(.MarginRight, 0) Then .MarginRight = 0
+        If GanttUiControls_DoubleDiffers(.MarginTop, 0) Then .MarginTop = 0
+        If GanttUiControls_DoubleDiffers(.MarginBottom, 0) Then .MarginBottom = 0
+        If .TextRange.ParagraphFormat.alignment <> msoAlignCenter Then .TextRange.ParagraphFormat.alignment = msoAlignCenter
     End With
 
     Select Case shpName
+        Case BTN_RESET_NAME
+            If shp.Fill.ForeColor.RGB <> RGB(96, 111, 128) Then shp.Fill.ForeColor.RGB = RGB(96, 111, 128)
+            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+
         Case BTN_SCENARIO_NAME, BTN_LOCK_NAME
-            shp.Fill.ForeColor.RGB = RGB(192, 0, 0)
-            shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+            If shp.Fill.ForeColor.RGB <> RGB(192, 0, 0) Then shp.Fill.ForeColor.RGB = RGB(192, 0, 0)
+            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
 
         Case BTN_TEST_NAME
-            shp.Fill.ForeColor.RGB = RGB(112, 173, 71)
-            shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+            If shp.Fill.ForeColor.RGB <> RGB(112, 173, 71) Then shp.Fill.ForeColor.RGB = RGB(112, 173, 71)
+            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
     End Select
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Corrige uniquement les dimensions d'une shape qui divergent du contrat.
+' EN: Corrects only shape dimensions that differ from the contract.
+'------------------------------------------------------------------------------
+Private Sub GanttUiControls_SetShapeGeometry( _
+    ByVal shp As Shape, _
+    ByVal expectedLeft As Double, _
+    ByVal expectedTop As Double, _
+    ByVal expectedWidth As Double, _
+    ByVal expectedHeight As Double)
+
+    If shp Is Nothing Then Exit Sub
+
+    If GanttUiControls_DoubleDiffers(shp.Left, expectedLeft) Then shp.Left = expectedLeft
+    If GanttUiControls_DoubleDiffers(shp.Top, expectedTop) Then shp.Top = expectedTop
+    If GanttUiControls_DoubleDiffers(shp.Width, expectedWidth) Then shp.Width = expectedWidth
+    If GanttUiControls_DoubleDiffers(shp.Height, expectedHeight) Then shp.Height = expectedHeight
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR: Compare deux valeurs geometriques avec la tolerance du contrat UI GANTT.
+' EN: Compares two geometry values using the GANTT UI contract tolerance.
+'------------------------------------------------------------------------------
+Private Function GanttUiControls_DoubleDiffers( _
+    ByVal actualValue As Double, _
+    ByVal expectedValue As Double) As Boolean
+
+    GanttUiControls_DoubleDiffers = _
+        (Abs(actualValue - expectedValue) > GANTT_UI_GEOMETRY_TOLERANCE)
+
+End Function
 
 
 '------------------------------------------------------------------------------
@@ -1026,4 +1045,3 @@ Private Sub FormatToggleLabel( _
     End With
 
 End Sub
-

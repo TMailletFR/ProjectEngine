@@ -176,7 +176,7 @@ Public Sub DrawGanttShapes( _
 
         End If
 
-        isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r)
+        isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r, idVal, testById, isTestMode)
 
         hasDelta = False
         If isTestMode Then
@@ -381,17 +381,24 @@ End Function
 Public Function ShouldHighlightGanttAnalyticsPath( _
     ByRef dataArr As Variant, _
     ByVal mapWBS As Object, _
-    ByVal dataRow As Long) As Boolean
+    ByVal dataRow As Long, _
+    Optional ByVal idVal As String = "", _
+    Optional ByVal testById As Object = Nothing, _
+    Optional ByVal isTestMode As Boolean = False) As Boolean
 
     Dim pathColumnName As String
     Dim pathValue As String
 
     pathColumnName = GetGanttAnalyticsPathColumnName()
     If Len(pathColumnName) = 0 Then Exit Function
-    If mapWBS Is Nothing Then Exit Function
-    If Not mapWBS.Exists(pathColumnName) Then Exit Function
 
-    pathValue = UCase$(Trim$(CStr(dataArr(dataRow, mapWBS(pathColumnName)))))
+    If isTestMode And GanttLive_IsTestAnalyticsProjectionActive() Then
+        pathValue = UCase$(Trim$(GanttLive_GetDisplayAnalyticsPath(idVal, testById, True, pathColumnName)))
+    Else
+        If mapWBS Is Nothing Then Exit Function
+        If Not mapWBS.Exists(pathColumnName) Then Exit Function
+        pathValue = UCase$(Trim$(CStr(dataArr(dataRow, mapWBS(pathColumnName)))))
+    End If
 
     Select Case pathColumnName
         Case "Critical Path"

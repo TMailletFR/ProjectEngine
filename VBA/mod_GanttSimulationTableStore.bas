@@ -310,6 +310,21 @@ End Sub
 '------------------------------------------------------------------------------
 Public Sub GanttSimulation_ClearResults()
 
+    Call GanttSimulation_ClearResultsIfAny
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR:
+' Vide le store uniquement lorsqu'il contient encore au moins une valeur.
+' Retourne True lorsqu'une mutation a réellement été effectuée.
+'
+' EN:
+' Clears the store only when it still contains at least one value.
+' Returns True when a mutation was actually performed.
+'------------------------------------------------------------------------------
+Public Function GanttSimulation_ClearResultsIfAny() As Boolean
+
     Dim ws As Worksheet
     Dim tbl As ListObject
 
@@ -318,12 +333,14 @@ Public Sub GanttSimulation_ClearResults()
     If Not ws Is Nothing Then Set tbl = ws.ListObjects(CALC_GANTT_TEST_TABLE)
     On Error GoTo 0
 
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Application.WorksheetFunction.CountA(tbl.DataBodyRange) = 0 Then Exit Function
 
     tbl.DataBodyRange.ClearContents
+    GanttSimulation_ClearResultsIfAny = True
 
-End Sub
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Construit les resultats de simulation par ID pour le renderer et les transactions live.

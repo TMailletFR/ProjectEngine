@@ -48,6 +48,7 @@ Private Sub Workbook_SheetActivate(ByVal Sh As Object)
     If Not Sh Is Nothing Then
         If CStr(Sh.Name) = "GANTT" Then
             Gantt_RepairPendingGeometryIfNeeded
+            GanttUiControls_EnsureCanonical Sh
             GanttDrag_StartWatch
         End If
     End If
@@ -92,6 +93,7 @@ Private Sub StartGanttDragWatchIfActive()
     If CStr(Application.ActiveSheet.Name) <> "GANTT" Then Exit Sub
 
     Gantt_RepairPendingGeometryIfNeeded
+    GanttUiControls_EnsureCanonical Application.ActiveSheet
     GanttDrag_StartWatch
 
 SafeExit:

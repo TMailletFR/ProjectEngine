@@ -128,6 +128,7 @@ Public Sub Gantt_SafeEmptyState()
 
     ClearGanttSheet wsGantt
     SetupStaticLayout wsGantt
+    If wasGanttSheetCreated Then SetupLeftPanelDefaults wsGantt
     Ensure_Gantt_Test_Buttons
 
     GanttDependency_ClearExpandedLinksCache
@@ -156,7 +157,7 @@ Public Sub PrepareGanttDisplayOnlyLayout( _
     End If
 
     ClearGanttRightPaneOnly wsGantt
-    BuildTimeline wsGantt, projectStart, totalDays
+    SetupTimelineLayout wsGantt, projectStart, totalDays
 
     If GetGanttPreserveTestInputs() Then
         RestoreGanttTestInputs wsGantt, testInputMap
@@ -204,12 +205,16 @@ Public Sub PrepareGanttFullLayout( _
 
     Dim ganttRow As Long
     Dim r As Long
+    Dim applyLeftPanelDefaults As Boolean
 
     Set perfScope = Profiler_BeginScope("PrepareGanttFullLayout", "Gantt Layout")
 
+    applyLeftPanelDefaults = (isNewSheet Or IsGanttSheetLayoutEmpty(wsGantt))
+
     ClearGanttSheet wsGantt
     SetupStaticLayout wsGantt
-    BuildTimeline wsGantt, projectStart, totalDays
+    If applyLeftPanelDefaults Then SetupLeftPanelDefaults wsGantt
+    SetupTimelineLayout wsGantt, projectStart, totalDays
 
     ganttRow = FIRST_TASK_ROW
     For r = 1 To rowCount
@@ -546,6 +551,23 @@ Private Sub SetupStaticLayout(ByVal ws As Worksheet)
     ws.rows(TOGGLE_ROW_BOTTOM).rowHeight = GANTT_ROW_HEIGHT_HEADER_2
     ws.rows(HEADER_ROW_2).rowHeight = GANTT_ROW_HEIGHT_HEADER_2
 
+
+    ws.Range("A1:FU3").Interior.Color = RGB(255, 255, 255)
+    ws.Range("A1:FU3").Borders.LineStyle = xlNone
+
+    ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Interior.Color = RGB(217, 217, 217)
+    ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Borders.LineStyle = xlContinuous
+
+    Gantt_ApplyLanguage
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR: Applique les largeurs initiales du panneau gauche lors d'une creation ou migration.
+' EN: Applies initial left-panel widths during creation or migration.
+'------------------------------------------------------------------------------
+Private Sub SetupLeftPanelDefaults(ByVal ws As Worksheet)
+
     ws.Columns("A").ColumnWidth = 12
     ws.Columns("B").ColumnWidth = 34
     ws.Columns("C:F").ColumnWidth = 11
@@ -555,14 +577,6 @@ Private Sub SetupStaticLayout(ByVal ws As Worksheet)
     'Logic column calibrated to avoid text overflow into the timeline at 55% zoom.
     'Measured target: approx. 109 px / Excel width 14.86.
     ws.Columns("J").ColumnWidth = 14.86
-
-    ws.Range("A1:FU3").Interior.Color = RGB(255, 255, 255)
-    ws.Range("A1:FU3").Borders.LineStyle = xlNone
-
-    ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Interior.Color = RGB(217, 217, 217)
-    ws.Range("A" & HEADER_ROW_2 & ":J" & HEADER_ROW_2).Borders.LineStyle = xlContinuous
-
-    Gantt_ApplyLanguage
 
 End Sub
 
@@ -585,11 +599,11 @@ End Sub
 ' Notes:
 ' - Point de bascule critique pour les modes agreges; impacts shapes, liens et registry.
 '------------------------------------------------------------------------------
-Private Sub BuildTimeline(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
+Private Sub SetupTimelineLayout(ByVal ws As Worksheet, ByVal projectStart As Variant, ByVal slotCount As Long)
 
     Dim perfScope As clsPerfScope
 
-    Set perfScope = Profiler_BeginScope("BuildTimeline", "Timeline")
+    Set perfScope = Profiler_BeginScope("SetupTimelineLayout", "Timeline")
 
     Select Case GetGanttTimelineScaleMode()
         Case GANTT_SCALE_WEEK
@@ -618,7 +632,7 @@ End Sub
 ' - Entetes jour/mois, formats et colonnes de rendu Day.
 '
 ' Appele par / Called by:
-' - BuildTimeline.
+' - SetupTimelineLayout.
 '
 ' Notes:
 ' - Seul mode eligible au registry predictif TEST Day.
@@ -731,7 +745,7 @@ End Sub
 ' - Colonnes Week compactes pour rendu agrege.
 '
 ' Appele par / Called by:
-' - BuildTimeline.
+' - SetupTimelineLayout.
 '
 ' Notes:
 ' - Les dependency links sont desactives en mode agrege.
@@ -804,7 +818,7 @@ End Sub
 ' - Colonnes Month compactes pour rendu agrege.
 '
 ' Appele par / Called by:
-' - BuildTimeline.
+' - SetupTimelineLayout.
 '
 ' Notes:
 ' - Mode utile au pilotage macro; geometrie des taches est projetee dans les periodes.
@@ -1199,36 +1213,31 @@ End Sub
 
 '------------------------------------------------------------------------------
 ' FR:
-' Efface les saisies TEST et l'etat live associe sur GANTT/CALC_GANTT_TEST.
+' Vide differentiellement les trois colonnes de saisie TEST du Gantt.
+' Retourne le nombre de cellules effectivement effacees et ne touche a aucun
+' mode runtime, store de simulation ou rendu.
 '
 ' EN:
-' Clears TEST inputs and associated live state on GANTT/CALC_GANTT_TEST.
-'
-' Entrees / Inputs:
-' - Feuille GANTT existante et colonnes TEST.
-'
-' Sorties / Outputs:
-' - Cellules TEST nettoyees, simulation active effacee, rendu rafraichi.
-'
-' Appele par / Called by:
-' - Boutons/workflows de reset TEST et scenario fork.
-'
-' Notes:
-' - Touche au domaine GanttLive; candidat futur a facade claire.
+' Differentially clears the three Gantt TEST input columns.
+' Returns the number of cells actually cleared and does not mutate runtime
+' modes, the simulation store, or rendering.
 '------------------------------------------------------------------------------
-Public Sub Gantt_Clear_Test_State()
+Public Function GanttSheetLayout_ClearTestInputs() As Long
 
     Dim ws As Worksheet
     Dim lastRow As Long
     Dim oldInternalWrite As Boolean
     Dim oldEvents As Boolean
     Dim oldScreenUpdating As Boolean
+    Dim stateCaptured As Boolean
+    Dim testRange As Range
 
     On Error GoTo SafeExit
 
     oldInternalWrite = GetGanttInternalWrite()
     oldEvents = Application.EnableEvents
     oldScreenUpdating = Application.ScreenUpdating
+    stateCaptured = True
 
     SetGanttInternalWrite True
     Application.EnableEvents = False
@@ -1243,28 +1252,46 @@ Public Sub Gantt_Clear_Test_State()
     lastRow = GetLastGanttRow(ws)
     If lastRow < FIRST_TASK_ROW Then GoTo SafeExit
 
-    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_START), ws.cells(lastRow, COL_TEST_START))
-        .ClearContents
-        .NumberFormat = "dd/mm/yyyy"
-    End With
+    Set testRange = ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_START), ws.cells(lastRow, COL_TEST_START))
+    GanttSheetLayout_ClearTestInputs = _
+        GanttSheetLayout_ClearTestInputs + GanttSheetLayout_ClearInputRange(testRange)
 
-    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_FINISH), ws.cells(lastRow, COL_TEST_FINISH))
-        .ClearContents
-        .NumberFormat = "dd/mm/yyyy"
-    End With
+    Set testRange = ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_FINISH), ws.cells(lastRow, COL_TEST_FINISH))
+    GanttSheetLayout_ClearTestInputs = _
+        GanttSheetLayout_ClearTestInputs + GanttSheetLayout_ClearInputRange(testRange)
 
-    With ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_PROGRESS), ws.cells(lastRow, COL_TEST_PROGRESS))
-        .ClearContents
-        .NumberFormat = "0%"
-    End With
-
-    GanttLive_ClearTestRenderRequest
-    GanttLive_ClearActiveSimulationMode
+    Set testRange = ws.Range(ws.cells(FIRST_TASK_ROW, COL_TEST_PROGRESS), ws.cells(lastRow, COL_TEST_PROGRESS))
+    GanttSheetLayout_ClearTestInputs = _
+        GanttSheetLayout_ClearTestInputs + GanttSheetLayout_ClearInputRange(testRange)
 
 SafeExit:
-    Application.ScreenUpdating = oldScreenUpdating
-    Application.EnableEvents = oldEvents
-    SetGanttInternalWrite oldInternalWrite
+    If stateCaptured Then
+        Application.ScreenUpdating = oldScreenUpdating
+        Application.EnableEvents = oldEvents
+        SetGanttInternalWrite oldInternalWrite
+    End If
 
+End Function
+
+'------------------------------------------------------------------------------
+' FR: Wrapper historique deleguant au contrat atomique de sortie de simulation.
+' EN: Historical wrapper delegating to the atomic simulation-exit contract.
+'------------------------------------------------------------------------------
+Public Sub Gantt_Clear_Test_State()
+    GanttSimulation_ResetToNormal False
 End Sub
 
+'------------------------------------------------------------------------------
+' FR: Efface une plage d'entree uniquement lorsqu'elle contient des valeurs.
+' EN: Clears an input range only when it contains values.
+'------------------------------------------------------------------------------
+Private Function GanttSheetLayout_ClearInputRange(ByVal targetRange As Range) As Long
+
+    If targetRange Is Nothing Then Exit Function
+    If Application.WorksheetFunction.CountA(targetRange) = 0 Then Exit Function
+
+    GanttSheetLayout_ClearInputRange = _
+        CLng(Application.WorksheetFunction.CountA(targetRange))
+    targetRange.ClearContents
+
+End Function

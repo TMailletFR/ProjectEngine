@@ -78,6 +78,8 @@ Public Sub Run_Gantt_Test_Engine( _
         transactionGanttRebuilt, _
         recordSilentMessages
 
+    GanttUiControls_EnsureCanonical ThisWorkbook.Worksheets(GANTT_SHEET)
+
 End Sub
 '------------------------------------------------------------------------------
 ' FR:
@@ -158,7 +160,56 @@ End Function
 '------------------------------------------------------------------------------
 Public Function GanttLive_BuildTestByIdMap() As Object
 
-    Set GanttLive_BuildTestByIdMap = GanttSimulation_BuildResultByIdMap()
+    Dim renderMode As String
+
+    renderMode = GanttLive_GetPendingRenderMode()
+    If renderMode = "" Then renderMode = GanttLive_GetActiveSimulationMode()
+
+    If renderMode = "TEST" And GanttTestAnalyticsSnapshot_IsCurrent() Then
+        Set GanttLive_BuildTestByIdMap = GanttTestAnalyticsSnapshot_GetProjectionById()
+    Else
+        Set GanttLive_BuildTestByIdMap = GanttSimulation_BuildResultByIdMap()
+    End If
+
+End Function
+
+' FR: Retourne la classification analytique du meme snapshot que les dates TEST.
+' EN: Returns the analytics classification from the same snapshot as TEST dates.
+' FR: Indique si le rendu courant doit lire les analytics du snapshot TEST.
+' EN: Returns whether the current render must read analytics from the TEST snapshot.
+Public Function GanttLive_IsTestAnalyticsProjectionActive() As Boolean
+
+    Dim renderMode As String
+
+    renderMode = GanttLive_GetPendingRenderMode()
+    If renderMode = "" Then renderMode = GanttLive_GetActiveSimulationMode()
+    GanttLive_IsTestAnalyticsProjectionActive = _
+        (renderMode = "TEST" And GanttTestAnalyticsSnapshot_IsCurrent())
+
+End Function
+
+Public Function GanttLive_GetDisplayAnalyticsPath( _
+    ByVal idVal As String, _
+    ByVal testById As Object, _
+    ByVal isTestMode As Boolean, _
+    ByVal pathColumnName As String) As String
+
+    Dim renderMode As String
+
+    If Not isTestMode Then Exit Function
+    renderMode = GanttLive_GetPendingRenderMode()
+    If renderMode = "" Then renderMode = GanttLive_GetActiveSimulationMode()
+    If renderMode <> "TEST" Then Exit Function
+    If testById Is Nothing Then Exit Function
+    If Not testById.Exists(idVal) Then Exit Function
+    If UBound(testById(idVal)) < 10 Then Exit Function
+
+    Select Case pathColumnName
+        Case "Critical Path"
+            GanttLive_GetDisplayAnalyticsPath = CStr(testById(idVal)(9))
+        Case "Longest Path"
+            GanttLive_GetDisplayAnalyticsPath = CStr(testById(idVal)(10))
+    End Select
 
 End Function
 
@@ -250,7 +301,7 @@ Public Function GanttLive_HasRenderableTestDelta(ByVal idVal As String, ByVal ba
     ' Pas de contour si la ligne test est en erreur
     If Trim$(CStr(testData(5))) <> "" Then Exit Function
 
-    ' Contour si le rendu simulé affiché diffère du rendu de base
+    ' Contour si le rendu simulÃ© affichÃ© diffÃ¨re du rendu de base
     If ValuesDiffer(baseData(0), testData(0)) Then
         GanttLive_HasRenderableTestDelta = True
         Exit Function
@@ -394,6 +445,7 @@ End Function
 Public Sub Run_Gantt_Lock_Changes()
 
     GanttLockService_RunLockChanges
+    GanttUiControls_EnsureCanonical ThisWorkbook.Worksheets(GANTT_SHEET)
 
 End Sub
 
@@ -482,6 +534,8 @@ Public Sub Run_Gantt_Scenario_Engine( _
         transactionMessages, _
         transactionGanttRebuilt, _
         recordSilentMessages
+
+    GanttUiControls_EnsureCanonical ThisWorkbook.Worksheets(GANTT_SHEET)
 
 End Sub
 '------------------------------------------------------------------------------

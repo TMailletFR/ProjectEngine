@@ -196,10 +196,7 @@ Public Sub InitializeScenarioPlanningCopyFromCurrentWorkbook()
 
     Constraints_DeactivateAll
     EventHistory_ResetRuntimeStorage
-    Gantt_Clear_Test_State
-    ClearCalcGanttTestResults
-    GanttLive_ClearTestRenderRequest
-    GanttLive_ClearActiveSimulationMode
+    GanttSimulation_ResetToNormal False
 
     Application.EnableEvents = oldEvents
     forcedUpdateGuardToken = OpenAuthorizedWBSWriteScope( _

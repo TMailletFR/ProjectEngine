@@ -193,9 +193,7 @@ Public Sub Run_Gantt_Update()
     '- The cleanup is done BEFORE Run_Calc_Engine / Refresh_Gantt.
     '- Refresh_Gantt itself must stay generic because it is also used by the test workflow.
 
-    Gantt_Clear_Test_State
-    SetGanttPreserveTestInputs False
-    GanttLive_ClearTestRenderRequest
+    GanttSimulation_ResetToNormal False
 
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine start Run_Gantt_Update"
     Run_Calc_Engine
@@ -318,10 +316,7 @@ Public Sub Run_Full_Update()
     RunButtonsTrace_Checkpoint "Workflow stack", "Workflow started Run_Full_Update=" & CStr(workflowStarted)
     BeginPlanningEventRun "Run_Full_Update"
     RunButtonsTrace_Checkpoint "EventHistory", "BeginPlanningEventRun returned Run_Full_Update"
-    Gantt_Clear_Test_State
-    SetGanttPreserveTestInputs False
-    GanttLive_ClearTestRenderRequest
-    GanttLive_ClearActiveSimulationMode
+    GanttSimulation_ResetToNormal False
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine force start Run_Full_Update"
     Run_Calc_Engine True
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine force returned Run_Full_Update"

@@ -383,11 +383,15 @@ Public Sub Toggle_Gantt_View()
     Application.ScreenUpdating = False
     On Error GoTo SafeExit
 
+    GanttDrag_PauseForLifecycle
     ApplyCurrentGanttView ws
-    RefreshFixedHeaderToggleVisuals ws
+    GanttUiControls_EnsureCanonical ws
 
 SafeExit:
+    On Error Resume Next
+    GanttDrag_ReconcileWatchState
     Application.ScreenUpdating = oldScreenUpdating
+    On Error GoTo 0
 
 End Sub
 
@@ -586,11 +590,10 @@ Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
 
     Set shapeIndex = BuildGanttShapeIndex(ws)
 
-    ws.rows(FIRST_TASK_ROW & ":" & lastRow).Hidden = False
-
     If GetGanttViewMode() = GANTT_VIEW_DETAIL Then
 
         For r = FIRST_TASK_ROW To lastRow
+            If ws.rows(r).Hidden Then ws.rows(r).Hidden = False
             SetRowRenderedShapesVisibility ws, r, True, shapeIndex
         Next r
 
@@ -604,7 +607,7 @@ Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
             End If
         Next shp
 
-        ReconcileGanttViewGridAfterFiltering ws, lastRow
+        ReconcileGanttViewRowsAfterFiltering ws, lastRow
         GoTo SafeExit
     End If
 
@@ -623,7 +626,7 @@ Private Sub ApplyCurrentGanttView(ByVal ws As Worksheet)
         End If
     Next shp
 
-    ReconcileGanttViewGridAfterFiltering ws, lastRow
+    ReconcileGanttViewRowsAfterFiltering ws, lastRow
 
 SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
@@ -659,35 +662,21 @@ End Function
 ' FR: Execute le helper Reconcile Gantt View Grid After Filtering dans le workflow de rendu GANTT.
 ' EN: Runs the Reconcile Gantt View Grid After Filtering helper in the GANTT rendering workflow.
 '------------------------------------------------------------------------------
-Private Sub ReconcileGanttViewGridAfterFiltering(ByVal ws As Worksheet, ByVal lastRow As Long)
+Private Sub ReconcileGanttViewRowsAfterFiltering(ByVal ws As Worksheet, ByVal lastRow As Long)
 
     Dim perfScope As clsPerfScope
 
-    Dim lastCol As Long
     Dim r As Long
-    Dim leftRange As Range
-    Dim timelineRange As Range
 
-    Set perfScope = Profiler_BeginScope("ReconcileGanttViewGridAfterFiltering", "Excel Format")
+    Set perfScope = Profiler_BeginScope("ReconcileGanttViewRowsAfterFiltering", "Excel Format")
 
     If ws Is Nothing Then Exit Sub
     If lastRow < FIRST_TASK_ROW Then Exit Sub
 
-    lastCol = ws.cells(HEADER_ROW_2, ws.Columns.Count).End(xlToLeft).Column
-    If lastCol < FIRST_TIMELINE_COL Then lastCol = FIRST_TIMELINE_COL
-
-    ws.Range(ws.cells(FIRST_TASK_ROW, 1), ws.cells(lastRow, COL_LOGIC)).Borders.LineStyle = xlNone
-    ws.Range(ws.cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), ws.cells(lastRow, lastCol)).Borders.LineStyle = xlNone
 
     For r = FIRST_TASK_ROW To lastRow
         If Not ws.rows(r).Hidden Then
             ws.rows(r).rowHeight = GANTT_ROW_HEIGHT_TASK
-            Set leftRange = ws.Range(ws.cells(r, 1), ws.cells(r, COL_LOGIC))
-            Set timelineRange = ws.Range(ws.cells(r, FIRST_TIMELINE_COL), ws.cells(r, lastCol))
-
-            leftRange.Borders.LineStyle = xlContinuous
-            timelineRange.Borders(xlInsideVertical).LineStyle = xlDot
-            timelineRange.Borders(xlEdgeBottom).LineStyle = xlDot
         End If
     Next r
 
@@ -734,11 +723,9 @@ Public Sub ApplyGanttUiState( _
 
     Set perfScope = Profiler_BeginScope("ApplyGanttUiState", "Gantt UI")
 
-    If rebuildHeaderControls Then
-        Ensure_Gantt_Test_Buttons
-    Else
-        RefreshFixedHeaderToggleVisuals ws
-    End If
+    'The historical flag is retained for source compatibility. Both full and fast
+    'paths now share the same differential post-condition for header controls.
+    GanttUiControls_EnsureCanonical ws
 
     ApplyCurrentGanttView ws
 
@@ -781,5 +768,4 @@ SafeExit:
     SetGanttPreserveTestInputs oldPreserve
 
 End Sub
-
 

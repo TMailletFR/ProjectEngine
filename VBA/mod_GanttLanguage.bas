@@ -25,6 +25,7 @@ Private Const GANTT_SHEET As String = "GANTT"
 Private Const TITLE_ROW As Long = 1
 Private Const HEADER_ROW_2 As Long = 4
 Private Const COL_WBS As Long = 1
+Private Const BTN_RESET_NAME As String = "btn_Gantt_Reset"
 Private Const BTN_SCENARIO_NAME As String = "btn_Gantt_Scenario"
 Private Const BTN_TEST_NAME As String = "btn_Gantt_Test"
 Private Const BTN_LOCK_NAME As String = "btn_Gantt_Lock"
@@ -64,24 +65,25 @@ Public Sub Gantt_ApplyLanguage(Optional ByVal languageCode As String = "")
         EnsureGanttLanguageInitialized
     End If
 
-    ws.cells(TITLE_ROW, COL_WBS).value = Gantt_L("VUE GANTT", "GANTT VIEW")
+    Gantt_SetCellTextIfDifferent ws.cells(TITLE_ROW, COL_WBS), Gantt_L("VUE GANTT", "GANTT VIEW")
 
-    ws.Range("A" & HEADER_ROW_2).value = "WBS"
-    ws.Range("B" & HEADER_ROW_2).value = Gantt_L("Nom t‚che", "Task Name")
-    ws.Range("C" & HEADER_ROW_2).value = Gantt_L("DÈbut", "Start")
-    ws.Range("D" & HEADER_ROW_2).value = Gantt_L("Fin", "Finish")
-    ws.Range("E" & HEADER_ROW_2).value = Gantt_L("DÈbut test", "Test Start")
-    ws.Range("F" & HEADER_ROW_2).value = Gantt_L("Fin test", "Test Finish")
-    ws.Range("G" & HEADER_ROW_2).value = Gantt_L("DurÈe", "Duration")
-    ws.Range("H" & HEADER_ROW_2).value = "%"
-    ws.Range("I" & HEADER_ROW_2).value = Gantt_L("Test %", "Test %")
-    ws.Range("J" & HEADER_ROW_2).value = Gantt_L("Logique", "Logic")
+    Gantt_SetCellTextIfDifferent ws.Range("A" & HEADER_ROW_2), "WBS"
+    Gantt_SetCellTextIfDifferent ws.Range("B" & HEADER_ROW_2), Gantt_L("Nom t√¢che", "Task Name")
+    Gantt_SetCellTextIfDifferent ws.Range("C" & HEADER_ROW_2), Gantt_L("D√©but", "Start")
+    Gantt_SetCellTextIfDifferent ws.Range("D" & HEADER_ROW_2), Gantt_L("Fin", "Finish")
+    Gantt_SetCellTextIfDifferent ws.Range("E" & HEADER_ROW_2), Gantt_L("D√©but test", "Test Start")
+    Gantt_SetCellTextIfDifferent ws.Range("F" & HEADER_ROW_2), Gantt_L("Fin test", "Test Finish")
+    Gantt_SetCellTextIfDifferent ws.Range("G" & HEADER_ROW_2), Gantt_L("Dur√©e", "Duration")
+    Gantt_SetCellTextIfDifferent ws.Range("H" & HEADER_ROW_2), "%"
+    Gantt_SetCellTextIfDifferent ws.Range("I" & HEADER_ROW_2), Gantt_L("Test %", "Test %")
+    Gantt_SetCellTextIfDifferent ws.Range("J" & HEADER_ROW_2), Gantt_L("Logique", "Logic")
 
-    Gantt_SetShapeText ws, BTN_SCENARIO_NAME, Gantt_L("ScÈnario", "Scenario")
+    Gantt_SetShapeText ws, BTN_RESET_NAME, Gantt_L("R√©initialiser", "Reset")
+    Gantt_SetShapeText ws, BTN_SCENARIO_NAME, Gantt_L("Sc√©nario", "Scenario")
     Gantt_SetShapeText ws, BTN_TEST_NAME, Gantt_L("Test", "Test")
     Gantt_SetShapeText ws, BTN_LOCK_NAME, Gantt_L("Verrouiller", "Lock")
 
-    Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, Gantt_L("DÈtail / SynthËse", "Detail / Summary")
+    Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, Gantt_L("D√©tail / Synth√®se", "Detail / Summary")
     Gantt_SetShapeText ws, BTN_SCALE_LEFT_NAME, Gantt_L("Jour / Sem. / Mois", "Day / Week / Month")
     Gantt_SetShapeText ws, BTN_CONSTRAINT_LEFT_NAME, Gantt_L("Contrainte", "Constraint")
     Gantt_SetShapeText ws, BTN_CP_LEFT_NAME, Gantt_L("N/A / Chem. Crit. / Le plus long", "None / Critical Path / Longest Path")
@@ -179,6 +181,21 @@ Private Sub Gantt_SetShapeText( _
 
     If shp Is Nothing Then Exit Sub
 
-    shp.TextFrame2.TextRange.Text = captionText
+    If CStr(shp.TextFrame2.TextRange.Text) <> captionText Then
+        shp.TextFrame2.TextRange.Text = captionText
+    End If
+
+End Sub
+
+'------------------------------------------------------------------------------
+' FR: Met a jour un libelle de cellule uniquement lorsque sa valeur differe.
+' EN: Updates a cell label only when its value differs.
+'------------------------------------------------------------------------------
+Private Sub Gantt_SetCellTextIfDifferent( _
+    ByVal targetCell As Range, _
+    ByVal captionText As String)
+
+    If targetCell Is Nothing Then Exit Sub
+    If CStr(targetCell.value) <> captionText Then targetCell.value = captionText
 
 End Sub

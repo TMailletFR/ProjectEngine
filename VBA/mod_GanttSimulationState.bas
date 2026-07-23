@@ -84,6 +84,7 @@ End Sub
 '------------------------------------------------------------------------------
 Public Sub GanttLive_ClearActiveSimulationMode()
     gActiveSimulationMode = ""
+    GanttTestAnalyticsSnapshot_Clear
 End Sub
 
 '------------------------------------------------------------------------------

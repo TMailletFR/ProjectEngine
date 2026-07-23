@@ -104,6 +104,7 @@ Public Sub GanttTestService_RunTestEngine( _
 
     On Error GoTo SafeExit
 
+    GanttTestAnalyticsSnapshot_Clear
     If Not silentMode Then workflowStarted = EnsurePlanningWorkflowStarted("Run_Gantt_Test_Engine")
     AppEvents_EnsureInitialized
     Set consoleMessages = New Collection
@@ -374,6 +375,8 @@ Private Function Run_Gantt_Test_Backend( _
     Dim cascadeDiagnostics As Object
     Dim warningActualIds As Object
     Dim constraintMessages As Collection
+    Dim analyticsById As Object
+    Dim resultById As Object
 
     Dim rowCount As Long
     Dim r As Long
@@ -481,13 +484,19 @@ NextRow:
                 "Calculation error in live engine", "fix test values or upstream logic", vbCritical, consoleMessages
         End If
 
+        GanttTestAnalyticsSnapshot_Clear
         Exit Function
     End If
+
+    Set analyticsById = CalcBridge_BuildAnalyticsSnapshotById(dataCore, mapCore, linksBySuccId)
+    Set resultById = GanttSimulation_BuildResultByIdMap()
+    GanttTestAnalyticsSnapshot_Set resultById, analyticsById
 
     Run_Gantt_Test_Backend = True
     Exit Function
 
 SafeExit:
+    GanttTestAnalyticsSnapshot_Clear
     If Err.Number <> 0 Then
         GanttLive_AddVbaOrStructuredError consoleMessages, "Run_Gantt_Test_Backend", Err.Description
     End If

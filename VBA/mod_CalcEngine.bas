@@ -240,7 +240,11 @@ Public Sub ComputeCurrentFloatAndCritical( _
     ByVal topoOrder As Collection, _
     Optional ByVal consoleMessages As Collection = Nothing, _
     Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
-    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
+    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing, _
+    Optional ByRef sourceData As Variant, _
+    Optional ByRef resultTotalFloat As Variant, _
+    Optional ByRef resultFreeFloat As Variant, _
+    Optional ByRef resultCriticalPath As Variant)
 
     Dim perfScope As clsPerfScope
 
@@ -289,11 +293,21 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
     Dim hasNegativeFloat As Boolean
     Dim useMultiNetwork As Boolean
+    Dim inMemoryResult As Boolean
+    Dim rowCount As Long
 
     Set perfScope = Profiler_BeginScope("ComputeCurrentFloatAndCritical", "Analytics Float")
 
-    If tblCalc Is Nothing Then Exit Sub
-    If tblCalc.DataBodyRange Is Nothing Then Exit Sub
+    inMemoryResult = Not IsMissing(sourceData)
+    If inMemoryResult Then
+        dataArr = sourceData
+        rowCount = UBound(dataArr, 1)
+    Else
+        If tblCalc Is Nothing Then Exit Sub
+        If tblCalc.DataBodyRange Is Nothing Then Exit Sub
+        dataArr = tblCalc.DataBodyRange.value
+        rowCount = tblCalc.ListRows.Count
+    End If
 
     Set currentLateStartById = CreateObject("Scripting.Dictionary")
     Set currentLateFinishById = CreateObject("Scripting.Dictionary")
@@ -314,7 +328,6 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Set reverseTopo = New Collection
     Set networkFinishById = CreateObject("Scripting.Dictionary")
 
-    dataArr = tblCalc.DataBodyRange.value
     projectCurrentFinish = Empty
     useMultiNetwork = IsCriticalPathMultiNetworkEnabled()
 
@@ -336,14 +349,20 @@ Public Sub ComputeCurrentFloatAndCritical( _
         Set networkFinishById = BuildCurrentNetworkFinishById(dataArr, mapCalc, idToRow, childrenById, validIds)
     End If
 
-    ReDim outTF(1 To tblCalc.ListRows.Count, 1 To 1)
-    ReDim outFF(1 To tblCalc.ListRows.Count, 1 To 1)
-    ReDim outCritical(1 To tblCalc.ListRows.Count, 1 To 1)
+    ReDim outTF(1 To rowCount, 1 To 1)
+    ReDim outFF(1 To rowCount, 1 To 1)
+    ReDim outCritical(1 To rowCount, 1 To 1)
 
     If Not HasValue(projectCurrentFinish) Then
-        tblCalc.ListColumns("Total Float").DataBodyRange.value = outTF
-        tblCalc.ListColumns("Free Float").DataBodyRange.value = outFF
-        tblCalc.ListColumns("Critical Path").DataBodyRange.value = outCritical
+        If inMemoryResult Then
+            resultTotalFloat = outTF
+            resultFreeFloat = outFF
+            resultCriticalPath = outCritical
+        Else
+            tblCalc.ListColumns("Total Float").DataBodyRange.value = outTF
+            tblCalc.ListColumns("Free Float").DataBodyRange.value = outFF
+            tblCalc.ListColumns("Critical Path").DataBodyRange.value = outCritical
+        End If
         Exit Sub
     End If
 
@@ -629,7 +648,7 @@ NextCurrentFreeFloatTask:
 
     RollupFloatToParents idToRow, directChildrenById, parentIds, outTF, outFF
 
-    For r = 1 To tblCalc.ListRows.Count
+    For r = 1 To rowCount
         If HasValue(outTF(r, 1)) Then
             If Not IsActualFinishedInCalcArray(dataArr, r, mapCalc) Then
                 If CDbl(outTF(r, 1)) <= 0 Then
@@ -645,9 +664,15 @@ NextCurrentFreeFloatTask:
         End If
     Next r
 
-    tblCalc.ListColumns("Total Float").DataBodyRange.value = outTF
-    tblCalc.ListColumns("Free Float").DataBodyRange.value = outFF
-    tblCalc.ListColumns("Critical Path").DataBodyRange.value = outCritical
+    If inMemoryResult Then
+        resultTotalFloat = outTF
+        resultFreeFloat = outFF
+        resultCriticalPath = outCritical
+    Else
+        tblCalc.ListColumns("Total Float").DataBodyRange.value = outTF
+        tblCalc.ListColumns("Free Float").DataBodyRange.value = outFF
+        tblCalc.ListColumns("Critical Path").DataBodyRange.value = outCritical
+    End If
 
 End Sub
 
@@ -664,7 +689,9 @@ Public Sub ComputeLongestPath( _
     ByVal childrenById As Object, _
     ByVal validIds As Object, _
     Optional ByVal analyticsPredLagBySuccPred As Object = Nothing, _
-    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing)
+    Optional ByVal analyticsPredTypeBySuccPred As Object = Nothing, _
+    Optional ByRef sourceData As Variant, _
+    Optional ByRef resultLongestPath As Variant)
 
     Dim perfScope As clsPerfScope
 
@@ -687,11 +714,21 @@ Public Sub ComputeLongestPath( _
     Dim linkKey As String
     Dim linkType As String
     Dim effectiveLag As Double
+    Dim inMemoryResult As Boolean
+    Dim rowCount As Long
 
     Set perfScope = Profiler_BeginScope("ComputeLongestPath", "Analytics Longest Path")
 
-    If tblCalc Is Nothing Then Exit Sub
-    If tblCalc.DataBodyRange Is Nothing Then Exit Sub
+    inMemoryResult = Not IsMissing(sourceData)
+    If inMemoryResult Then
+        dataArr = sourceData
+        rowCount = UBound(dataArr, 1)
+    Else
+        If tblCalc Is Nothing Then Exit Sub
+        If tblCalc.DataBodyRange Is Nothing Then Exit Sub
+        dataArr = tblCalc.DataBodyRange.value
+        rowCount = tblCalc.ListRows.Count
+    End If
     If mapCalc Is Nothing Then Exit Sub
     If idToRow Is Nothing Then Exit Sub
     If predsById Is Nothing Then Exit Sub
@@ -699,10 +736,11 @@ Public Sub ComputeLongestPath( _
     If validIds Is Nothing Then Exit Sub
     If Not mapCalc.Exists("Calculated Start") Then Exit Sub
     If Not mapCalc.Exists("Calculated Finish") Then Exit Sub
-    If Not mapCalc.Exists("Longest Path") Then Exit Sub
+    If Not inMemoryResult Then
+        If Not mapCalc.Exists("Longest Path") Then Exit Sub
+    End If
 
-    dataArr = tblCalc.DataBodyRange.value
-    ReDim outLP(1 To tblCalc.ListRows.Count, 1 To 1)
+    ReDim outLP(1 To rowCount, 1 To 1)
 
     Set lpById = CreateObject("Scripting.Dictionary")
     Set queuedById = CreateObject("Scripting.Dictionary")
@@ -736,7 +774,11 @@ Public Sub ComputeLongestPath( _
     Next idKey
 
     If Not HasValue(projectFinish) Then
-        tblCalc.ListColumns("Longest Path").DataBodyRange.value = outLP
+        If inMemoryResult Then
+            resultLongestPath = outLP
+        Else
+            tblCalc.ListColumns("Longest Path").DataBodyRange.value = outLP
+        End If
         Exit Sub
     End If
 
@@ -798,7 +840,11 @@ Public Sub ComputeLongestPath( _
         End If
     Next idKey
 
-    tblCalc.ListColumns("Longest Path").DataBodyRange.value = outLP
+    If inMemoryResult Then
+        resultLongestPath = outLP
+    Else
+        tblCalc.ListColumns("Longest Path").DataBodyRange.value = outLP
+    End If
 
 End Sub
 

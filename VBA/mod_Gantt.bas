@@ -415,7 +415,7 @@ Private Function GanttPredictive_BuildExpectedRegistry( _
             progressVal = CDbl(GanttLive_GetDisplayProgress(idVal, baseById, testById, True))
         End If
 
-        isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r)
+        isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r, idVal, testById, True)
         hasDelta = GanttLive_HasRenderableTestDelta(idVal, baseById, testById)
 
         If isMilestone Then

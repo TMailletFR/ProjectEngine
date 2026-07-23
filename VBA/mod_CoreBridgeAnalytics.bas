@@ -574,6 +574,73 @@ End Function
 ' EN: Orchestrates Run Analytics And Push while preserving the domain's contractual step order.
 '------------------------------------------------------------------------------
 
+' FR: Calcule en memoire les floats et chemins du dataset fourni, sans ecriture CALC/WBS.
+' EN: Computes floats and paths in memory for the supplied dataset without CALC/WBS writes.
+Public Function CalcBridge_BuildAnalyticsSnapshotById( _
+    ByRef dataArr As Variant, _
+    ByVal mapCalc As Object, _
+    ByVal linksBySuccId As Object) As Object
+
+    Dim perfScope As clsPerfScope
+    Dim result As Object
+    Dim rowById As Object
+    Dim parentIds As Object
+    Dim validIds As Object
+    Dim directChildrenById As Object
+    Dim predsById As Object
+    Dim childrenById As Object
+    Dim topoOrder As Collection
+    Dim analyticsPredLagBySuccPred As Object
+    Dim analyticsPredTypeBySuccPred As Object
+    Dim outTotalFloat As Variant
+    Dim outFreeFloat As Variant
+    Dim outCriticalPath As Variant
+    Dim outLongestPath As Variant
+    Dim idKey As Variant
+    Dim rowIndex As Long
+
+    Set perfScope = Profiler_BeginScope("GanttTestAnalytics_Compute", "Analytics")
+    Set result = CreateObject("Scripting.Dictionary")
+
+    If mapCalc Is Nothing Then GoTo SafeExit
+    If linksBySuccId Is Nothing Then GoTo SafeExit
+
+    Set rowById = Core_BuildRowById(dataArr, mapCalc)
+    Set parentIds = Core_BuildParentIds(dataArr, mapCalc, rowById)
+    Set validIds = CalcBridge_BuildLeafIds(rowById, parentIds, dataArr, mapCalc)
+    Set directChildrenById = CalcBridge_BuildDirectChildrenById(dataArr, mapCalc, rowById)
+    Set predsById = CalcBridge_BuildEmptyCollections(validIds)
+    Set childrenById = CalcBridge_BuildEmptyCollections(validIds)
+
+    CalcBridge_BuildAnalyticsNetworkFromExpandedLinks linksBySuccId, validIds, predsById, childrenById, _
+        analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred
+    Set topoOrder = CalcBridge_TopologicalOrder(validIds, predsById, childrenById)
+    If topoOrder.Count <> validIds.Count Then GoTo SafeExit
+
+    ComputeCurrentFloatAndCritical _
+        Nothing, mapCalc, rowById, childrenById, directChildrenById, parentIds, validIds, topoOrder, _
+        Nothing, analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred, _
+        dataArr, outTotalFloat, outFreeFloat, outCriticalPath
+
+    ComputeLongestPath _
+        Nothing, mapCalc, rowById, predsById, childrenById, validIds, _
+        analyticsPredLagBySuccPred, analyticsPredTypeBySuccPred, dataArr, outLongestPath
+
+    For Each idKey In rowById.Keys
+        rowIndex = CLng(rowById(CStr(idKey)))
+        result(CStr(idKey)) = Array( _
+            outTotalFloat(rowIndex, 1), _
+            outFreeFloat(rowIndex, 1), _
+            CStr(outCriticalPath(rowIndex, 1)), _
+            CStr(outLongestPath(rowIndex, 1)))
+    Next idKey
+
+SafeExit:
+    Set CalcBridge_BuildAnalyticsSnapshotById = result
+
+End Function
+
+'------------------------------------------------------------------------------
 Public Sub CalcBridge_RunAnalyticsAndPush( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _

@@ -65,6 +65,7 @@ Private gInTick As Boolean
 Private gSuspendDepth As Long
 Private gStructuralErrorCount As Long
 Private gShapeState As Object
+Private gLayoutSignature As String
 Private gLastDebugStatus As String
 Private gTransactionActive As Boolean
 Private gLastTransactionResult As String
@@ -119,6 +120,8 @@ Public Sub GanttDrag_RebuildWatchMaps()
             GanttDrag_SaveShapeState shp, rowIndex, taskType
         End If
     Next shp
+
+    gLayoutSignature = GanttDrag_BuildLayoutSignature(ws)
 
 End Sub
 
@@ -285,6 +288,7 @@ Private Sub GanttDrag_StopRuntime( _
     End If
 
     Set gShapeState = Nothing
+    gLayoutSignature = vbNullString
     If clearRequest Then gWatchRequested = False
 
     If showStatus Then Debug.Print "Gantt Drag Watch stopped."
@@ -352,6 +356,7 @@ Private Sub GanttDrag_WatchTick()
     Dim shp As Shape
     Dim state As Variant
     Dim geometryChanged As Boolean
+    Dim currentLayoutSignature As String
 
     If Not GanttDrag_IsGanttSheetActive(ws) Then
         GanttDrag_StopRuntime False, False
@@ -371,6 +376,13 @@ Private Sub GanttDrag_WatchTick()
     If gShapeState Is Nothing Then Exit Sub
     If gShapeState.Count = 0 Then
         GanttDrag_StopRuntime False, False
+        Exit Sub
+    End If
+
+    currentLayoutSignature = GanttDrag_BuildLayoutSignature(ws)
+    If currentLayoutSignature <> gLayoutSignature Then
+        gLastDebugStatus = "LAYOUT_RECONCILED"
+        GanttDrag_RebuildWatchMaps
         Exit Sub
     End If
 
@@ -407,6 +419,46 @@ Private Sub GanttDrag_WatchTick()
     Next shapeName
 
 End Sub
+
+'------------------------------------------------------------------------------
+' FR: Construit la signature du layout qui peut reprojeter les shapes sans drag utilisateur.
+' EN: Builds the layout signature that can reproject Shapes without a user drag.
+'------------------------------------------------------------------------------
+Private Function GanttDrag_BuildLayoutSignature(ByVal ws As Worksheet) As String
+
+    Dim signature As String
+    Dim colIndex As Long
+    Dim shapeName As Variant
+    Dim state As Variant
+    Dim rowIndex As Long
+
+    If ws Is Nothing Then Exit Function
+
+    For colIndex = 1 To GANTT_DRAG_FIRST_TIMELINE_COL - 1
+        signature = signature & _
+            "|C" & CStr(colIndex) & "=" & _
+            Format$(CDbl(ws.Columns(colIndex).Width), "0.000")
+    Next colIndex
+
+    signature = signature & _
+        "|TL_LEFT=" & Format$(CDbl(ws.cells(GANTT_DRAG_HEADER_ROW, GANTT_DRAG_FIRST_TIMELINE_COL).Left), "0.000") & _
+        "|TL_WIDTH=" & Format$(CDbl(ws.Columns(GANTT_DRAG_FIRST_TIMELINE_COL).Width), "0.000")
+
+    If Not gShapeState Is Nothing Then
+        For Each shapeName In gShapeState.Keys
+            state = gShapeState(CStr(shapeName))
+            rowIndex = CLng(state(4))
+            If rowIndex >= GANTT_DRAG_FIRST_TASK_ROW Then
+                signature = signature & _
+                    "|R" & CStr(rowIndex) & "=" & _
+                    Format$(CDbl(ws.rows(rowIndex).rowHeight), "0.000")
+            End If
+        Next shapeName
+    End If
+
+    GanttDrag_BuildLayoutSignature = signature
+
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Traite la collection Handle Shape Change sans modifier les donnees d'entree.
@@ -1156,23 +1208,42 @@ Private Function GanttDrag_BuildDragMessage( _
     Dim changesEn As String
     Dim frText As String
     Dim enText As String
+    Dim simulationMode As String
 
     taskLabel = GanttDrag_InfoTaskLabel(dragInfo)
     changesFr = GanttDrag_InfoChangesText(dragInfo, True)
     changesEn = GanttDrag_InfoChangesText(dragInfo, False)
+    If Not dragInfo Is Nothing Then
+        If dragInfo.Exists("EngineMode") Then
+            simulationMode = UCase$(Trim$(CStr(dragInfo("EngineMode"))))
+        End If
+    End If
 
     If success Then
         frText = "Modification " & GanttDrag_InfoEngineLabel(dragInfo, "Drag") & " appliquée." & vbCrLf & _
             "Tâche : " & taskLabel & vbCrLf & _
             "Modification demandée : " & changesFr & vbCrLf & _
             "Le planning a été recalculé. Les conséquences éventuelles sur les autres tâches proviennent du moteur planning." & vbCrLf & vbCrLf & _
-            "Pour annuler cette modification, videz simplement les cellules TEST jaunes puis relancez TEST."
+            "Pour abandonner cette simulation et revenir au dernier planning calculé, cliquez sur Réinitialiser."
 
         enText = GanttDrag_InfoEngineLabel(dragInfo, "Drag") & " modification applied." & vbCrLf & _
             "Task: " & taskLabel & vbCrLf & _
             "Requested modification: " & changesEn & vbCrLf & _
             "The schedule has been recalculated. Any consequences on other tasks come from the planning engine." & vbCrLf & vbCrLf & _
-            "To cancel this modification, simply clear the yellow TEST cells and run TEST again."
+            "To abandon this simulation and return to the last calculated schedule, click Reset."
+
+        Select Case simulationMode
+            Case "TEST"
+                frText = frText & vbCrLf & _
+                    "Pour retirer uniquement une hypothèse, videz la cellule TEST jaune correspondante puis relancez TEST."
+                enText = enText & vbCrLf & _
+                    "To remove only one assumption, clear the corresponding yellow TEST cell and run TEST again."
+            Case "SCENARIO"
+                frText = frText & vbCrLf & _
+                    "Pour retirer uniquement une hypothèse, videz la cellule jaune correspondante puis cliquez sur Scénario."
+                enText = enText & vbCrLf & _
+                    "To remove only one assumption, clear the corresponding yellow cell and click Scenario."
+        End Select
     Else
         frText = "La modification demandée par Drag n'a pas pu être appliquée." & vbCrLf & _
             "Tâche : " & taskLabel & vbCrLf & _
