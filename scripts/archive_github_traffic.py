@@ -278,7 +278,50 @@ def build_release_events(releases: list[dict]) -> list[dict[str, str]]:
     return rows
 
 
-def merge_events(manual_events: list[dict[str, str]], release_events: list[dict[str, str]]) -> list[dict[str, str]]:
+def build_referrer_events(combined_refs: list[dict[str, str]]) -> list[dict[str, str]]:
+    """
+    Build one durable automatic event per referrer from the earliest exact
+    snapshot available in the long-term archive.
+
+    The date means "first detection in our archive", not the creation date of
+    the external source. Because the source is derived from the full combined
+    referrer history, the event remains available even after the referrer
+    disappears from GitHub's current rolling top-referrers table.
+    """
+    first_by_source: dict[str, dict[str, str]] = {}
+
+    for row in combined_refs:
+        source = str(row.get("referrer", "")).strip()
+        snapshot_date = str(row.get("snapshot_date", "")).strip()
+        if not source or not snapshot_date:
+            continue
+
+        previous = first_by_source.get(source)
+        if previous is None or snapshot_date < previous.get("snapshot_date", ""):
+            first_by_source[source] = row
+
+    rows = []
+    for source in sorted(first_by_source, key=lambda value: value.lower()):
+        first = first_by_source[source]
+        rows.append({
+            "date": first.get("snapshot_date", ""),
+            "category": "referrer",
+            "label": f"Première détection connue du referrer : {source}",
+            "short_label": f"Source: {source}",
+            "plot": "1",
+            "source": "github_referrer",
+            "key": f"referrer:first_seen:{source.lower()}",
+        })
+
+    rows.sort(key=lambda row: (row["date"], row["key"]))
+    return rows
+
+
+def merge_events(
+    manual_events: list[dict[str, str]],
+    release_events: list[dict[str, str]],
+    referrer_events: list[dict[str, str]] | None = None,
+) -> list[dict[str, str]]:
     """
     Merge manual events with automatically discovered GitHub releases.
 
@@ -311,6 +354,15 @@ def merge_events(manual_events: list[dict[str, str]], release_events: list[dict[
         merged[key] = normalized
 
     for row in release_events:
+        normalized = normalize_event(row)
+        key = normalized["key"] or "|".join([
+            normalized["date"],
+            normalized["category"],
+            normalized["label"],
+        ])
+        merged[key] = normalized
+
+    for row in referrer_events or []:
         normalized = normalize_event(row)
         key = normalized["key"] or "|".join([
             normalized["date"],
@@ -606,13 +658,6 @@ write_csv(
     release_events,
 )
 
-events = merge_events(manual_events, release_events)
-write_csv(
-    derived_dir / "combined_events.csv",
-    ["date", "category", "label", "short_label", "plot", "source", "key"],
-    events,
-)
-
 repository_info = repo_api_get("")
 stars = as_int(repository_info.get("stargazers_count", 0))
 release_downloads = sum(
@@ -800,6 +845,20 @@ write_csv(
     derived_dir / "combined_referrers_history.csv",
     ["snapshot_date", "referrer", "views", "unique_visitors"],
     combined_refs,
+)
+
+referrer_events = build_referrer_events(combined_refs)
+write_csv(
+    data_dir / "referrer_events.csv",
+    ["date", "category", "label", "short_label", "plot", "source", "key"],
+    referrer_events,
+)
+
+events = merge_events(manual_events, release_events, referrer_events)
+write_csv(
+    derived_dir / "combined_events.csv",
+    ["date", "category", "label", "short_label", "plot", "source", "key"],
+    events,
 )
 
 hist_rollups = load_csv(historical_dir / "rolling_14d_snapshots.csv")
@@ -1274,9 +1333,11 @@ Les calculs ci-dessous utilisent donc la **date réelle de fin de fenêtre API**
 
 Les événements manuels restent enregistrés dans [`data/events.csv`](data/events.csv).
 
-Les releases GitHub publiées sont récupérées automatiquement dans [`data/release_events.csv`](data/release_events.csv), puis fusionnées avec les événements manuels dans [`data/derived/combined_events.csv`](data/derived/combined_events.csv).
+Les releases GitHub publiées sont récupérées automatiquement dans [`data/release_events.csv`](data/release_events.csv). La première détection connue de chaque referrer est également enregistrée automatiquement dans [`data/referrer_events.csv`](data/referrer_events.csv).
 
-Les événements dont `plot=1` sont représentés sur les graphiques quotidiens afin de comparer les pics de trafic avec les publications et actions de communication.
+Ces événements sont fusionnés dans [`data/derived/combined_events.csv`](data/derived/combined_events.csv). Pour un referrer, la date signifie **première apparition dans les instantanés archivés disponibles**, et non date de création de la source externe. L'événement reste conservé même si la source disparaît ensuite de la fenêtre glissante GitHub.
+
+Les événements dont `plot=1` sont représentés sur les graphiques quotidiens afin de comparer les pics de trafic avec les publications, actions de communication et premières détections de nouvelles sources.
 
 ## Organisation des données
 
@@ -1288,6 +1349,7 @@ Les événements dont `plot=1` sont représentés sur les graphiques quotidiens 
 - [`data/derived/referrer_minimum_detected_gains.csv`](data/derived/referrer_minimum_detected_gains.csv) : borne basse cumulée des gains visibles
 - [`data/derived/referrer_visible_coverage.csv`](data/derived/referrer_visible_coverage.csv) : part visible et non attribuée du trafic
 - [`data/release_events.csv`](data/release_events.csv) : releases GitHub récupérées automatiquement
+- [`data/referrer_events.csv`](data/referrer_events.csv) : première détection connue de chaque source de trafic
 - [`data/project_indicators.csv`](data/project_indicators.csv) : historique des étoiles et téléchargements
 - [`data/historical/`](data/historical/) : données historiques récupérées manuellement
 - [`data/derived/`](data/derived/) : données fusionnées et métadonnées générées automatiquement
