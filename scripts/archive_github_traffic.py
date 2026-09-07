@@ -129,6 +129,52 @@ def break_series_on_gaps(x, values, max_gap_days=2):
     return broken_x, broken_values
 
 
+def add_vertical_event_markers(ax, events: list[dict[str, str]] | None, x_min, x_max) -> None:
+    """
+    Add grouped vertical markers for dated events that belong to the chart.
+
+    Used for referrer first-seen events on referrer analytics only. Multiple
+    sources first seen on the same date share one vertical line and label.
+    """
+    if not events:
+        return
+
+    grouped = defaultdict(list)
+    for event in events:
+        try:
+            event_date = dt.strptime(str(event.get("date", "")), "%Y-%m-%d")
+        except Exception:
+            continue
+        if event_date < x_min or event_date > x_max:
+            continue
+        label = event.get("short_label") or event.get("label") or "Event"
+        if label not in grouped[event_date]:
+            grouped[event_date].append(label)
+
+    if not grouped:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    span = ymax - ymin if ymax > ymin else 1
+    plotted_dates = []
+
+    for event_date in sorted(grouped):
+        ax.axvline(event_date, linestyle="--", linewidth=1, alpha=0.35)
+        nearby_count = sum(1 for previous in plotted_dates if abs((previous - event_date).days) <= 1)
+        y = ymax - span * (0.04 + 0.08 * (nearby_count % 4))
+        ax.text(
+            event_date,
+            y,
+            " + ".join(grouped[event_date]),
+            rotation=90,
+            va="top",
+            ha="right",
+            fontsize=8,
+            alpha=0.8,
+        )
+        plotted_dates.append(event_date)
+
+
 def save_line_chart(
     path: Path,
     title: str,
@@ -136,6 +182,7 @@ def save_line_chart(
     series: list[tuple[str, list[int]]],
     ylabel: str,
     max_gap_days=None,
+    vertical_events: list[dict[str, str]] | None = None,
 ):
     if not x:
         return
@@ -145,6 +192,9 @@ def save_line_chart(
         if max_gap_days is not None:
             plot_x, plot_values = break_series_on_gaps(x, values, max_gap_days=max_gap_days)
         ax.plot(plot_x, plot_values, marker="o", linewidth=2, label=label)
+    if vertical_events:
+        add_vertical_event_markers(ax, vertical_events, min(x), max(x))
+
     ax.set_title(title)
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.25)
@@ -536,6 +586,7 @@ def save_sparse_line_chart(
     series: list[tuple[str, list[float]]],
     ylabel: str,
     show_zero_line: bool = False,
+    vertical_events: list[dict[str, str]] | None = None,
 ):
     if not x or not series:
         return
@@ -546,6 +597,9 @@ def save_sparse_line_chart(
 
     if show_zero_line:
         ax.axhline(0, linewidth=1, alpha=0.45)
+
+    if vertical_events:
+        add_vertical_event_markers(ax, vertical_events, min(x), max(x))
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
@@ -854,7 +908,7 @@ write_csv(
     referrer_events,
 )
 
-events = merge_events(manual_events, release_events, referrer_events)
+events = merge_events(manual_events, release_events)
 write_csv(
     derived_dir / "combined_events.csv",
     ["date", "category", "label", "short_label", "plot", "source", "key"],
@@ -1054,6 +1108,7 @@ if all_snapshot_dates:
             for s in ranked_sources
         ],
         "Visiteurs uniques dans la fenêtre glissante GitHub",
+        vertical_events=referrer_events,
     )
 
 # Conservative source analytics: missing source means missing data, not zero.
@@ -1094,6 +1149,7 @@ if referrer_windows and referrer_net_change_rows:
         ],
         "Variation nette des vues",
         show_zero_line=True,
+        vertical_events=referrer_events,
     )
 
 if referrer_windows and referrer_minimum_gain_rows:
@@ -1131,6 +1187,7 @@ if referrer_windows and referrer_minimum_gain_rows:
             for source in ranked_gain_sources
         ],
         "Borne basse cumulée des vues",
+        vertical_events=referrer_events,
     )
 
 if referrer_coverage_rows:
@@ -1333,11 +1390,11 @@ Les calculs ci-dessous utilisent donc la **date réelle de fin de fenêtre API**
 
 Les événements manuels restent enregistrés dans [`data/events.csv`](data/events.csv).
 
-Les releases GitHub publiées sont récupérées automatiquement dans [`data/release_events.csv`](data/release_events.csv). La première détection connue de chaque referrer est également enregistrée automatiquement dans [`data/referrer_events.csv`](data/referrer_events.csv).
+Les releases GitHub publiées sont récupérées automatiquement dans [`data/release_events.csv`](data/release_events.csv), puis fusionnées avec les événements manuels dans [`data/derived/combined_events.csv`](data/derived/combined_events.csv).
 
-Ces événements sont fusionnés dans [`data/derived/combined_events.csv`](data/derived/combined_events.csv). Pour un referrer, la date signifie **première apparition dans les instantanés archivés disponibles**, et non date de création de la source externe. L'événement reste conservé même si la source disparaît ensuite de la fenêtre glissante GitHub.
+Les événements dont `plot=1` sont représentés sur les graphiques quotidiens afin de comparer les pics de trafic avec les publications et actions de communication.
 
-Les événements dont `plot=1` sont représentés sur les graphiques quotidiens afin de comparer les pics de trafic avec les publications, actions de communication et premières détections de nouvelles sources.
+La première détection connue de chaque referrer est enregistrée séparément dans [`data/referrer_events.csv`](data/referrer_events.csv). Ces marqueurs sont tracés uniquement sur les graphiques consacrés aux sources. Pour un referrer, la date signifie **première apparition dans les instantanés archivés disponibles**, et non date de création de la source externe.
 
 ## Organisation des données
 
