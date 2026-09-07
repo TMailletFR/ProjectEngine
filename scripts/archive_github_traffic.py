@@ -12,6 +12,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.ticker import MaxNLocator
 from datetime import datetime as dt
 
 
@@ -175,6 +176,14 @@ def add_vertical_event_markers(ax, events: list[dict[str, str]] | None, x_min, x
         plotted_dates.append(event_date)
 
 
+def apply_readable_y_ticks(ax, target_intervals: int = 10) -> None:
+    """
+    Use a denser, integer-friendly vertical scale across charts.
+    Matplotlib still adapts automatically to the actual data range.
+    """
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=target_intervals, integer=True))
+
+
 def save_line_chart(
     path: Path,
     title: str,
@@ -197,6 +206,7 @@ def save_line_chart(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
+    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -219,6 +229,7 @@ def save_bar_chart(path: Path, title: str, labels: list[str], values: list[int],
     ax.invert_yaxis()
     ax.set_title(title)
     ax.set_xlabel(xlabel)
+    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, axis="x", alpha=0.25)
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -603,6 +614,7 @@ def save_sparse_line_chart(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
+    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -680,6 +692,7 @@ def save_line_chart_with_events(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
+    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -1092,12 +1105,27 @@ for r in combined_refs:
         sources[source][r["snapshot_date"]] = as_int(r.get("unique_visitors", 0))
 
 if all_snapshot_dates:
-    ranked_sources = sorted(
-        sources,
-        key=lambda s: max(sources[s].values()) if sources[s] else 0,
-        reverse=True
-    )[:8]
+    latest_snapshot_date = all_snapshot_dates[-1]
+    latest_source_rows = [
+        r for r in combined_refs
+        if r.get("snapshot_date") == latest_snapshot_date and r.get("referrer")
+    ]
+    ranked_sources = [
+        r["referrer"]
+        for r in sorted(
+            latest_source_rows,
+            key=lambda r: (
+                as_int(r.get("unique_visitors", 0)),
+                as_int(r.get("views", 0)),
+                r.get("referrer", ""),
+            ),
+            reverse=True,
+        )[:8]
+    ]
 
+    # Show the history of the sources that are currently in the latest GitHub Top 8.
+    # If a source leaves the current Top 8 it disappears from the chart; if it returns
+    # later, it automatically reappears with its full archived history.
     # Missing source on a GitHub top-referrers table is represented as 0 for visualization.
     save_line_chart(
         charts_dir / "referrers_history.png",
