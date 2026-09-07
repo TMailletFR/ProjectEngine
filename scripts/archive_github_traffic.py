@@ -12,7 +12,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.ticker import MaxNLocator
 from datetime import datetime as dt
 
 
@@ -176,14 +175,6 @@ def add_vertical_event_markers(ax, events: list[dict[str, str]] | None, x_min, x
         plotted_dates.append(event_date)
 
 
-def apply_readable_y_ticks(ax, target_intervals: int = 10) -> None:
-    """
-    Use a denser, integer-friendly vertical scale across charts.
-    Matplotlib still adapts automatically to the actual data range.
-    """
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=target_intervals, integer=True))
-
-
 def save_line_chart(
     path: Path,
     title: str,
@@ -206,7 +197,6 @@ def save_line_chart(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
-    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -229,7 +219,6 @@ def save_bar_chart(path: Path, title: str, labels: list[str], values: list[int],
     ax.invert_yaxis()
     ax.set_title(title)
     ax.set_xlabel(xlabel)
-    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, axis="x", alpha=0.25)
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -614,7 +603,6 @@ def save_sparse_line_chart(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
-    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -692,7 +680,6 @@ def save_line_chart_with_events(
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
-    apply_readable_y_ticks(ax, target_intervals=10)
     ax.grid(True, alpha=0.25)
     ax.legend()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
@@ -1079,6 +1066,11 @@ if valid_rollups:
     )
 
 latest_refs = sorted(referrers, key=lambda x: x["uniques"], reverse=True)
+current_top_referrer_names = [
+    str(item.get("referrer", "")).strip()
+    for item in latest_refs[:8]
+    if str(item.get("referrer", "")).strip()
+]
 save_bar_chart(
     charts_dir / "latest_referrers.png",
     f"Principales sources — instantané du {snapshot_date}",
@@ -1105,27 +1097,15 @@ for r in combined_refs:
         sources[source][r["snapshot_date"]] = as_int(r.get("unique_visitors", 0))
 
 if all_snapshot_dates:
-    latest_snapshot_date = all_snapshot_dates[-1]
-    latest_source_rows = [
-        r for r in combined_refs
-        if r.get("snapshot_date") == latest_snapshot_date and r.get("referrer")
-    ]
+    # Display the CURRENT GitHub top 8 referrers, while retaining each
+    # selected source's full known history on the chart. A source that
+    # leaves the current top 8 disappears from the chart; if it returns
+    # later, its historical series returns automatically.
     ranked_sources = [
-        r["referrer"]
-        for r in sorted(
-            latest_source_rows,
-            key=lambda r: (
-                as_int(r.get("unique_visitors", 0)),
-                as_int(r.get("views", 0)),
-                r.get("referrer", ""),
-            ),
-            reverse=True,
-        )[:8]
+        source for source in current_top_referrer_names
+        if source in sources
     ]
 
-    # Show the history of the sources that are currently in the latest GitHub Top 8.
-    # If a source leaves the current Top 8 it disappears from the chart; if it returns
-    # later, it automatically reappears with its full archived history.
     # Missing source on a GitHub top-referrers table is represented as 0 for visualization.
     save_line_chart(
         charts_dir / "referrers_history.png",
@@ -1155,11 +1135,7 @@ if referrer_windows and referrer_net_change_rows:
         net_by_source[source][date] = value
         net_activity[source] += abs(value)
 
-    ranked_net_sources = sorted(
-        net_activity,
-        key=lambda source: net_activity[source],
-        reverse=True,
-    )[:8]
+    ranked_net_sources = list(current_top_referrer_names)
 
     save_sparse_line_chart(
         charts_dir / "referrer_net_changes.png",
@@ -1191,11 +1167,7 @@ if referrer_windows and referrer_minimum_gain_rows:
         gain_by_source[source][date] = value
         final_minimum[source] = max(final_minimum[source], value)
 
-    ranked_gain_sources = sorted(
-        final_minimum,
-        key=lambda source: final_minimum[source],
-        reverse=True,
-    )[:8]
+    ranked_gain_sources = list(current_top_referrer_names)
 
     save_sparse_line_chart(
         charts_dir / "referrer_minimum_detected_gains.png",
