@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_DataSync"
 Option Explicit
 
 '===============================================================================
@@ -419,7 +418,7 @@ Private Sub DataSync_ResizeCalcTable( _
         Exit Sub
     End If
 
-    Set targetRange = tblCalc.HeaderRowRange.Cells(1, 1).Resize( _
+    Set targetRange = tblCalc.HeaderRowRange.cells(1, 1).Resize( _
         targetRows + 1, tblCalc.ListColumns.Count)
     tblCalc.Resize targetRange
     resizeCount = resizeCount + 1
@@ -565,7 +564,7 @@ Private Function DataSync_SortedInputColumnNames( _
     Dim swapValue As Variant
 
     ReDim names(0 To inputColumns.Count - 1)
-    For Each key In inputColumns.Keys
+    For Each key In inputColumns.keys
         names(i) = CStr(key)
         i = i + 1
     Next key
@@ -620,7 +619,7 @@ Private Sub DataSync_WriteOneInputBlock( _
         Next r
     Next c
 
-    Set targetRange = tblCalc.DataBodyRange.Cells(1, firstColumn).Resize( _
+    Set targetRange = tblCalc.DataBodyRange.cells(1, firstColumn).Resize( _
         rowCount, columnCount)
     currentValues = targetRange.value
 
@@ -675,8 +674,8 @@ Private Function DataSync_ValuesEqual( _
     Dim leftType As VbVarType
     Dim rightType As VbVarType
 
-    If IsError(leftValue) Or IsError(rightValue) Then
-        If IsError(leftValue) And IsError(rightValue) Then
+    If isError(leftValue) Or isError(rightValue) Then
+        If isError(leftValue) And isError(rightValue) Then
             DataSync_ValuesEqual = ( _
                 DataSync_ErrorCode(leftValue) = DataSync_ErrorCode(rightValue))
         End If
@@ -791,9 +790,9 @@ Private Sub DataSync_EnsureColumnFormat( _
     Set targetRange = tblCalc.ListColumns(columnName).DataBodyRange
     If targetRange Is Nothing Then Exit Sub
 
-    currentFormat = targetRange.NumberFormat
+    currentFormat = targetRange.numberFormat
     If IsNull(currentFormat) Or CStr(currentFormat) <> expectedFormat Then
-        targetRange.NumberFormat = expectedFormat
+        targetRange.numberFormat = expectedFormat
         formatWriteCount = formatWriteCount + 1
     End If
 
@@ -859,7 +858,7 @@ Private Sub DataSync_ClearMissingIdOutputs( _
                 values = targetRange.value
                 changed = False
 
-                For Each rowKey In missingIdRows.Keys
+                For Each rowKey In missingIdRows.keys
                     If rowCount = 1 And Not IsArray(values) Then
                         If Not DataSync_ValuesEqual(values, Empty) Then
                             values = Empty
@@ -982,17 +981,17 @@ Private Function WBSRowHasTaskIdentity( _
 
     If Not mapWBS Is Nothing Then
         If mapWBS.Exists(VTS_COL_ID) Then
-            idVal = Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS(VTS_COL_ID)).value))
+            idVal = Trim$(CStr(tblWBS.DataBodyRange.cells(rowIndex, mapWBS(VTS_COL_ID)).value))
         End If
         If mapWBS.Exists(VTS_COL_WBS) Then
-            wbsVal = Trim$(CStr(tblWBS.DataBodyRange.Cells(rowIndex, mapWBS(VTS_COL_WBS)).value))
+            wbsVal = Trim$(CStr(tblWBS.DataBodyRange.cells(rowIndex, mapWBS(VTS_COL_WBS)).value))
         End If
     Else
         If TableHasColumn(tblWBS, SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_ID)) Then
-            idVal = Trim$(CStr(SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.Cells(rowIndex, 1).value))
+            idVal = Trim$(CStr(SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.cells(rowIndex, 1).value))
         End If
         If TableHasColumn(tblWBS, SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_WBS)) Then
-            wbsVal = Trim$(CStr(SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.Cells(rowIndex, 1).value))
+            wbsVal = Trim$(CStr(SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.cells(rowIndex, 1).value))
         End If
     End If
 
@@ -1103,7 +1102,7 @@ Private Sub EnsureTaskTypeColumnExists( _
 
     Dim wbsTaskTypeIndex As Long
     Dim calcTaskTypeIndex As Long
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
 
     If tblWBS Is Nothing Then Exit Sub
     If tblCalc Is Nothing Then Exit Sub
@@ -1114,7 +1113,7 @@ Private Sub EnsureTaskTypeColumnExists( _
     wbsTaskTypeIndex = 0
 
     On Error Resume Next
-    wbsTaskTypeIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).Index
+    wbsTaskTypeIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).index
     On Error GoTo 0
 
     If wbsTaskTypeIndex <= 0 Then
@@ -1141,7 +1140,7 @@ Private Sub EnsureTaskTypeColumnExists( _
     calcTaskTypeIndex = 0
 
     On Error Resume Next
-    calcTaskTypeIndex = tblCalc.ListColumns("Task Type").Index
+    calcTaskTypeIndex = tblCalc.ListColumns("Task Type").index
     On Error GoTo 0
 
     If calcTaskTypeIndex <= 0 Then
@@ -1150,7 +1149,7 @@ Private Sub EnsureTaskTypeColumnExists( _
     End If
 
     If Not tblCalc.DataBodyRange Is Nothing Then
-        tblCalc.ListColumns("Task Type").DataBodyRange.NumberFormat = "@"
+        tblCalc.ListColumns("Task Type").DataBodyRange.numberFormat = "@"
     End If
 
 End Sub
@@ -1163,7 +1162,7 @@ Private Sub EnsureCalendarColumnExists( _
     ByVal tblWBS As ListObject, _
     ByVal tblCalc As ListObject)
 
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
 
     If tblWBS Is Nothing Then Exit Sub
     If tblCalc Is Nothing Then Exit Sub
@@ -1179,11 +1178,11 @@ Private Sub EnsureCalendarColumnExists( _
     End If
 
     If Not tblWBS.DataBodyRange Is Nothing Then
-        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CAL).DataBodyRange.NumberFormat = "@"
+        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CAL).DataBodyRange.numberFormat = "@"
     End If
 
     If Not tblCalc.DataBodyRange Is Nothing Then
-        tblCalc.ListColumns("Cal").DataBodyRange.NumberFormat = "@"
+        tblCalc.ListColumns("Cal").DataBodyRange.numberFormat = "@"
     End If
 
 End Sub
@@ -1196,7 +1195,7 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
     ByVal tblCalc As ListObject)
 
     Dim colIndex As Long
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
 
     If tblWBS Is Nothing Then Exit Sub
     If tblCalc Is Nothing Then Exit Sub
@@ -1204,7 +1203,7 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
     
     colIndex = 0
     On Error Resume Next
-    colIndex = tblWBS.ListColumns("Deadline").Index
+    colIndex = tblWBS.ListColumns("Deadline").index
     On Error GoTo 0
 
     If colIndex > 0 Then
@@ -1213,7 +1212,7 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
 
     colIndex = 0
     On Error Resume Next
-    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).Index
+    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).index
     On Error GoTo 0
 
     If colIndex <= 0 Then
@@ -1223,7 +1222,7 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
 
     colIndex = 0
     On Error Resume Next
-    colIndex = tblCalc.ListColumns("Deadline").Index
+    colIndex = tblCalc.ListColumns("Deadline").index
     On Error GoTo 0
 
     If colIndex <= 0 Then
@@ -1233,7 +1232,7 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
 
     colIndex = 0
     On Error Resume Next
-    colIndex = tblCalc.ListColumns("Deadline Float").Index
+    colIndex = tblCalc.ListColumns("Deadline Float").index
     On Error GoTo 0
 
     If colIndex <= 0 Then
@@ -1242,12 +1241,12 @@ Private Sub EnsureDeadlineOutputColumnsExist( _
     End If
 
     If Not tblWBS.DataBodyRange Is Nothing Then
-        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).DataBodyRange.NumberFormat = "0"
+        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).DataBodyRange.numberFormat = "0"
     End If
 
     If Not tblCalc.DataBodyRange Is Nothing Then
-        tblCalc.ListColumns("Deadline").DataBodyRange.NumberFormat = "dd/mm/yyyy"
-        tblCalc.ListColumns("Deadline Float").DataBodyRange.NumberFormat = "0"
+        tblCalc.ListColumns("Deadline").DataBodyRange.numberFormat = "dd/mm/yyyy"
+        tblCalc.ListColumns("Deadline Float").DataBodyRange.numberFormat = "0"
     End If
 
 End Sub
@@ -1263,14 +1262,14 @@ Private Sub EnsureLongestPathOutputColumnsExist( _
     ByVal tblCalc As ListObject)
 
     Dim colIndex As Long
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
 
     If tblWBS Is Nothing Then Exit Sub
     If tblCalc Is Nothing Then Exit Sub
 
     colIndex = 0
     On Error Resume Next
-    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).Index
+    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).index
     On Error GoTo 0
 
     If colIndex <= 0 Then
@@ -1280,7 +1279,7 @@ Private Sub EnsureLongestPathOutputColumnsExist( _
 
     colIndex = 0
     On Error Resume Next
-    colIndex = tblCalc.ListColumns("Longest Path").Index
+    colIndex = tblCalc.ListColumns("Longest Path").index
     On Error GoTo 0
 
     If colIndex <= 0 Then
@@ -1290,32 +1289,32 @@ Private Sub EnsureLongestPathOutputColumnsExist( _
 
     colIndex = 0
     On Error Resume Next
-    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH_REX).Index
+    colIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH_REX).index
     On Error GoTo 0
 
     If colIndex <= 0 Then
-        Set newCol = tblWBS.ListColumns.Add(Position:=SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).Index + 1)
+        Set newCol = tblWBS.ListColumns.Add(Position:=SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).index + 1)
         newCol.Name = SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_LONGEST_PATH_REX)
     End If
 
     colIndex = 0
     On Error Resume Next
-    colIndex = tblCalc.ListColumns("Longest Path REX").Index
+    colIndex = tblCalc.ListColumns("Longest Path REX").index
     On Error GoTo 0
 
     If colIndex <= 0 Then
-        Set newCol = tblCalc.ListColumns.Add(Position:=tblCalc.ListColumns("Longest Path").Index + 1)
+        Set newCol = tblCalc.ListColumns.Add(Position:=tblCalc.ListColumns("Longest Path").index + 1)
         newCol.Name = "Longest Path REX"
     End If
 
     If Not tblWBS.DataBodyRange Is Nothing Then
-        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).DataBodyRange.NumberFormat = "@"
-        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH_REX).DataBodyRange.NumberFormat = "@"
+        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH).DataBodyRange.numberFormat = "@"
+        SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_LONGEST_PATH_REX).DataBodyRange.numberFormat = "@"
     End If
 
     If Not tblCalc.DataBodyRange Is Nothing Then
-        tblCalc.ListColumns("Longest Path").DataBodyRange.NumberFormat = "@"
-        tblCalc.ListColumns("Longest Path REX").DataBodyRange.NumberFormat = "@"
+        tblCalc.ListColumns("Longest Path").DataBodyRange.numberFormat = "@"
+        tblCalc.ListColumns("Longest Path REX").DataBodyRange.numberFormat = "@"
     End If
 
 End Sub
@@ -1442,7 +1441,7 @@ Function Sync_Forecast_Only() As Boolean
     Application.EnableEvents = False
 
     For r = 1 To tblWBS.ListRows.Count
-        idValue = tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_ID)).value
+        idValue = tblWBS.DataBodyRange.cells(r, mapWBS(VTS_COL_ID)).value
         If Trim(CStr(idValue)) <> "" Then
             idKey = CStr(idValue)
             wbsIdRows(idKey) = r
@@ -1451,7 +1450,7 @@ Function Sync_Forecast_Only() As Boolean
 
     For r = 1 To tblCalc.ListRows.Count
 
-        idValue = tblCalc.DataBodyRange.Cells(r, mapCalc("ID")).value
+        idValue = tblCalc.DataBodyRange.cells(r, mapCalc("ID")).value
 
         If Trim(CStr(idValue)) <> "" Then
             idKey = CStr(idValue)
@@ -1459,11 +1458,11 @@ Function Sync_Forecast_Only() As Boolean
             If wbsIdRows.Exists(idKey) Then
                 wbsRowIndex = wbsIdRows(idKey)
 
-                tblCalc.DataBodyRange.Cells(r, mapCalc("Forecast Start")).value = _
-                    tblWBS.DataBodyRange.Cells(wbsRowIndex, mapWBS(VTS_COL_FORECAST_START)).value
+                tblCalc.DataBodyRange.cells(r, mapCalc("Forecast Start")).value = _
+                    tblWBS.DataBodyRange.cells(wbsRowIndex, mapWBS(VTS_COL_FORECAST_START)).value
 
-                tblCalc.DataBodyRange.Cells(r, mapCalc("Forecast Finish")).value = _
-                    tblWBS.DataBodyRange.Cells(wbsRowIndex, mapWBS(VTS_COL_FORECAST_FINISH)).value
+                tblCalc.DataBodyRange.cells(r, mapCalc("Forecast Finish")).value = _
+                    tblWBS.DataBodyRange.cells(wbsRowIndex, mapWBS(VTS_COL_FORECAST_FINISH)).value
             End If
         End If
 
@@ -1534,15 +1533,15 @@ Private Sub ApplyWBSDateFormats(ByVal tblWBS As ListObject)
 
     dateFormat = Settings_GetDateNumberFormat()
 
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_BASELINE_START).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_BASELINE_FINISH).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ACTUAL_START).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ACTUAL_FINISH).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_FORECAST_START).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_FORECAST_FINISH).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).DataBodyRange.NumberFormat = "0"
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CALCULATED_START).DataBodyRange.NumberFormat = dateFormat
-    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CALCULATED_FINISH).DataBodyRange.NumberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_BASELINE_START).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_BASELINE_FINISH).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ACTUAL_START).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ACTUAL_FINISH).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_FORECAST_START).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_FORECAST_FINISH).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_DEADLINE_FLOAT).DataBodyRange.numberFormat = "0"
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CALCULATED_START).DataBodyRange.numberFormat = dateFormat
+    SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_CALCULATED_FINISH).DataBodyRange.numberFormat = dateFormat
 
     On Error GoTo 0
 
@@ -1717,13 +1716,13 @@ End Function
 '------------------------------------------------------------------------------
 Private Sub WriteLogicLinksHeaders(ByVal headerRange As Range)
 
-    headerRange.Cells(1, 1).value = "Succ ID"
-    headerRange.Cells(1, 2).value = "Succ WBS"
-    headerRange.Cells(1, 3).value = "Pred ID"
-    headerRange.Cells(1, 4).value = "Pred WBS"
-    headerRange.Cells(1, 5).value = "Link Type"
-    headerRange.Cells(1, 6).value = "Lag"
-    headerRange.Cells(1, 7).value = "Raw Token"
+    headerRange.cells(1, 1).value = "Succ ID"
+    headerRange.cells(1, 2).value = "Succ WBS"
+    headerRange.cells(1, 3).value = "Pred ID"
+    headerRange.cells(1, 4).value = "Pred WBS"
+    headerRange.cells(1, 5).value = "Link Type"
+    headerRange.cells(1, 6).value = "Lag"
+    headerRange.cells(1, 7).value = "Raw Token"
 
 End Sub
 
@@ -1742,8 +1741,8 @@ Private Sub ClearLogicLinksTableRows(ByVal tbl As ListObject)
     If tbl Is Nothing Then Exit Sub
     If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
 
-    Set targetRange = tbl.HeaderRowRange.Cells(1, 1).Resize(2, tbl.ListColumns.Count)
-    If tbl.Range.Rows.Count <> 2 Then tbl.Resize targetRange
+    Set targetRange = tbl.HeaderRowRange.cells(1, 1).Resize(2, tbl.ListColumns.Count)
+    If tbl.Range.rows.Count <> 2 Then tbl.Resize targetRange
 
 End Sub
 
@@ -1825,31 +1824,43 @@ Private Sub RewriteLogicLinksTable( _
     ByVal outCount As Long)
 
     Dim perfScope As clsPerfScope
-    Dim targetRows As Long
     Dim targetRange As Range
 
     Set perfScope = Profiler_BeginScope("RewriteLogicLinksTable", "Excel Table Write")
 
     If tbl Is Nothing Then Exit Sub
-    targetRows = outCount
-    If targetRows < 1 Then targetRows = 1
+
+    If outCount <= 0 Then
+        ClearLogicLinksTableRows tbl
+        Exit Sub
+    End If
 
     If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
-    Set targetRange = tbl.HeaderRowRange.Cells(1, 1).Resize(targetRows + 1, tbl.ListColumns.Count)
-    If tbl.Range.Rows.Count <> targetRows + 1 Then tbl.Resize targetRange
 
-    If outCount > 0 Then
-        Set targetRange = tbl.DataBodyRange.Resize(outCount, 7)
-        targetRange.Columns(1).NumberFormat = "@"
-        targetRange.Columns(2).NumberFormat = "@"
-        targetRange.Columns(3).NumberFormat = "@"
-        targetRange.Columns(4).NumberFormat = "@"
-        targetRange.Columns(5).NumberFormat = "@"
-        targetRange.Columns(7).NumberFormat = "@"
-        targetRange.Columns(6).NumberFormat = "0"
-        targetRange.value = outArr
-        ApplyLogicLinksTableFormats tbl
+    'FR: Une table sans DataBodyRange compte encore sa ligne d'insertion dans Range.
+    'EN: A table without DataBodyRange still counts its insertion row in Range.
+    Set targetRange = tbl.HeaderRowRange.cells(1, 1).Resize(outCount + 1, tbl.ListColumns.Count)
+    If tbl.ListRows.Count <> outCount Then tbl.Resize targetRange
+
+    'Resize can still leave the last row as InsertRowRange instead of a real ListRow.
+    'Materialize that single missing row after the bulk resize.
+    If tbl.ListRows.Count < outCount Then tbl.ListRows.Add
+
+    If tbl.DataBodyRange Is Nothing Or tbl.ListRows.Count <> outCount Then
+        Err.Raise vbObjectError + 2312, "RewriteLogicLinksTable", _
+            "tbl_LOGIC_LINKS did not materialize its data rows."
     End If
+
+    Set targetRange = tbl.DataBodyRange.cells(1, 1).Resize(outCount, 7)
+    targetRange.columns(1).numberFormat = "@"
+    targetRange.columns(2).numberFormat = "@"
+    targetRange.columns(3).numberFormat = "@"
+    targetRange.columns(4).numberFormat = "@"
+    targetRange.columns(5).numberFormat = "@"
+    targetRange.columns(7).numberFormat = "@"
+    targetRange.columns(6).numberFormat = "0"
+    targetRange.value = outArr
+    ApplyLogicLinksTableFormats tbl
 
 End Sub
 
@@ -1866,14 +1877,14 @@ Private Sub ApplyLogicLinksTableFormats(ByVal tbl As ListObject)
 
     On Error Resume Next
 
-    tbl.ListColumns("Succ ID").DataBodyRange.NumberFormat = "@"
-    tbl.ListColumns("Succ WBS").DataBodyRange.NumberFormat = "@"
-    tbl.ListColumns("Pred ID").DataBodyRange.NumberFormat = "@"
-    tbl.ListColumns("Pred WBS").DataBodyRange.NumberFormat = "@"
-    tbl.ListColumns("Link Type").DataBodyRange.NumberFormat = "@"
-    tbl.ListColumns("Raw Token").DataBodyRange.NumberFormat = "@"
+    tbl.ListColumns("Succ ID").DataBodyRange.numberFormat = "@"
+    tbl.ListColumns("Succ WBS").DataBodyRange.numberFormat = "@"
+    tbl.ListColumns("Pred ID").DataBodyRange.numberFormat = "@"
+    tbl.ListColumns("Pred WBS").DataBodyRange.numberFormat = "@"
+    tbl.ListColumns("Link Type").DataBodyRange.numberFormat = "@"
+    tbl.ListColumns("Raw Token").DataBodyRange.numberFormat = "@"
 
-    tbl.ListColumns("Lag").DataBodyRange.NumberFormat = "0"
+    tbl.ListColumns("Lag").DataBodyRange.numberFormat = "0"
 
     On Error GoTo 0
 
@@ -1888,7 +1899,7 @@ Private Function TableHasColumn(ByVal tbl As ListObject, ByVal columnName As Str
 
     Dim perfScope As clsPerfScope
 
-    Dim col As ListColumn
+    Dim col As listColumn
 
     Set perfScope = Profiler_BeginScope("TableHasColumn", "Excel Metadata")
 
@@ -1957,9 +1968,9 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
     Set rng = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).DataBodyRange
     tableData = tblWBS.DataBodyRange.value
     rowCount = tblWBS.ListRows.Count
-    idIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ID).Index
-    wbsIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_WBS).Index
-    taskTypeIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).Index
+    idIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_ID).index
+    wbsIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_WBS).index
+    taskTypeIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).index
     ReDim outputValues(1 To rowCount, 1 To 1)
 
     'Default blank cells to Task only on rows that have an ID/WBS identity.
@@ -1993,15 +2004,15 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
              Formula1:="Task,Milestone,Level of Effort"
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = "Task Type"
-        .InputMessage = "Choose: Task, Milestone, or Level of Effort."
-        .ErrorTitle = "Invalid Task Type"
+        .inputTitle = "Task Type"
+        .inputMessage = "Choose: Task, Milestone, or Level of Effort."
+        .errorTitle = "Invalid Task Type"
         .errorMessage = "Allowed values: Task, Milestone, Level of Effort."
         .ShowInput = True
         .ShowError = True
     End With
 
-    rng.NumberFormat = "@"
+    rng.numberFormat = "@"
 
 End Sub
 
@@ -2015,7 +2026,7 @@ Private Sub EnsureSummaryDisplayColumnExists( _
 
     Dim perfScope As clsPerfScope
 
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
     Dim targetIndex As Long
 
     Set perfScope = Profiler_BeginScope("EnsureSummaryDisplayColumnExists", "Excel Infrastructure")
@@ -2023,9 +2034,9 @@ Private Sub EnsureSummaryDisplayColumnExists( _
     If Not tblWBS Is Nothing Then
         If Not TableHasColumn(tblWBS, SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_S)) Then
             If TableHasColumn(tblWBS, SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_COMMENTS)) Then
-                targetIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_COMMENTS).Index
+                targetIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_COMMENTS).index
             ElseIf TableHasColumn(tblWBS, SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_TASK_TYPE)) Then
-                targetIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).Index + 1
+                targetIndex = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_TASK_TYPE).index + 1
             Else
                 targetIndex = tblWBS.ListColumns.Count + 1
             End If
@@ -2036,7 +2047,7 @@ Private Sub EnsureSummaryDisplayColumnExists( _
 
         If Not tblWBS.DataBodyRange Is Nothing Then
             With SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_S).DataBodyRange
-                .NumberFormat = "@"
+                .numberFormat = "@"
                 With .Validation
                     .Delete
                     .Add Type:=xlValidateList, _
@@ -2045,9 +2056,9 @@ Private Sub EnsureSummaryDisplayColumnExists( _
                          Formula1:="Y,N"
                     .IgnoreBlank = True
                     .InCellDropdown = True
-                    .InputTitle = "S"
-                    .InputMessage = "Choose Y to show in Summary, N to hide."
-                    .ErrorTitle = "Invalid S"
+                    .inputTitle = "S"
+                    .inputMessage = "Choose Y to show in Summary, N to hide."
+                    .errorTitle = "Invalid S"
                     .errorMessage = "Allowed values: blank, Y, N."
                     .ShowInput = True
                     .ShowError = True
@@ -2063,7 +2074,7 @@ Private Sub EnsureSummaryDisplayColumnExists( _
         End If
 
         If Not tblCalc.DataBodyRange Is Nothing Then
-            tblCalc.ListColumns("S").DataBodyRange.NumberFormat = "@"
+            tblCalc.ListColumns("S").DataBodyRange.numberFormat = "@"
         End If
     End If
 
@@ -2174,7 +2185,7 @@ Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
     Dim perfScope As clsPerfScope
 
     Dim rng As Range
-    Dim newCol As ListColumn
+    Dim newCol As listColumn
 
     Set perfScope = Profiler_BeginScope("EnsureWBSCalendarInputSetup", "Excel Validation")
 
@@ -2197,15 +2208,15 @@ Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
              Formula1:=CALENDAR_7D & "," & CALENDAR_6D & "," & CALENDAR_5D
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = "Cal"
-        .InputMessage = "Choose: 7j/7, 6j/7, or 5j/7."
-        .ErrorTitle = "Invalid Cal"
+        .inputTitle = "Cal"
+        .inputMessage = "Choose: 7j/7, 6j/7, or 5j/7."
+        .errorTitle = "Invalid Cal"
         .errorMessage = "Allowed values: blank, 7j/7, 6j/7, 5j/7."
         .ShowInput = True
         .ShowError = True
     End With
 
-    rng.NumberFormat = "@"
+    rng.numberFormat = "@"
 
 End Sub
 
@@ -2438,7 +2449,6 @@ Private Sub DataSync_AddConsoleMessage( _
         BiMsg(frText, enText)
 
 End Sub
-
 
 
 

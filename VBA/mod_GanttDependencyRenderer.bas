@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_GanttDependencyRenderer"
 Option Explicit
 
 '===============================================================================
@@ -131,6 +130,11 @@ Public Function GanttDependency_DrawAffectedLinks( _
     End If
 
     If affectedLinks.Count = 0 Then
+        If GanttDependencySvg_IsRequested() Then
+            If Not gLinkSpecsByPrefix Is Nothing Then
+                If gLinkSpecsByPrefix.Count = 0 Then GanttDependencySvg_AcceptEmptyModel wsGantt
+            End If
+        End If
         Profiler_RecordOperation "GanttLocalLinksInspected", 0, 0#
         GanttDependency_DrawAffectedLinks = True
         Exit Function
@@ -157,7 +161,7 @@ Public Function GanttDependency_DrawAffectedLinks( _
     If GanttDependencySvg_IsRequested() And GanttDependencySvg_HasRoutes() Then
         Set anchorCache = CreateObject("Scripting.Dictionary")
 
-        For Each prefix In affectedLinks.Keys
+        For Each prefix In affectedLinks.keys
             If Not gLinkSpecsByPrefix.Exists(CStr(prefix)) Then
                 fallbackReason = "DependencySvgSpecMissing"
                 Exit Function
@@ -202,10 +206,10 @@ Public Function GanttDependency_DrawAffectedLinks( _
     gDependencyArrowTransfers = 0
 
     'Resolve only the stable names owned by affected links.
-    For Each prefix In affectedLinks.Keys
+    For Each prefix In affectedLinks.keys
         If gSegmentsByLink.Exists(CStr(prefix)) Then
             Set oldSegments = gSegmentsByLink(CStr(prefix))
-            For Each segmentName In oldSegments.Keys
+            For Each segmentName In oldSegments.keys
                 Set shp = Nothing
                 On Error Resume Next
                 Set shp = wsGantt.Shapes(CStr(segmentName))
@@ -220,7 +224,7 @@ Public Function GanttDependency_DrawAffectedLinks( _
 
     Set anchorCache = CreateObject("Scripting.Dictionary")
 
-    For Each prefix In affectedLinks.Keys
+    For Each prefix In affectedLinks.keys
         If Not gLinkSpecsByPrefix.Exists(CStr(prefix)) Then
             fallbackReason = "DependencySpecMissing"
             GoTo FailedWithoutError
@@ -240,10 +244,10 @@ Public Function GanttDependency_DrawAffectedLinks( _
 
     'Delete only stale segments belonging to the affected link prefixes, then
     'commit the new per-link segment index.
-    For Each prefix In affectedLinks.Keys
+    For Each prefix In affectedLinks.keys
         If gSegmentsByLink.Exists(CStr(prefix)) Then
             Set oldSegments = gSegmentsByLink(CStr(prefix))
-            For Each segmentName In oldSegments.Keys
+            For Each segmentName In oldSegments.keys
                 If Not gExpectedDependencySegments.Exists(CStr(segmentName)) Then
                     On Error Resume Next
                     wsGantt.Shapes(CStr(segmentName)).Delete
@@ -255,7 +259,7 @@ Public Function GanttDependency_DrawAffectedLinks( _
         End If
 
         Set newSegments = CreateObject("Scripting.Dictionary")
-        For Each segmentName In gExpectedDependencySegments.Keys
+        For Each segmentName In gExpectedDependencySegments.keys
             If Left$(CStr(segmentName), Len(CStr(prefix)) + 1) = CStr(prefix) & "_" Then
                 newSegments(CStr(segmentName)) = True
             End If
@@ -376,10 +380,10 @@ Private Sub GanttDependency_CollectAffectedLinkPrefixes( _
 
     If affectedIds Is Nothing Then Exit Sub
 
-    For Each idVal In affectedIds.Keys
+    For Each idVal In affectedIds.keys
         If sourceIndex.Exists(CStr(idVal)) Then
             Set linksForTask = sourceIndex(CStr(idVal))
-            For Each prefix In linksForTask.Keys
+            For Each prefix In linksForTask.keys
                 target(CStr(prefix)) = True
             Next prefix
         End If
@@ -472,11 +476,11 @@ Public Function GanttDependency_PrimeLocalIndex( _
 
     If refreshFromCalc Then Set gExpandedLinks = Nothing
     EnsureExpandedLinksCacheFromCalc
-    If Not HasExpandedLinksAvailable() Then Exit Function
+    If gExpandedLinks Is Nothing Then Exit Function
 
     GanttDependency_ResetLocalIndex
 
-    For Each succId In gExpandedLinks.Keys
+    For Each succId In gExpandedLinks.keys
         linkIndex = 0
         For Each linkItem In gExpandedLinks(CStr(succId))
             predId = Trim$(CStr(linkItem("PredID")))
@@ -491,7 +495,7 @@ Public Function GanttDependency_PrimeLocalIndex( _
     Next succId
 
     If Not oldSpecs Is Nothing Then
-        For Each prefix In oldSpecs.Keys
+        For Each prefix In oldSpecs.keys
             If Not gLinkSpecsByPrefix.Exists(CStr(prefix)) Then
                 changedPrefixes(CStr(prefix)) = True
             ElseIf Not GanttDependency_LinkSpecsEqual( _
@@ -499,7 +503,7 @@ Public Function GanttDependency_PrimeLocalIndex( _
                 changedPrefixes(CStr(prefix)) = True
             End If
         Next prefix
-        For Each prefix In gLinkSpecsByPrefix.Keys
+        For Each prefix In gLinkSpecsByPrefix.keys
             If Not oldSpecs.Exists(CStr(prefix)) Then changedPrefixes(CStr(prefix)) = True
         Next prefix
     End If
@@ -620,6 +624,14 @@ Public Sub DrawDependencyLinks( _
         End If
 
         EnsureExpandedLinksCacheFromCalc
+        If Not gExpandedLinks Is Nothing Then
+            If gExpandedLinks.Count = 0 Then
+                GanttDependency_ResetLocalIndex
+                GanttDependencySvg_AcceptEmptyModel wsGantt
+                svgRendered = True
+                GoTo SafeExit
+            End If
+        End If
         If HasExpandedLinksAvailable() Then
             svgRendered = GanttDependency_TryDrawSvgFull( _
                 wsGantt, mapWBS, dataArr, hasChildren, rowById, _
@@ -649,7 +661,7 @@ Public Sub DrawDependencyLinks( _
     Set anchorCache = CreateObject("Scripting.Dictionary")
     GanttDependency_ResetLocalIndex
 
-    For Each succId In gExpandedLinks.Keys
+    For Each succId In gExpandedLinks.keys
 
         linkIndex = 0
 
@@ -738,7 +750,7 @@ Private Function GanttDependency_TryDrawSvgFull( _
     Set anchorCache = CreateObject("Scripting.Dictionary")
     GanttDependency_ResetLocalIndex
 
-    For Each succId In gExpandedLinks.Keys
+    For Each succId In gExpandedLinks.keys
         linkIndex = 0
         For Each linkItem In gExpandedLinks(CStr(succId))
             predId = Trim$(CStr(linkItem("PredID")))
@@ -804,9 +816,9 @@ Private Function GanttDependency_LoadIndexedExistingSegments(ByVal ws As Workshe
     If gSegmentsByLink Is Nothing Then Exit Function
     If gSegmentsByLink.Count = 0 Then Exit Function
 
-    For Each prefix In gSegmentsByLink.Keys
+    For Each prefix In gSegmentsByLink.keys
         Set segments = gSegmentsByLink(CStr(prefix))
-        For Each segmentName In segments.Keys
+        For Each segmentName In segments.keys
             Set shp = Nothing
             On Error Resume Next
             Set shp = ws.Shapes(CStr(segmentName))
@@ -846,9 +858,9 @@ Private Sub GanttDependency_SetIndexedVisibility(ByVal ws As Worksheet, ByVal ma
         Exit Sub
     End If
 
-    For Each prefix In gSegmentsByLink.Keys
+    For Each prefix In gSegmentsByLink.keys
         Set segments = gSegmentsByLink(CStr(prefix))
-        For Each segmentName In segments.Keys
+        For Each segmentName In segments.keys
             Set shp = Nothing
             On Error Resume Next
             Set shp = ws.Shapes(CStr(segmentName))
@@ -1767,7 +1779,7 @@ Private Sub GanttDependency_SetExistingVisibility( _
     expectedVisibility = IIf(visibleValue, msoTrue, msoFalse)
     If gExistingDependencySegments Is Nothing Then Exit Sub
 
-    For Each shapeName In gExistingDependencySegments.Keys
+    For Each shapeName In gExistingDependencySegments.keys
         If gExistingDependencySegments(shapeName).Visible <> expectedVisibility Then
             gExistingDependencySegments(shapeName).Visible = expectedVisibility
             changedCount = changedCount + 1
@@ -1793,7 +1805,7 @@ Private Sub GanttDependency_DeleteStaleSegments(ByVal ws As Worksheet)
 
     If gExistingDependencySegments Is Nothing Then Exit Sub
 
-    For Each shapeName In gExistingDependencySegments.Keys
+    For Each shapeName In gExistingDependencySegments.keys
         If Not gExpectedDependencySegments.Exists(CStr(shapeName)) Then
             Set shp = gExistingDependencySegments(CStr(shapeName))
             shp.Delete
@@ -1860,10 +1872,10 @@ Private Function BuildExpandedLinksCacheFromLogicLinksTable() As Object
 
     For r = 1 To network.Count
 
-        Set link = network.Item(r)
-        succId = link.SuccId
-        predId = link.PredId
-        linkType = link.LinkType
+        Set link = network.item(r)
+        succId = link.succId
+        predId = link.predId
+        linkType = link.linkType
 
         If succId = "" Then GoTo NextRow
         If predId = "" Then GoTo NextRow
@@ -1877,8 +1889,8 @@ Private Function BuildExpandedLinksCacheFromLogicLinksTable() As Object
         Set tokenInfo = CreateObject("Scripting.Dictionary")
         tokenInfo("PredID") = predId
         tokenInfo("LinkType") = linkType
-        tokenInfo("Lag") = link.Lag
-        tokenInfo("RawToken") = link.RawToken
+        tokenInfo("Lag") = link.lag
+        tokenInfo("RawToken") = link.rawToken
 
         d(succId).Add tokenInfo
 

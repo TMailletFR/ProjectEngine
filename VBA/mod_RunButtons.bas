@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_RunButtons"
 Option Explicit
 
 '===============================================================================
@@ -21,13 +20,13 @@ Option Explicit
 '=====================================================
 ' USER ORCHESTRATION BUTTONS
 '
-' Règle :
+' RÃ¨gle :
 ' - les boutons ne font pas de push direct vers WBS ;
-' - Run_Calc_Engine pilote le bridge + état ;
-' - le bridge se charge du sync, du calcul, puis du push contrôlé.
+' - Run_Calc_Engine pilote le bridge + Ã©tat ;
+' - le bridge se charge du sync, du calcul, puis du push contrÃ´lÃ©.
 '
 ' Console routing:
-' - les erreurs VBA des boutons sont envoyées dans frmPlanningMessages
+' - les erreurs VBA des boutons sont envoyÃ©es dans frmPlanningMessages
 ' - aucun MsgBox direct dans ce module
 '=====================================================
 
@@ -61,7 +60,7 @@ Private Sub RunButtons_ShowDeferredWorkflowConsole( _
 
 SafeExit:
     If finalDisplayStarted Then EndPlanningWorkflowFinalDisplay
-    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.source, Err.Description
 
 End Sub
 
@@ -76,11 +75,23 @@ Private Sub RunButtons_AddConsoleError( _
 
     If consoleMessages Is Nothing Then Exit Sub
 
+    If procName = "Run_Gantt_Update" Then
+        CalcBridge_AddConsoleMessage consoleMessages, _
+            "STOP", _
+            "FR:" & vbCrLf & _
+            "Le Gantt n'a pas pu Ãªtre mis Ã  jour et reste indisponible." & vbCrLf & _
+            "RÃ©essayez l'action. Si le problÃ¨me persiste, transmettez le classeur au support." & vbCrLf & vbCrLf & _
+            "EN:" & vbCrLf & _
+            "The Gantt could not be updated and remains unavailable." & vbCrLf & _
+            "Retry the action. If the problem persists, send the workbook to support."
+        Exit Sub
+    End If
+
     CalcBridge_AddConsoleMessage consoleMessages, _
         "STOP", _
         "FR:" & vbCrLf & _
         "Erreur VBA dans " & procName & vbCrLf & _
-        "-> vérifier le dernier bloc modifié dans mod_RunButtons" & vbCrLf & vbCrLf & _
+        "-> vÃ©rifier le dernier bloc modifiÃ© dans mod_RunButtons" & vbCrLf & vbCrLf & _
         "EN:" & vbCrLf & _
         "VBA error in " & procName & vbCrLf & _
         "-> check the last edited block in mod_RunButtons"
@@ -176,6 +187,7 @@ Public Sub Run_Gantt_Update()
 
     Dim wsCaller As Worksheet
     Dim workflowStarted As Boolean
+    Dim finalConsoleShown As Boolean
 
     On Error GoTo SafeExit
 
@@ -226,14 +238,19 @@ Public Sub Run_Gantt_Update()
 
 CleanExit:
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Gantt_Update"
+    If workflowStarted And Not finalConsoleShown Then RunButtons_ShowDeferredWorkflowConsole
     If workflowStarted Then EndPlanningWorkflow
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Gantt_Update"
     Exit Sub
 
 SafeExit:
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Gantt_Update Err=" & CStr(Err.Number)
-
-    RunButtons_ShowConsoleError "Run_Gantt_Update"
+    If workflowStarted Then
+        RunButtons_ShowDeferredWorkflowConsole "Run_Gantt_Update"
+        finalConsoleShown = True
+    Else
+        RunButtons_ShowConsoleError "Run_Gantt_Update"
+    End If
     Resume CleanExit
 
 End Sub
@@ -380,7 +397,6 @@ SafeExit:
     Resume CleanExit
 
 End Sub
-
 
 
 

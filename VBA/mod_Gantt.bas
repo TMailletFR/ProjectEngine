@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_Gantt"
 Option Explicit
 
 '===============================================================================
@@ -411,6 +410,14 @@ Private Function Gantt_DependencyDiagnosticsAreReady(ByVal diag As Variant) As B
     If CBool(diag(1, 7)) Then Exit Function
     If Not CBool(diag(1, 10)) Then Exit Function
 
+    If CBool(diag(1, 13)) And CLng(diag(1, 5)) = 0 Then
+        Gantt_DependencyDiagnosticsAreReady = _
+            Not CBool(diag(1, 2)) And _
+            Not CBool(diag(1, 3)) And _
+            Not CBool(diag(1, 4))
+        Exit Function
+    End If
+
     If IsAggregatedScaleMode() Then
         Gantt_DependencyDiagnosticsAreReady = True
         Exit Function
@@ -588,4 +595,3 @@ Failed:
     Gantt_TryApplyTestDayPredictiveRegistry = False
 
 End Function
-

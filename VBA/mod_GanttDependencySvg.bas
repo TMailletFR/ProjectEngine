@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_GanttDependencySvg"
 Option Explicit
 
 '===============================================================================
@@ -153,12 +152,12 @@ Public Sub GanttDependencySvg_InvalidatePersistentCache( _
 
     Set cacheWs = GetSvgCacheSheet(False)
     If Not cacheWs Is Nothing Then
-        cacheWs.Cells.Clear
-        cacheWs.Range("A1").Value = "RecordType"
-        cacheWs.Range("A2").Value = "INVALIDATED"
-        cacheWs.Range("B2").Value = SVG_CACHE_VERSION
-        cacheWs.Range("C2").Value = reason
-        cacheWs.Range("D2").Value = Format$(Now, "yyyy-mm-dd hh:nn:ss")
+        cacheWs.cells.Clear
+        cacheWs.Range("A1").value = "RecordType"
+        cacheWs.Range("A2").value = "INVALIDATED"
+        cacheWs.Range("B2").value = SVG_CACHE_VERSION
+        cacheWs.Range("C2").value = reason
+        cacheWs.Range("D2").value = Format$(Now, "yyyy-mm-dd hh:nn:ss")
         cacheWs.Visible = xlSheetVeryHidden
     End If
     On Error GoTo 0
@@ -206,19 +205,19 @@ Public Sub GanttDependencySvg_StoreRoute(ByVal route As clsGanttDependencyRoute)
     If route Is Nothing Then Exit Sub
     If gRoutesById Is Nothing Then Set gRoutesById = CreateObject("Scripting.Dictionary")
 
-    If route.SegmentCount = 0 Then
-        If gRoutesById.Exists(route.LinkId) Then gRoutesById.Remove route.LinkId
+    If route.segmentCount = 0 Then
+        If gRoutesById.Exists(route.linkId) Then gRoutesById.Remove route.linkId
         Exit Sub
     End If
 
-    If gRoutesById.Exists(route.LinkId) Then
-        Set gRoutesById(route.LinkId) = route
+    If gRoutesById.Exists(route.linkId) Then
+        Set gRoutesById(route.linkId) = route
     Else
-        gRoutesById.Add route.LinkId, route
+        gRoutesById.Add route.linkId, route
     End If
 
     If Not gDirtyLinkIds Is Nothing Then
-        If gDirtyLinkIds.Exists(route.LinkId) Then gDirtyLinkIds.Remove route.LinkId
+        If gDirtyLinkIds.Exists(route.linkId) Then gDirtyLinkIds.Remove route.linkId
     End If
 
 End Sub
@@ -263,7 +262,7 @@ Public Sub GanttDependencySvg_ReconcileRouteIds( _
     If gRoutesById Is Nothing Then Exit Sub
     Set staleIds = New Collection
 
-    For Each routeId In gRoutesById.Keys
+    For Each routeId In gRoutesById.keys
         If expectedRouteIds Is Nothing Then
             staleIds.Add CStr(routeId)
         ElseIf Not expectedRouteIds.Exists(CStr(routeId)) Then
@@ -288,7 +287,7 @@ Public Sub GanttDependencySvg_MarkLinksDirty(ByVal linkIds As Object)
     If gDirtyLinkIds Is Nothing Then Set gDirtyLinkIds = CreateObject("Scripting.Dictionary")
     If linkIds Is Nothing Then Exit Sub
 
-    For Each linkId In linkIds.Keys
+    For Each linkId In linkIds.keys
         gDirtyLinkIds(CStr(linkId)) = True
     Next linkId
     gLastDirtyLinkCount = linkIds.Count
@@ -354,6 +353,46 @@ Public Sub GanttDependencySvg_EnsureFrontLayer(ByVal ws As Worksheet)
 
 End Sub
 
+Public Sub GanttDependencySvg_AcceptEmptyModel(ByVal ws As Worksheet)
+
+    Dim layer As Shape
+    Dim cacheWs As Worksheet
+
+    EnsureModeInitialized
+    On Error GoTo Failed
+
+    Set gRoutesById = CreateObject("Scripting.Dictionary")
+    Set gDirtyLinkIds = CreateObject("Scripting.Dictionary")
+    gLastTaskGeometrySignature = GanttDependencySvg_CurrentTaskGeometrySnapshot(ws, gLastTaskGeometryByShape)
+    If Len(gLastTaskGeometrySignature) = 0 Then GoTo Failed
+
+    Set layer = GetLayerShape(ws)
+    If Not layer Is Nothing Then layer.Delete
+
+    Set cacheWs = GetSvgCacheSheet(False)
+    If Not cacheWs Is Nothing Then
+        cacheWs.cells.Clear
+        cacheWs.Range("A1").value = "RecordType"
+        cacheWs.Range("A2").value = "EMPTY"
+        cacheWs.Range("B2").value = SVG_CACHE_VERSION
+        cacheWs.Visible = xlSheetVeryHidden
+    End If
+
+    gLastContentHash = vbNullString
+    gLastFallbackReason = vbNullString
+    gLastDirtyLinkCount = 0
+    gFullModelDirty = False
+    gLayerVisible = False
+    gActiveMode = SVG_MODE
+    Profiler_RecordOperation "GanttDependencySvgEmptyModelsAccepted", 1, 0#
+    Exit Sub
+
+Failed:
+    gFullModelDirty = True
+    gLastFallbackReason = "EmptyModelCommitError_" & CStr(Err.Number)
+
+End Sub
+
 Public Sub GanttDependencySvg_SetVisible(ByVal ws As Worksheet, ByVal makeVisible As Boolean)
 
     Dim shp As Shape
@@ -402,9 +441,9 @@ Public Function GanttDependencySvg_TryHydratePersistentCache( _
 
     Set cacheWs = GetSvgCacheSheet(False)
     If cacheWs Is Nothing Then Exit Function
-    If cacheWs.UsedRange.Rows.Count < 3 Then Exit Function
+    If cacheWs.usedRange.rows.Count < 3 Then Exit Function
 
-    arr = cacheWs.UsedRange.Value
+    arr = cacheWs.usedRange.value
     If Not IsArray(arr) Then Exit Function
     rowCount = UBound(arr, 1)
     If CStr(arr(2, 1)) <> "META" Then Exit Function
@@ -670,9 +709,9 @@ Public Function GanttDependencySvg_SegmentCount() As Long
     Dim route As clsGanttDependencyRoute
 
     If gRoutesById Is Nothing Then Exit Function
-    For Each routeId In gRoutesById.Keys
+    For Each routeId In gRoutesById.keys
         Set route = gRoutesById(CStr(routeId))
-        GanttDependencySvg_SegmentCount = GanttDependencySvg_SegmentCount + route.SegmentCount
+        GanttDependencySvg_SegmentCount = GanttDependencySvg_SegmentCount + route.segmentCount
     Next routeId
 
 End Function
@@ -789,6 +828,13 @@ Public Function GanttDependencySvg_IsLayerPhysicalStateCurrent(ByVal ws As Works
 
     EnsureModeInitialized
     If ws Is Nothing Then Exit Function
+    If Not gRoutesById Is Nothing Then
+        If gRoutesById.Count = 0 And Not gFullModelDirty Then
+            Set layer = GetLayerShape(ws)
+            GanttDependencySvg_IsLayerPhysicalStateCurrent = (layer Is Nothing)
+            Exit Function
+        End If
+    End If
     If IsAggregatedScaleMode() Then
         GanttDependencySvg_IsLayerPhysicalStateCurrent = True
         Exit Function
@@ -849,7 +895,7 @@ Public Function GanttDependencySvg_GetPhysicallyDirtyTaskIds( _
         Exit Function
     End If
 
-    For Each idKey In rowById.Keys
+    For Each idKey In rowById.keys
         taskId = CStr(idKey)
         ganttRow = CLng(rowById(taskId))
         dataRow = ganttRow - 5 + 1
@@ -884,10 +930,10 @@ Public Function GanttDependencySvg_AllRoutesHaveTerminalArrow() As Boolean
     If gRoutesById Is Nothing Then Exit Function
     If gRoutesById.Count = 0 Then Exit Function
 
-    For Each routeId In gRoutesById.Keys
+    For Each routeId In gRoutesById.keys
         Set route = gRoutesById(CStr(routeId))
         hasArrow = False
-        For Each segment In route.Segments
+        For Each segment In route.segments
             If SvgParseBoolean(segment("Arrow")) Then
                 hasArrow = True
                 Exit For
@@ -923,7 +969,7 @@ End Function
 
 Public Function GanttDependencySvg_GetPersistentCacheDiagnostics(ByVal ws As Worksheet) As Variant
 
-    Dim result(1 To 1, 1 To 12) As Variant
+    Dim result(1 To 1, 1 To 13) As Variant
     Dim cacheWs As Worksheet
     Dim layer As Shape
     Dim layerSignature As String
@@ -945,6 +991,7 @@ Public Function GanttDependencySvg_GetPersistentCacheDiagnostics(ByVal ws As Wor
     result(1, 10) = GanttDependencySvg_IsTaskGeometryCurrent(ws)
     result(1, 11) = GanttDependencySvg_AllRoutesHaveTerminalArrow()
     result(1, 12) = GanttDependencySvg_IsLayerPhysicalStateCurrent(ws)
+    result(1, 13) = Not gRoutesById Is Nothing
     GanttDependencySvg_GetPersistentCacheDiagnostics = result
 
 End Function
@@ -971,11 +1018,11 @@ Public Function GanttDependencySvg_ExportRoutes(ByVal outputPath As String) As B
     routeKeys = SortedDictionaryKeys(gRoutesById)
     For Each routeKey In routeKeys
         Set route = gRoutesById(CStr(routeKey))
-        For i = 1 To route.Segments.Count
-            Set segment = route.Segments(i)
+        For i = 1 To route.segments.Count
+            Set segment = route.segments(i)
             stream.WriteLine _
-                route.LinkId & vbTab & route.PredId & vbTab & route.SuccId & vbTab & _
-                route.LinkType & vbTab & SvgNumber(route.Lag) & vbTab & CStr(i) & vbTab & _
+                route.linkId & vbTab & route.predId & vbTab & route.succId & vbTab & _
+                route.linkType & vbTab & SvgNumber(route.lag) & vbTab & CStr(i) & vbTab & _
                 SvgNumber(CDbl(segment("X1"))) & vbTab & SvgNumber(CDbl(segment("Y1"))) & vbTab & _
                 SvgNumber(CDbl(segment("X2"))) & vbTab & SvgNumber(CDbl(segment("Y2"))) & vbTab & _
                 SvgBoolToken(CBool(segment("Arrow")))
@@ -1051,18 +1098,18 @@ Private Function BuildSvgDocument( _
 
     For Each routeKey In routeKeys
         Set route = gRoutesById(CStr(routeKey))
-        If route.Visible And route.SegmentCount > 0 Then
+        If route.Visible And route.segmentCount > 0 Then
             If firstBounds Then
-                minX = route.MinX
-                minY = route.MinY
-                maxX = route.MaxX
-                maxY = route.MaxY
+                minX = route.minX
+                minY = route.minY
+                maxX = route.maxX
+                maxY = route.maxY
                 firstBounds = False
             Else
-                If route.MinX < minX Then minX = route.MinX
-                If route.MinY < minY Then minY = route.MinY
-                If route.MaxX > maxX Then maxX = route.MaxX
-                If route.MaxY > maxY Then maxY = route.MaxY
+                If route.minX < minX Then minX = route.minX
+                If route.minY < minY Then minY = route.minY
+                If route.maxX > maxX Then maxX = route.maxX
+                If route.maxY > maxY Then maxY = route.maxY
             End If
         End If
     Next routeKey
@@ -1075,11 +1122,11 @@ Private Function BuildSvgDocument( _
 
     For Each routeKey In routeKeys
         Set route = gRoutesById(CStr(routeKey))
-        If route.Visible And route.SegmentCount > 0 Then
+        If route.Visible And route.segmentCount > 0 Then
             routesSerialized = routesSerialized + 1
             routePath = ""
-            For i = 1 To route.Segments.Count
-                Set segment = route.Segments(i)
+            For i = 1 To route.segments.Count
+                Set segment = route.segments(i)
                 segmentsSerialized = segmentsSerialized + 1
                 x1 = CDbl(segment("X1")) - minX
                 y1 = CDbl(segment("Y1")) - minY
@@ -1255,15 +1302,15 @@ Private Sub SavePersistentRouteCache( _
     routeKeys = SortedDictionaryKeys(gRoutesById)
     For Each routeKey In routeKeys
         Set route = gRoutesById(CStr(routeKey))
-        For i = 1 To route.Segments.Count
-            Set segment = route.Segments(i)
+        For i = 1 To route.segments.Count
+            Set segment = route.segments(i)
             arr(rowIndex, 1) = "ROUTE"
             arr(rowIndex, 2) = SVG_CACHE_VERSION
-            arr(rowIndex, 3) = route.LinkId
-            arr(rowIndex, 4) = route.PredId
-            arr(rowIndex, 5) = route.SuccId
-            arr(rowIndex, 6) = route.LinkType
-            arr(rowIndex, 7) = SvgNumber(route.Lag)
+            arr(rowIndex, 3) = route.linkId
+            arr(rowIndex, 4) = route.predId
+            arr(rowIndex, 5) = route.succId
+            arr(rowIndex, 6) = route.linkType
+            arr(rowIndex, 7) = SvgNumber(route.lag)
             arr(rowIndex, 8) = i
             arr(rowIndex, 9) = SvgNumber(CDbl(segment("X1")))
             arr(rowIndex, 10) = SvgNumber(CDbl(segment("Y1")))
@@ -1274,8 +1321,8 @@ Private Sub SavePersistentRouteCache( _
         Next i
     Next routeKey
 
-    cacheWs.Cells.Clear
-    cacheWs.Range("A1").Resize(UBound(arr, 1), UBound(arr, 2)).Value = arr
+    cacheWs.cells.Clear
+    cacheWs.Range("A1").Resize(UBound(arr, 1), UBound(arr, 2)).value = arr
     cacheWs.Visible = xlSheetVeryHidden
 
     Profiler_RecordOperation "GanttDependencySvgCacheSaved", gRoutesById.Count, 0#
@@ -1307,10 +1354,10 @@ Private Function BuildRouteSnapshotSignature(ByVal contentHash As String) As Str
     routeKeys = SortedDictionaryKeys(gRoutesById)
     For Each routeKey In routeKeys
         Set route = gRoutesById(CStr(routeKey))
-        textValue = textValue & "|" & route.LinkId & "," & route.PredId & "," & _
-            route.SuccId & "," & route.LinkType & "," & SvgNumber(route.Lag)
-        For i = 1 To route.Segments.Count
-            Set segment = route.Segments(i)
+        textValue = textValue & "|" & route.linkId & "," & route.predId & "," & _
+            route.succId & "," & route.linkType & "," & SvgNumber(route.lag)
+        For i = 1 To route.segments.Count
+            Set segment = route.segments(i)
             textValue = textValue & "," & CStr(i) & ":" & _
                 SvgNumber(CDbl(segment("X1"))) & "," & _
                 SvgNumber(CDbl(segment("Y1"))) & "," & _
@@ -1375,20 +1422,20 @@ Private Function GanttDependencySvg_TryGetExpectedLayerBounds( _
     If gRoutesById.Count = 0 Then Exit Function
 
     firstBounds = True
-    For Each routeKey In gRoutesById.Keys
+    For Each routeKey In gRoutesById.keys
         Set route = gRoutesById(CStr(routeKey))
-        If route.Visible And route.SegmentCount > 0 Then
+        If route.Visible And route.segmentCount > 0 Then
             If firstBounds Then
-                layerLeft = route.MinX
-                layerTop = route.MinY
-                maxX = route.MaxX
-                maxY = route.MaxY
+                layerLeft = route.minX
+                layerTop = route.minY
+                maxX = route.maxX
+                maxY = route.maxY
                 firstBounds = False
             Else
-                If route.MinX < layerLeft Then layerLeft = route.MinX
-                If route.MinY < layerTop Then layerTop = route.MinY
-                If route.MaxX > maxX Then maxX = route.MaxX
-                If route.MaxY > maxY Then maxY = route.MaxY
+                If route.minX < layerLeft Then layerLeft = route.minX
+                If route.minY < layerTop Then layerTop = route.minY
+                If route.maxX > maxX Then maxX = route.maxX
+                If route.maxY > maxY Then maxY = route.maxY
             End If
         End If
     Next routeKey
@@ -1516,7 +1563,7 @@ Private Function SortedDictionaryKeys(ByVal source As Object) As Variant
 
     Dim values As Variant
 
-    values = source.Keys
+    values = source.keys
     If source.Count > 1 Then QuickSortStrings values, LBound(values), UBound(values)
     SortedDictionaryKeys = values
 

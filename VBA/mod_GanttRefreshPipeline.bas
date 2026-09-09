@@ -1,4 +1,3 @@
-Attribute VB_Name = "mod_GanttRefreshPipeline"
 Option Explicit
 
 '===============================================================================
@@ -61,6 +60,7 @@ Private gLastTimelineSignature As String
 Private gLastWorksheetShapeCount As Long
 Private gLastRefreshSucceeded As Boolean
 Private gLastRefreshEffectiveScope As String
+Private gLastRefreshErrorDescription As String
 
 Public Function GanttRefresh_LastRunSucceeded() As Boolean
 
@@ -71,6 +71,12 @@ End Function
 Public Function GanttRefresh_LastEffectiveScope() As String
 
     GanttRefresh_LastEffectiveScope = gLastRefreshEffectiveScope
+
+End Function
+
+Public Function GanttRefresh_LastErrorDescription() As String
+
+    GanttRefresh_LastErrorDescription = gLastRefreshErrorDescription
 
 End Function
 
@@ -169,6 +175,7 @@ Public Sub RunGanttRefreshCore( _
     Set perfScope = Profiler_BeginScope("RunGanttRefreshCore", "Gantt")
     gLastRefreshSucceeded = False
     gLastRefreshEffectiveScope = ""
+    gLastRefreshErrorDescription = ""
 
     On Error GoTo SafeExit
 
@@ -545,28 +552,11 @@ SafeExit:
     End If
 
     If refreshErrNumber <> 0 Then
-
-        If displayOnly Then
-            Profiler_RecordOperation "GanttDiffFallback_RenderError", 1, 0#
-            Gantt_AddConsoleMessage consoleMessages, "STOP", _
-                "Erreur VBA dans Refresh_Gantt_DisplayOnly" & vbCrLf & _
-                "-> vérifier le dernier bloc modifié dans mod_Gantt" & vbCrLf & _
-                "-> " & refreshErrDescription, _
-                "VBA error in Refresh_Gantt_DisplayOnly" & vbCrLf & _
-                "-> check the last edited block in mod_Gantt" & vbCrLf & _
-                "-> " & refreshErrDescription
-        Else
-            Gantt_AddConsoleMessage consoleMessages, "STOP", _
-                "Erreur VBA dans Refresh_Gantt" & vbCrLf & _
-                "-> vérifier le dernier bloc modifié dans mod_Gantt" & vbCrLf & _
-                "-> " & refreshErrDescription, _
-                "VBA error in Refresh_Gantt" & vbCrLf & _
-                "-> check the last edited block in mod_Gantt" & vbCrLf & _
-                "-> " & refreshErrDescription
-        End If
-
-        CalcBridge_ShowPlanningConsole consoleMessages
-
+        gLastRefreshErrorDescription = refreshErrDescription
+        If displayOnly Then Profiler_RecordOperation "GanttDiffFallback_RenderError", 1, 0#
+        Profiler_RecordOperation "GanttRefreshInternalErrorsCaptured", 1, 0#
+        GanttOpenLifecycle_Record "RunGanttRefreshCoreError", _
+            IIf(displayOnly, "INCREMENTAL|", "FULL|") & refreshErrDescription
     End If
 
 End Sub
