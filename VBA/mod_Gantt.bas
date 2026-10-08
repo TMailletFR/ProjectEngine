@@ -1,3 +1,4 @@
+Attribute VB_Name = "mod_Gantt"
 Option Explicit
 
 '===============================================================================
@@ -331,7 +332,8 @@ Public Function EnsureGanttForCurrentPlanning( _
             EnsureGanttForCurrentPlanning = ready
 
         Case Else
-            Err.Raise 5, "EnsureGanttForCurrentPlanning", "Unknown Gantt ensure mode: " & mode
+        Err.Raise 5, "EnsureGanttForCurrentPlanning", PlanningMessageText_Format("GANTT.ERROR.UNKNOWN_ENSURE_MODE", _
+            TextCatalog_Arguments("Mode", mode), TextCatalog_Arguments("Mode", mode))
     End Select
 
 TraceExit:
@@ -358,6 +360,7 @@ Public Function Gantt_FinalizeReadyState(Optional ByVal reason As String = "") A
     Dim beforeSheet As String
     Dim afterSheet As String
     Dim diag As Variant
+    Dim slotCount As Long, rowCount As Long
 
     startedAt = Timer
     beforeSheet = GanttOpenLifecycle_ActiveSheetName()
@@ -366,6 +369,9 @@ Public Function Gantt_FinalizeReadyState(Optional ByVal reason As String = "") A
 
     Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
     If ws Is Nothing Then GoTo Failed
+    If Not GanttTimeline_HasPhysicalHeader(ws) Then GoTo Failed
+    If Not GanttRefresh_GetRenderedExtent(slotCount, rowCount) Then GoTo Failed
+    If Not GanttLayout_HasPhysicalTaskProjection(ws, rowCount) Then GoTo Failed
 
     diag = GanttDependencySvg_GetPersistentCacheDiagnostics(ws)
     If Not Gantt_DependencyDiagnosticsAreReady(diag) Then GoTo Failed
@@ -391,10 +397,14 @@ Public Function Gantt_IsReadyStateValid() As Boolean
 
     Dim ws As Worksheet
     Dim diag As Variant
+    Dim slotCount As Long, rowCount As Long
 
     On Error GoTo Failed
 
     Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
+    If Not GanttTimeline_HasPhysicalHeader(ws) Then Exit Function
+    If Not GanttRefresh_GetRenderedExtent(slotCount, rowCount) Then Exit Function
+    If Not GanttLayout_HasPhysicalTaskProjection(ws, rowCount) Then Exit Function
     diag = GanttDependencySvg_GetPersistentCacheDiagnostics(ws)
 
     Gantt_IsReadyStateValid = Gantt_DependencyDiagnosticsAreReady(diag)
@@ -408,18 +418,22 @@ End Function
 Private Function Gantt_DependencyDiagnosticsAreReady(ByVal diag As Variant) As Boolean
 
     If CBool(diag(1, 7)) Then Exit Function
-    If Not CBool(diag(1, 10)) Then Exit Function
+    If GetGanttViewMode() = "SUMMARY" Then
+        If Not GanttViewState_IsSummaryProjectionCurrent(ThisWorkbook.Worksheets(GANTT_SHEET)) Then Exit Function
+    Else
+        If Not CBool(diag(1, 10)) Then Exit Function
+    End If
+
+    If IsAggregatedScaleMode() Then
+        Gantt_DependencyDiagnosticsAreReady = CBool(diag(1, 12))
+        Exit Function
+    End If
 
     If CBool(diag(1, 13)) And CLng(diag(1, 5)) = 0 Then
         Gantt_DependencyDiagnosticsAreReady = _
             Not CBool(diag(1, 2)) And _
             Not CBool(diag(1, 3)) And _
             Not CBool(diag(1, 4))
-        Exit Function
-    End If
-
-    If IsAggregatedScaleMode() Then
-        Gantt_DependencyDiagnosticsAreReady = True
         Exit Function
     End If
 
@@ -535,6 +549,11 @@ Public Sub Gantt_RepairColdStartSvgIfNeeded()
     Set ws = ThisWorkbook.Worksheets(GANTT_SHEET)
     If ws Is Nothing Then Exit Sub
 
+    If IsAggregatedScaleMode() Then
+        If Not Gantt_IsReadyStateValid() Then GanttDependencySvg_TryHydratePersistentCache ws
+        Exit Sub
+    End If
+
     If GanttDependencySvg_HasLayer(ws) And Not GanttDependencySvg_HasRoutes() Then
         If GanttDependencySvg_TryHydratePersistentCache(ws) Then Exit Sub
         GanttColdState_MarkPending "ColdStartSvgLayerWithoutRoutes"
@@ -595,3 +614,4 @@ Failed:
     Gantt_TryApplyTestDayPredictiveRegistry = False
 
 End Function
+

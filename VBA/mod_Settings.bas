@@ -109,6 +109,126 @@ Public Sub Settings_HydrateRuntimeState()
     Constraints_SetLanguage Settings_GetOwnerLanguage(MODULE_CONSTRAINTS)
 
 End Sub
+
+' Retire only the legacy UI now owned by the Ribbon.
+Public Sub Settings_RemoveLegacyMigrationCommand()
+    Dim ws As Worksheet, i As Long
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    For i = 1 To ws.Shapes.Count
+        If ws.Shapes(i).Name = "SET_BTN_MIGRATION" Then
+            ws.Shapes(i).Delete
+            Exit Sub
+        End If
+    Next i
+End Sub
+
+' This owner alone knows the persisted Settings layout, including legacy V1.
+Public Function Settings_MigrationSnapshot(ByVal source As Workbook) As Object
+    Dim result As Object, ws As Worksheet, candidate As Worksheet
+    Dim values(1 To 10, 1 To 1) As Variant, raw As Variant
+    Dim i As Long, marker As String, defaults As String
+    Set result = CreateObject("Scripting.Dictionary")
+    For Each candidate In source.Worksheets
+        If candidate.Name = SETTINGS_SHEET Then Set ws = candidate
+    Next candidate
+    For i = 1 To 10
+        values(i, 1) = "EN"
+    Next i
+    values(2, 1) = 1: values(8, 1) = 1: values(10, 1) = DATE_MODE_DMY
+    If ws Is Nothing Then
+        defaults = "GLOBAL=EN; languages=EN; GLOBAL activated=1; INFO=1; date=DMY"
+        For Each candidate In source.Worksheets
+            If candidate.Name = "EVENT_HISTORY" Then
+                Dim bg As Shape, knob As Shape
+                On Error Resume Next
+                Set bg = candidate.Shapes("btn_EventHistory_Language_BG")
+                Set knob = candidate.Shapes("btn_EventHistory_Language_Knob")
+                On Error GoTo 0
+                If Not bg Is Nothing And Not knob Is Nothing Then
+                    values(7, 1) = "FR"
+                    If knob.Left + knob.Width / 2 >= bg.Left + bg.Width / 2 Then values(7, 1) = "EN"
+                End If
+                Set bg = Nothing: Set knob = Nothing
+                On Error Resume Next
+                Set bg = candidate.Shapes("btn_EventHistory_Info_BG")
+                Set knob = candidate.Shapes("btn_EventHistory_Info_Knob")
+                On Error GoTo 0
+                If Not bg Is Nothing And Not knob Is Nothing Then
+                    values(8, 1) = CLng(Abs(knob.Left + knob.Width / 2 >= bg.Left + bg.Width / 2))
+                End If
+            End If
+        Next candidate
+        marker = "NO_SETTINGS"
+    Else
+        marker = CStr(ws.Range("X1").Value2)
+        If marker <> "SETTINGS_STORAGE_V1" And marker <> SETTINGS_STORAGE_VERSION Then
+            Err.Raise 5, "Settings_MigrationSnapshot", "UNRECOGNIZED_SETTINGS_STORAGE"
+        End If
+        raw = ws.Range("X2:X11").Value2
+        For i = 1 To 10
+            If i = 9 And marker = "SETTINGS_STORAGE_V1" Then
+                values(i, 1) = CStr(raw(1, 1))
+                defaults = defaults & "CONSTRAINTS=GLOBAL; "
+            ElseIf i = 10 And Len(CStr(raw(i, 1))) = 0 Then
+                defaults = defaults & "date=DMY; "
+            Else
+                values(i, 1) = raw(i, 1)
+            End If
+        Next i
+    End If
+    For i = 1 To 10
+        Select Case i
+            Case 2, 8
+                If VarType(values(i, 1)) = vbBoolean Then
+                    values(i, 1) = CLng(Abs(CBool(values(i, 1))))
+                Else
+                    Select Case UCase$(Trim$(CStr(values(i, 1))))
+                        Case "1", "TRUE", "VRAI", "YES", "Y", "ON": values(i, 1) = 1
+                        Case "0", "FALSE", "FAUX", "NO", "N", "OFF": values(i, 1) = 0
+                        Case Else: Err.Raise 5, "Settings_MigrationSnapshot", "INVALID_SETTINGS_BOOLEAN"
+                    End Select
+                End If
+            Case 10
+                If InStr(1, "|DMY|MDY|ISO|", "|" & CStr(values(i, 1)) & "|", vbBinaryCompare) = 0 Then Err.Raise 5, , "INVALID_DATE_DISPLAY_OPTION"
+            Case Else
+                If CStr(values(i, 1)) <> "FR" And CStr(values(i, 1)) <> "EN" Then Err.Raise 5, , "INVALID_SETTINGS_LANGUAGE"
+        End Select
+    Next i
+    result.Add "Values", values
+    result.Add "Storage", marker
+    result.Add "Defaults", defaults
+    Set Settings_MigrationSnapshot = result
+End Function
+
+Public Sub Settings_ApplyMigrationSnapshot(ByVal values As Variant)
+    Dim owners As Variant, owner As Variant, headers As Object, ws As Worksheet
+    Dim index As Long, language As String, errorNumber As Long, errorSource As String, description As String
+    On Error GoTo Failed
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    owners = Settings_LanguageOwnerKeys()
+    For Each owner In owners
+        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).Row - 1
+        Settings_PreflightLanguageOwner CStr(owner)
+        VisibleHeaders_PreflightOwner CStr(owner), CStr(values(index, 1))
+    Next owner
+    Set headers = VisibleHeaders_CaptureAllSnapshot()
+    For Each owner In owners
+        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).Row - 1
+        VisibleHeaders_ApplyOwnerFromSnapshot headers, CStr(owner), CStr(values(index, 1))
+    Next owner
+    ThisWorkbook.Worksheets(SETTINGS_SHEET).Range("X2:X11").Value2 = values
+    ThisWorkbook.Worksheets(SETTINGS_SHEET).Range("X1").Value2 = SETTINGS_STORAGE_VERSION
+    Settings_HydrateRuntimeState
+    For Each owner In owners
+        Settings_ApplySingleModule CStr(owner), Settings_GetOwnerLanguage(CStr(owner))
+    Next owner
+    Schema_ClearPhysicalHeaderLanguageOverrides
+    Exit Sub
+Failed:
+    errorNumber = Err.Number: errorSource = Err.Source: description = Err.Description
+    Schema_ClearPhysicalHeaderLanguageOverrides
+    Err.Raise errorNumber, errorSource, description
+End Sub
 '------------------------------------------------------------------------------
 ' FR: Retourne la langue persistante d'un owner sans modifier le workbook.
 ' EN: Returns an owner's persisted language without mutating the workbook.
@@ -133,6 +253,25 @@ Public Function Settings_GetOwnerLanguage(ByVal ownerKey As String) As String
 
 UseFallback:
     Settings_GetOwnerLanguage = "EN"
+
+End Function
+
+'------------------------------------------------------------------------------
+' Returns the persisted presentation language used by SETTINGS and, later, the
+' workbook Ribbon. It does not replace any functional owner's language.
+'------------------------------------------------------------------------------
+Public Function Settings_GetGlobalDisplayLanguage() As String
+
+    Dim ws As Worksheet
+
+    On Error GoTo UseFallback
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    Settings_GetGlobalDisplayLanguage = _
+        Settings_NormalizeLanguage(CStr(ws.Range(CELL_GLOBAL_LANGUAGE).Value2), "EN")
+    Exit Function
+
+UseFallback:
+    Settings_GetGlobalDisplayLanguage = "EN"
 
 End Function
 
@@ -183,6 +322,7 @@ Public Sub Settings_ToggleInfoMessages()
     Dim ws As Worksheet
     Dim newValue As Boolean
 
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
     Set ws = Settings_EnsureSheet()
 
     newValue = Not Settings_InfoIsEnabled(ws)
@@ -203,6 +343,7 @@ Public Sub Settings_ToggleGlobalLanguage()
     Dim ws As Worksheet
     Dim languageCode As String
 
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
     Set ws = Settings_EnsureSheet()
 
     languageCode = Settings_OppositeLanguage(CStr(ws.Range(CELL_GLOBAL_LANGUAGE).value))
@@ -213,6 +354,8 @@ Public Sub Settings_ToggleGlobalLanguage()
         ws.Range(CELL_GLOBAL_LANGUAGE).value = languageCode
         Settings_RefreshVisuals ws
     End If
+
+    Ribbon_InvalidateLanguage
 
 End Sub
 
@@ -225,6 +368,7 @@ Public Sub Settings_ToggleGlobalActivated()
     Dim ws As Worksheet
     Dim newValue As Boolean
 
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
     Set ws = Settings_EnsureSheet()
 
     newValue = Not Settings_GlobalIsActivated(ws)
@@ -373,6 +517,7 @@ Private Sub Settings_ToggleModuleLanguage(ByVal moduleKey As String)
     Dim headersApplied As Boolean
     Dim errorDescription As String
 
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
     Set ws = Settings_EnsureSheet()
 
     storageCell = Settings_ModuleStorageCell(moduleKey)
@@ -425,9 +570,8 @@ ApplyFailed:
         Application.ScreenUpdating = oldScreenUpdating
         Application.EnableEvents = oldEvents
     End If
-    CalcBridge_ShowSingleConsoleMessage "STOP", _
-        "La langue " & moduleKey & " n'a pas ete modifiee. " & errorDescription, _
-        "The " & moduleKey & " language was not changed. " & errorDescription
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.OWNER_LANGUAGE", _
+        TextCatalog_Arguments("Owner", moduleKey, "Details", errorDescription)
 
 End Sub
 
@@ -550,9 +694,8 @@ ApplyFailed:
         Application.ScreenUpdating = oldScreenUpdating
         Application.EnableEvents = oldEvents
     End If
-    CalcBridge_ShowSingleConsoleMessage "STOP", _
-        "Le changement GLOBAL a echoue sur " & failedOwner & ". " & errorDescription, _
-        "The GLOBAL language change failed on " & failedOwner & ". " & errorDescription
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.GLOBAL_LANGUAGE", _
+        TextCatalog_Arguments("Owner", failedOwner, "Details", errorDescription)
 
 End Sub
 
@@ -587,8 +730,9 @@ Private Sub Settings_PreflightLanguageOwner(ByVal moduleKey As String)
             Settings_RequireTable "EVENT_HISTORY", "tbl_EVENT_HISTORY"
             Settings_RequireTable "EVENT_ACK", "tbl_EVENT_ACK"
         Case Else
-            Err.Raise vbObjectError + 5210, "Settings_PreflightLanguageOwner", _
-                "Unknown language owner: " & moduleKey
+        Err.Raise vbObjectError + 5210, "Settings_PreflightLanguageOwner", _
+            PlanningMessageText_Format("DIAG.TECH.UNKNOWN_LANGUAGE_OWNER", _
+                TextCatalog_Arguments("Owner", moduleKey), TextCatalog_Arguments("Owner", moduleKey))
     End Select
 
 End Sub
@@ -811,50 +955,55 @@ Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
     dateLabelLeft = dateTrackLeft - dateLabelGap - DATE_CONTROL_LABEL_WIDTH
 
     Settings_AddPanel ws, "SET_PANEL_LANGUAGE", panelLeft, panelTop, 610, 444, RGB(255, 255, 255), RGB(214, 220, 228)
-    Settings_AddCenteredTitle ws, "SET_TITLE_LANGUAGE", Settings_L(ws, "Langue", "Language"), panelLeft + 20, panelTop + 16, 570, 28, 15
+    Settings_AddCenteredTitle ws, "SET_TITLE_LANGUAGE", TextCatalog_Get("SETTINGS.LANGUAGE.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 20, panelTop + 16, 570, 28, 15
 
-    Settings_AddLanguageSwitch ws, "GLOBAL", "GLOBAL", panelLeft + 28, panelTop + 64, _
+    Settings_AddLanguageSwitch ws, "GLOBAL", TextCatalog_Get("SETTINGS.OWNER.GLOBAL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 64, _
         Settings_ModuleDisplayLanguage(ws, "GLOBAL"), "Settings_ToggleGlobalLanguage", True
     Settings_AddActivatedControl ws, panelLeft + 430, panelTop + 63, Settings_GlobalIsActivated(ws)
 
-    Settings_AddLanguageSwitch ws, MODULE_DASHBOARD, "Dashboard", panelLeft + 28, panelTop + 118, _
+    Settings_AddLanguageSwitch ws, MODULE_DASHBOARD, TextCatalog_Get("SETTINGS.OWNER.DASHBOARD", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 118, _
         Settings_ModuleLanguage(ws, MODULE_DASHBOARD), "Settings_ToggleDashboardLanguage", False
-    Settings_AddLanguageSwitch ws, MODULE_GANTT, "Gantt", panelLeft + 28, panelTop + 162, _
+    Settings_AddLanguageSwitch ws, MODULE_GANTT, TextCatalog_Get("SETTINGS.OWNER.GANTT", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 162, _
         Settings_ModuleLanguage(ws, MODULE_GANTT), "Settings_ToggleGanttLanguage", False
-    Settings_AddLanguageSwitch ws, MODULE_SCURVE, "S-Curve", panelLeft + 28, panelTop + 206, _
+    Settings_AddLanguageSwitch ws, MODULE_SCURVE, TextCatalog_Get("SETTINGS.OWNER.SCURVE", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 206, _
         Settings_ModuleLanguage(ws, MODULE_SCURVE), "Settings_ToggleSCurveLanguage", False
-    Settings_AddLanguageSwitch ws, MODULE_WBS, "WBS", panelLeft + 28, panelTop + 250, _
+    Settings_AddLanguageSwitch ws, MODULE_WBS, TextCatalog_Get("SETTINGS.OWNER.WBS", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 250, _
         Settings_ModuleLanguage(ws, MODULE_WBS), "Settings_ToggleWBSLanguage", False
     Settings_AddLanguageSwitch ws, MODULE_CONSTRAINTS, _
-        Settings_L(ws, "Contraintes", "Constraints"), panelLeft + 28, panelTop + 294, _
+        TextCatalog_Get("SETTINGS.CONSTRAINTS.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 294, _
         Settings_ModuleLanguage(ws, MODULE_CONSTRAINTS), "Settings_ToggleConstraintsLanguage", False
-    Settings_AddLanguageSwitch ws, MODULE_EVENT, "Messages & Event History", panelLeft + 28, panelTop + 338, _
+    Settings_AddLanguageSwitch ws, MODULE_EVENT, TextCatalog_Get("SETTINGS.OWNER.EVENT", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 28, panelTop + 338, _
         Settings_ModuleLanguage(ws, MODULE_EVENT), "Settings_ToggleEventHistoryLanguage", False
     Settings_AddInfoSwitch ws, panelLeft + 430, panelTop + 338, Settings_InfoIsEnabled(ws)
 
     Set dateTitle = Settings_AddTextShape(ws, "SET_DATE_FORMAT_TITLE", _
-        Settings_L(ws, "Format des dates", "Date format"), _
+        TextCatalog_Get("SETTINGS.DATE_FORMAT.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), _
         panelLeft + 28, panelTop + 388, 150, 20, msoAlignLeft, 10.5, True)
     ThreePositionControl_Ensure ws, _
         DATE_CONTROL_LABEL_NAME, DATE_CONTROL_BG_NAME, DATE_CONTROL_KNOB_NAME, _
-        dateLabelLeft, panelTop + 388, DATE_CONTROL_LABEL_WIDTH, "DMY / MDY / ISO", _
+        dateLabelLeft, panelTop + 388, DATE_CONTROL_LABEL_WIDTH, TextCatalog_Get("SETTINGS.DATE_FORMAT.OPTIONS", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), _
         dateTrackLeft, dateTrackTop, dateTrackWidth, dateTrackHeight, dateKnobSize, _
         "Settings_ToggleDateDisplayMode", xlFreeFloating
     ThreePositionControl_Refresh ws, DATE_CONTROL_BG_NAME, DATE_CONTROL_KNOB_NAME, _
         Settings_DateDisplayPosition(Settings_GetDateDisplayMode())
 
     Settings_AddPanel ws, "SET_PANEL_RESET", panelLeft + 634, panelTop, 300, 226, RGB(255, 255, 255), RGB(214, 220, 228)
-    Settings_AddCenteredTitle ws, "SET_TITLE_RESET", Settings_L(ws, "R" & ChrW$(&HE9) & "initialisation", "Reset"), panelLeft + 654, panelTop + 16, 260, 28, 14
-    Settings_AddCommandButton ws, "SET_BTN_CLEAR_HISTORY", Settings_L(ws, "Nettoyer historique", "Clear History"), "ClearPlanningEventHistory", panelLeft + 674, panelTop + 52, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
-    Settings_AddCommandButton ws, "SET_BTN_CLEAR_ACK", Settings_L(ws, "Nettoyer les messages acquités", "Clear Acknowledged"), "ClearPlanningWarningAcknowledgements", panelLeft + 674, panelTop + 92, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
-    Settings_AddCommandButton ws, "SET_BTN_CLEAN_DASHBOARD", Settings_L(ws, "Nettoyer Dashboard", "Clean Dashboard"), "Reset_Dashboard", panelLeft + 674, panelTop + 132, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
-    Settings_AddCommandButton ws, "SET_BTN_RESET_PLANNING", Settings_L(ws, "R" & ChrW$(&HE9) & "initialiser planning", "Reset Planning"), "Reset_Planning", panelLeft + 674, panelTop + 172, 220, 34, RGB(192, 120, 0), RGB(255, 255, 255)
+    Settings_AddCenteredTitle ws, "SET_TITLE_RESET", TextCatalog_Get("SETTINGS.RESET.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 654, panelTop + 16, 260, 28, 14
+    Settings_AddCommandButton ws, "SET_BTN_CLEAR_HISTORY", TextCatalog_Get("SETTINGS.CLEAR_HISTORY.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), "ClearPlanningEventHistory", panelLeft + 674, panelTop + 52, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
+    Settings_AddCommandButton ws, "SET_BTN_CLEAR_ACK", TextCatalog_Get("SETTINGS.CLEAR_ACK.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), "ClearPlanningWarningAcknowledgements", panelLeft + 674, panelTop + 92, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
+    Settings_AddCommandButton ws, "SET_BTN_CLEAN_DASHBOARD", TextCatalog_Get("SETTINGS.CLEAN_DASHBOARD.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), "Reset_Dashboard", panelLeft + 674, panelTop + 132, 220, 34, RGB(68, 114, 196), RGB(255, 255, 255)
+    Settings_AddCommandButton ws, "SET_BTN_RESET_PLANNING", TextCatalog_Get(TXT_COMMON_RESET_PLANNING_LABEL, Settings_GetGlobalDisplayLanguage()), "Reset_Planning", panelLeft + 674, panelTop + 172, 220, 34, RGB(192, 120, 0), RGB(255, 255, 255)
 
     Settings_AddPanel ws, "SET_PANEL_DANGER", panelLeft + 634, panelTop + 250, 300, 150, RGB(255, 247, 247), RGB(220, 80, 80)
-    Settings_AddCenteredTitle ws, "SET_TITLE_DANGER", Settings_L(ws, "Zone de danger", "Danger Zone"), panelLeft + 654, panelTop + 266, 260, 28, 14
-    Settings_AddCommandButton ws, "SET_BTN_FULL_RESET", Settings_L(ws, "R" & ChrW$(&HE9) & "initialisation compl" & ChrW$(&HE8) & "te", "Full Reset"), "Armageddon", panelLeft + 674, panelTop + 316, 220, 42, RGB(192, 0, 0), RGB(255, 255, 255)
+    Settings_AddCenteredTitle ws, "SET_TITLE_DANGER", TextCatalog_Get("SETTINGS.DANGER.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), panelLeft + 654, panelTop + 266, 260, 28, 14
+    Settings_AddCommandButton ws, "SET_BTN_FULL_RESET", TextCatalog_Get("SETTINGS.FULL_RESET.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL")), "Armageddon", panelLeft + 674, panelTop + 316, 220, 42, RGB(192, 0, 0), RGB(255, 255, 255)
 
     Settings_RefreshVisuals ws
+
+    Settings_RemoveLegacyMigrationCommand
+    Settings_AddTextShape ws, "SET_SCHEMA_VERSION", _
+        "ProjectEngine " & CStr(WorkbookSchema_Property(ThisWorkbook, PE_RELEASE_PROPERTY)) & _
+        " / " & CStr(WorkbookSchema_Version(ThisWorkbook)), panelLeft + 320, panelTop + 476, 300, 24, msoAlignLeft, 10, False
 
     On Error Resume Next
     ws.Activate
@@ -884,8 +1033,8 @@ Private Sub Settings_AddInfoSwitch( _
 
     trackLeft = leftPos + 58
 
-    Set labelShape = Settings_AddTextShape(ws, "SET_INFO_LABEL", "Info", leftPos, topPos, 50, 24, msoAlignLeft, 9.5, True)
-    Set offShape = Settings_AddTextShape(ws, "SET_INFO_OFF", "OFF", trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
+    Set labelShape = Settings_AddTextShape(ws, "SET_INFO_LABEL", TextCatalog_Get("SETTINGS.INFO.LABEL", Settings_GetGlobalDisplayLanguage()), leftPos, topPos, 50, 24, msoAlignLeft, 9.5, True)
+    Set offShape = Settings_AddTextShape(ws, "SET_INFO_OFF", TextCatalog_Get("SETTINGS.TOGGLE.OFF", Settings_GetGlobalDisplayLanguage()), trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, topPos + 4, 44, 16)
     trackShape.Name = "SET_INFO_TRACK"
@@ -902,7 +1051,7 @@ Private Sub Settings_AddInfoSwitch( _
     knobShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
     knobShape.Line.Visible = msoFalse
 
-    Set onShape = Settings_AddTextShape(ws, "SET_INFO_ON", "ON", trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
+    Set onShape = Settings_AddTextShape(ws, "SET_INFO_ON", TextCatalog_Get("SETTINGS.TOGGLE.ON", Settings_GetGlobalDisplayLanguage()), trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
 
     labelShape.OnAction = "Settings_ToggleInfoMessages"
     offShape.OnAction = "Settings_ToggleInfoMessages"
@@ -932,19 +1081,6 @@ End Function
 ' FR: Met a jour Settings L dans le contexte settings and language.
 ' EN: Updates Settings L in the settings and language context.
 '------------------------------------------------------------------------------
-Private Function Settings_L( _
-    ByVal ws As Worksheet, _
-    ByVal frText As String, _
-    ByVal enText As String) As String
-
-    If Settings_ModuleDisplayLanguage(ws, "GLOBAL") = "FR" Then
-        Settings_L = frText
-    Else
-        Settings_L = enText
-    End If
-
-End Function
-
 '------------------------------------------------------------------------------
 ' FR: Met a jour Settings Prepare Canvas dans le contexte settings and language.
 ' EN: Updates Settings Prepare Canvas in the settings and language context.
@@ -970,7 +1106,7 @@ Private Sub Settings_PrepareCanvas(ByVal ws As Worksheet)
 
     With ws.Range("B1:K2")
         .Merge
-        .value = Settings_L(ws, "Options", "Settings")
+        .value = TextCatalog_Get("SETTINGS.PAGE.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
         .Font.Name = "Segoe UI Semibold"
         .Font.Size = 22
         .Font.Bold = True
@@ -1086,7 +1222,7 @@ Private Sub Settings_AddLanguageSwitch( _
     trackLeft = leftPos + 310
 
     Set labelShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_LABEL", labelText, leftPos, topPos, 250, 24, msoAlignLeft, 10.5, emphasize)
-    Set frShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_FR", "FR", trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
+    Set frShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_FR", TextCatalog_Get("SETTINGS.LANGUAGE.FR", Settings_GetGlobalDisplayLanguage()), trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, topPos + 4, 44, 16)
     trackShape.Name = "SET_LANG_" & keyName & "_TRACK"
@@ -1103,7 +1239,7 @@ Private Sub Settings_AddLanguageSwitch( _
     knobShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
     knobShape.Line.Visible = msoFalse
 
-    Set enShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_EN", "EN", trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
+    Set enShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_EN", TextCatalog_Get("SETTINGS.LANGUAGE.EN", Settings_GetGlobalDisplayLanguage()), trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
 
     labelShape.OnAction = macroName
     frShape.OnAction = macroName
@@ -1400,13 +1536,13 @@ Private Sub Settings_RefreshTitles(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
 
-    ws.Range("B1").value = Settings_L(ws, "Options", "Settings")
-    Settings_SetShapeText ws, "SET_TITLE_LANGUAGE", Settings_L(ws, "Langue", "Language")
+    ws.Range("B1").value = TextCatalog_Get("SETTINGS.PAGE.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_TITLE_LANGUAGE", TextCatalog_Get("SETTINGS.LANGUAGE.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
     Settings_SetShapeText ws, "SET_LANG_CONSTRAINTS_LABEL", _
-        Settings_L(ws, "Contraintes", "Constraints")
-    Settings_SetShapeText ws, "SET_DATE_FORMAT_TITLE", Settings_L(ws, "Format des dates", "Date format")
-    Settings_SetShapeText ws, "SET_TITLE_RESET", Settings_L(ws, "R" & ChrW$(&HE9) & "initialisation", "Reset")
-    Settings_SetShapeText ws, "SET_TITLE_DANGER", Settings_L(ws, "Zone de danger", "Danger Zone")
+        TextCatalog_Get("SETTINGS.CONSTRAINTS.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_DATE_FORMAT_TITLE", TextCatalog_Get("SETTINGS.DATE_FORMAT.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_TITLE_RESET", TextCatalog_Get("SETTINGS.RESET.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_TITLE_DANGER", TextCatalog_Get("SETTINGS.DANGER.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
 
 End Sub
 
@@ -1418,11 +1554,11 @@ Private Sub Settings_RefreshCommandCaptions(ByVal ws As Worksheet)
 
     If ws Is Nothing Then Exit Sub
 
-    Settings_SetShapeText ws, "SET_BTN_CLEAR_HISTORY", Settings_L(ws, "Nettoyer historique", "Clear History")
-    Settings_SetShapeText ws, "SET_BTN_CLEAR_ACK", Settings_L(ws, "Nettoyer les messages acquités", "Clear Acknowledged")
-    Settings_SetShapeText ws, "SET_BTN_CLEAN_DASHBOARD", Settings_L(ws, "Nettoyer Dashboard", "Clean Dashboard")
-    Settings_SetShapeText ws, "SET_BTN_RESET_PLANNING", Settings_L(ws, "R" & ChrW$(&HE9) & "initialiser planning", "Reset Planning")
-    Settings_SetShapeText ws, "SET_BTN_FULL_RESET", Settings_L(ws, "R" & ChrW$(&HE9) & "initialisation compl" & ChrW$(&HE8) & "te", "Full Reset")
+    Settings_SetShapeText ws, "SET_BTN_CLEAR_HISTORY", TextCatalog_Get("SETTINGS.CLEAR_HISTORY.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_BTN_CLEAR_ACK", TextCatalog_Get("SETTINGS.CLEAR_ACK.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_BTN_CLEAN_DASHBOARD", TextCatalog_Get("SETTINGS.CLEAN_DASHBOARD.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
+    Settings_SetShapeText ws, "SET_BTN_RESET_PLANNING", TextCatalog_Get(TXT_COMMON_RESET_PLANNING_LABEL, Settings_GetGlobalDisplayLanguage())
+    Settings_SetShapeText ws, "SET_BTN_FULL_RESET", TextCatalog_Get("SETTINGS.FULL_RESET.LABEL", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
 
 End Sub
 
@@ -1487,16 +1623,12 @@ End Sub
 ' FR: Met a jour Settings Reset Title dans le contexte settings and language.
 ' EN: Updates Settings Reset Title in the settings and language context.
 '------------------------------------------------------------------------------
-Private Function Settings_ResetTitle() As String
-    Settings_ResetTitle = "Reset / R" & ChrW$(&HE9) & "initialisation"
-End Function
-
 '------------------------------------------------------------------------------
 ' FR: Met a jour Settings Activated Label dans le contexte settings and language.
 ' EN: Updates Settings Activated Label in the settings and language context.
 '------------------------------------------------------------------------------
 Private Function Settings_ActivatedLabel() As String
-    Settings_ActivatedLabel = "Activated / Activ" & ChrW$(&HE9)
+    Settings_ActivatedLabel = TextCatalog_Get("SETTINGS.ACTIVATION.LABEL", Settings_GetGlobalDisplayLanguage())
 End Function
 
 '------------------------------------------------------------------------------
@@ -1515,10 +1647,10 @@ Public Sub Settings_ApplyDateDisplayMode(ByVal requestedMode As String)
     Dim formattingStarted As Boolean
     Dim errorDescription As String
 
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
     If Not Settings_IsValidDateDisplayMode(requestedMode) Then
-        CalcBridge_ShowSingleConsoleMessage "STOP", _
-            "Mode de format de date inconnu : " & requestedMode, _
-            "Unknown date display mode: " & requestedMode
+        CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.DATE_MODE", _
+            TextCatalog_Arguments("Mode", requestedMode)
         Exit Sub
     End If
 
@@ -1565,9 +1697,8 @@ ApplyFailed:
         Application.ScreenUpdating = oldScreenUpdating
         Application.EnableEvents = oldEvents
     End If
-    CalcBridge_ShowSingleConsoleMessage "STOP", _
-        "Le format des dates n'a pas ete modifie. " & errorDescription, _
-        "The date format was not changed. " & errorDescription
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.DATE_FORMAT", _
+        TextCatalog_Arguments("Details", errorDescription)
 
 End Sub
 
@@ -1682,8 +1813,9 @@ Private Function Settings_RequireWorksheet(ByVal sheetName As String) As Workshe
     Set Settings_RequireWorksheet = ThisWorkbook.Worksheets(sheetName)
     On Error GoTo 0
     If Settings_RequireWorksheet Is Nothing Then
-        Err.Raise vbObjectError + 5281, "Settings_RequireWorksheet", _
-            "Required worksheet is missing: " & sheetName
+    Err.Raise vbObjectError + 5281, "Settings_RequireWorksheet", _
+        PlanningMessageText_Format("DIAG.TECH.REQUIRED_WORKSHEET_MISSING", _
+            TextCatalog_Arguments("Sheet", sheetName), TextCatalog_Arguments("Sheet", sheetName))
     End If
 
 End Function
@@ -1699,8 +1831,10 @@ Private Function Settings_RequireTable( _
     Set Settings_RequireTable = ws.ListObjects(tableName)
     On Error GoTo 0
     If Settings_RequireTable Is Nothing Then
-        Err.Raise vbObjectError + 5282, "Settings_RequireTable", _
-            "Required table is missing: " & sheetName & "!" & tableName
+    Err.Raise vbObjectError + 5282, "Settings_RequireTable", _
+        PlanningMessageText_Format("DIAG.TECH.REQUIRED_TABLE_MISSING", _
+            TextCatalog_Arguments("Object", sheetName & "!" & tableName), _
+            TextCatalog_Arguments("Object", sheetName & "!" & tableName))
     End If
 
 End Function
@@ -1724,16 +1858,20 @@ Private Function Settings_RequireVisibleDateChart( _
         Set dateRange = SchemaListColumn(dateTable, tableKey, dateColumnKey).DataBodyRange
         If Not dateRange Is Nothing Then
             If Application.Count(dateRange) > 0 Then
-                Err.Raise vbObjectError + 5283, "Settings_RequireVisibleDateChart", _
-                    "Required chart is missing: " & sheetName & "!" & chartName
+    Err.Raise vbObjectError + 5283, "Settings_RequireVisibleDateChart", _
+        PlanningMessageText_Format("DIAG.TECH.REQUIRED_CHART_MISSING", _
+            TextCatalog_Arguments("Object", sheetName & "!" & chartName), _
+            TextCatalog_Arguments("Object", sheetName & "!" & chartName))
             End If
         End If
         Exit Function
     End If
 
     If Not Settings_RequireVisibleDateChart.HasAxis(xlCategory) Then
-        Err.Raise vbObjectError + 5284, "Settings_RequireVisibleDateChart", _
-            "Required date axis is missing: " & sheetName & "!" & chartName
+    Err.Raise vbObjectError + 5284, "Settings_RequireVisibleDateChart", _
+        PlanningMessageText_Format("DIAG.TECH.REQUIRED_DATE_AXIS_MISSING", _
+            TextCatalog_Arguments("Object", sheetName & "!" & chartName), _
+            TextCatalog_Arguments("Object", sheetName & "!" & chartName))
     End If
 
 End Function
@@ -1753,7 +1891,9 @@ Private Sub Settings_RequireColumns( _
         On Error GoTo 0
         If listColumn Is Nothing Then
             Err.Raise vbObjectError + 5285, "Settings_RequireColumns", _
-                "Required column is missing: " & tbl.Name & "[" & CStr(columnKey) & "]"
+                PlanningMessageText_Format("DIAG.TECH.REQUIRED_COLUMN_MISSING", _
+                    TextCatalog_Arguments("Column", tbl.Name & "[" & CStr(columnKey) & "]"), _
+                    TextCatalog_Arguments("Column", tbl.Name & "[" & CStr(columnKey) & "]"))
         End If
     Next columnKey
 

@@ -170,11 +170,8 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
     Exit Sub
 
 ErrHandler:
-    Variance_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur dans Compute_And_Push_Variances" & vbCrLf & _
-        "-> " & Err.Description, _
-        "Error in Compute_And_Push_Variances" & vbCrLf & _
-        "-> " & Err.Description
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.VARIANCES.ERROR", _
+        TextCatalog_Arguments("Details", Err.Description)
 
 End Sub
 
@@ -561,9 +558,9 @@ Private Sub Variance_WriteOutputArraysToWBS( _
     On Error GoTo ErrHandler
 
     allowedFields = Array( _
-        "Start Variance", _
-        "Finish Variance", _
-        "Duration Variance" _
+        SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_START_VARIANCE), _
+        SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_FINISH_VARIANCE), _
+        SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_DURATION_VARIANCE) _
     )
 
     writeScopeToken = OpenAuthorizedWBSWriteScope( _
@@ -713,22 +710,5 @@ Private Sub ParsePredecessorToken( _
     End If
 
     predWbs = NormalizeWBSCode(predWbs)
-
-End Sub
-
-
-
-'------------------------------------------------------------------------------
-' FR: Ajoute la collection Variance Add Or Show Console Message a la structure cible fournie par l'appelant.
-' EN: Adds the Variance Add Or Show Console Message collection to the target structure supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Sub Variance_AddOrShowConsoleMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
-
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, msgType, frText, enText
 
 End Sub

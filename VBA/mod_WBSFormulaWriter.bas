@@ -84,8 +84,8 @@ SafeExit:
     If errorNumber <> 0 Then
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
         WBSFormulaWriter_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur dans RestoreWBSFormulaColumns : " & errorDescription, _
-            "Error in RestoreWBSFormulaColumns: " & errorDescription
+            "DIAG.WBS_FORMULAS.RESTORE_ERROR", _
+            TextCatalog_Arguments("Details", errorDescription)
         CalcBridge_ShowPlanningConsole consoleMessages
     End If
 
@@ -116,7 +116,8 @@ Public Function WBSFormulaWriter_ExpectedFormula(ByVal columnKey As String) As S
                 secondReference & "-" & firstReference & "+1)"
         Case Else
             Err.Raise vbObjectError + 5298, "WBSFormulaWriter_ExpectedFormula", _
-                "Unknown managed WBS formula column key '" & columnKey & "'."
+                PlanningMessageText_Format("WBS.ERROR.UNKNOWN_FORMULA_KEY", _
+                    TextCatalog_Arguments("Key", columnKey), TextCatalog_Arguments("Key", columnKey))
     End Select
 End Function
 
@@ -176,12 +177,12 @@ End Sub
 Private Sub WBSFormulaWriter_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
 End Sub

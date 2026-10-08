@@ -1,3 +1,4 @@
+Attribute VB_Name = "mod_RunButtons"
 Option Explicit
 
 '===============================================================================
@@ -60,7 +61,7 @@ Private Sub RunButtons_ShowDeferredWorkflowConsole( _
 
 SafeExit:
     If finalDisplayStarted Then EndPlanningWorkflowFinalDisplay
-    If Err.Number <> 0 Then Err.Raise Err.Number, Err.source, Err.Description
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
 
 End Sub
 
@@ -78,23 +79,15 @@ Private Sub RunButtons_AddConsoleError( _
     If procName = "Run_Gantt_Update" Then
         CalcBridge_AddConsoleMessage consoleMessages, _
             "STOP", _
-            "FR:" & vbCrLf & _
-            "Le Gantt n'a pas pu être mis à jour et reste indisponible." & vbCrLf & _
-            "Réessayez l'action. Si le problème persiste, transmettez le classeur au support." & vbCrLf & vbCrLf & _
-            "EN:" & vbCrLf & _
-            "The Gantt could not be updated and remains unavailable." & vbCrLf & _
-            "Retry the action. If the problem persists, send the workbook to support."
+            PlanningMessageText_Format("DIAG.RUN_BUTTONS.GANTT_UPDATE_ERROR", Nothing, Nothing)
         Exit Sub
     End If
 
     CalcBridge_AddConsoleMessage consoleMessages, _
         "STOP", _
-        "FR:" & vbCrLf & _
-        "Erreur VBA dans " & procName & vbCrLf & _
-        "-> vérifier le dernier bloc modifié dans mod_RunButtons" & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "VBA error in " & procName & vbCrLf & _
-        "-> check the last edited block in mod_RunButtons"
+        PlanningMessageText_Format("DIAG.RUN_BUTTONS.VBA_ERROR", _
+            TextCatalog_Arguments("Procedure", procName), _
+            TextCatalog_Arguments("Procedure", procName))
 
 End Sub
 
@@ -133,6 +126,18 @@ Public Sub Run_Planning_Update()
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine start Run_Planning_Update"
     Run_Calc_Engine
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine returned Run_Planning_Update"
+
+    If Not CalcEngine_HasBlockingErrorsForState() And Not IsMacroAbortRequested() Then
+        If Not Planning_WBSIsEmpty() Then
+            If Not GanttTimeline_HasPhysicalHeader(ThisWorkbook.Worksheets("GANTT")) Then
+                If Not EnsureGanttForCurrentPlanning( _
+                    GANTT_ENSURE_RENDER_OFFSCREEN, "Run_Planning_UpdateBootstrap") Then
+                    Err.Raise 5, "Run_Planning_Update", _
+                        PlanningMessageText_Format("GANTT.ERROR.UPDATE_NOT_READY")
+                End If
+            End If
+        End If
+    End If
 
 CleanExit:
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Planning_Update"
@@ -188,6 +193,7 @@ Public Sub Run_Gantt_Update()
     Dim wsCaller As Worksheet
     Dim workflowStarted As Boolean
     Dim finalConsoleShown As Boolean
+    Dim hadLocalSnapshot As Boolean
 
     On Error GoTo SafeExit
 
@@ -195,6 +201,7 @@ Public Sub Run_Gantt_Update()
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Gantt_Update")
     RunButtonsTrace_Checkpoint "Workflow stack", "Workflow started Run_Gantt_Update=" & CStr(workflowStarted)
     Set wsCaller = ActiveSheet
+    hadLocalSnapshot = GanttLocal_HasCommittedSnapshot()
     GanttLocal_PrimeNormalState
 
     'User-facing full update from the big Gantt Update button.
@@ -230,9 +237,15 @@ Public Sub Run_Gantt_Update()
         GoTo CleanExit
     End If
 
+    If Not hadLocalSnapshot Then
+        If Not GanttDependency_PrimeLocalIndex(ThisWorkbook.Worksheets("GANTT"), True) Then
+            GanttLocal_Invalidate "ColdDependencyRefreshFailed"
+        End If
+    End If
+
     RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_AND_SHOW start Run_Gantt_Update"
     If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_RENDER_AND_SHOW, "Run_Gantt_Update") Then
-        Err.Raise 5, "Run_Gantt_Update", "Gantt renderer did not reach READY state after Update Gantt."
+        Err.Raise 5, "Run_Gantt_Update", PlanningMessageText_Format("GANTT.ERROR.UPDATE_NOT_READY")
     End If
     RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_AND_SHOW returned Run_Gantt_Update"
 
@@ -297,11 +310,9 @@ ErrHandler:
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Erreur dans Run_SCurve_Update" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Run_SCurve_Update" & vbCrLf & _
-            "-> " & Err.Description)
+        PlanningMessageText_Format("DIAG.SCURVE.UPDATE_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description), _
+            TextCatalog_Arguments("Details", Err.Description))
 
     RunButtonsTrace_Checkpoint "Console", "Error console display start Run_SCurve_Update"
     CalcBridge_ShowPlanningConsole consoleMessages
@@ -315,13 +326,15 @@ End Sub
 ' FR: Lance le workflow Full Update.
 ' EN: Runs the Full Update workflow.
 '------------------------------------------------------------------------------
-Public Sub Run_Full_Update()
+Public Sub Run_Full_Update(Optional ByVal propagateErrors As Boolean = False)
 
     Dim perfScope As clsPerfScope
 
     Dim workflowStarted As Boolean
     Dim wsCaller As Worksheet
     Dim deferredConsoleShown As Boolean
+
+    Dim failureNumber As Long, failureSource As String, failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Run_Full_Update", "Workflow")
 
@@ -340,40 +353,47 @@ Public Sub Run_Full_Update()
 
     If CalcEngine_HasBlockingErrorsForState() Then
         RunButtonsTrace_Checkpoint "CoreBridge", "Blocking errors detected Run_Full_Update"
-        If Planning_WBSIsEmpty() Then
+        If Planning_WBSIsEmpty(propagateErrors) Then
             Planning_FullSafeEmptyState
         Else
+            If propagateErrors Then Err.Raise 5, "Run_Full_Update", "PLANNING_VALIDATION_FAILED"
             Gantt_SafeEmptyState
         End If
         GoTo CleanExit
     End If
-    If IsMacroAbortRequested() Then GoTo CleanExit
+    If IsMacroAbortRequested() Then
+        If propagateErrors Then Err.Raise 5, "Run_Full_Update", "PLANNING_ABORTED"
+        GoTo CleanExit
+    End If
 
     If Not wsCaller Is Nothing Then
         If UCase$(CStr(wsCaller.Name)) = "GANTT" Then
             RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_AND_SHOW start Run_Full_Update"
             If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_RENDER_AND_SHOW, "Run_Full_Update") Then
-                Err.Raise 5, "Run_Full_Update", "Gantt renderer did not reach READY state after Full Update on GANTT."
+        Err.Raise 5, "Run_Full_Update", PlanningMessageText_Format("GANTT.ERROR.FULL_UPDATE_GANTT_NOT_READY")
             End If
             RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_AND_SHOW returned Run_Full_Update"
         Else
             RunButtonsTrace_Checkpoint "Gantt", "Ensure NO_RENDER start Run_Full_Update"
             If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_NO_RENDER, "Run_Full_UpdateDeferredNonGantt") Then
-                Err.Raise 5, "Run_Full_Update", "Gantt NO_RENDER invalidation failed."
+        Err.Raise 5, "Run_Full_Update", PlanningMessageText_Format("GANTT.ERROR.NO_RENDER_INVALIDATION")
             End If
             RunButtonsTrace_Checkpoint "Gantt", "Ensure NO_RENDER returned Run_Full_Update"
         End If
     Else
         RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_OFFSCREEN start Run_Full_Update"
         If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_RENDER_OFFSCREEN, "Run_Full_UpdateNoCaller") Then
-            Err.Raise 5, "Run_Full_Update", "Gantt renderer did not reach READY state after Full Update."
+        Err.Raise 5, "Run_Full_Update", PlanningMessageText_Format("GANTT.ERROR.FULL_UPDATE_NOT_READY")
         End If
         RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_OFFSCREEN returned Run_Full_Update"
     End If
 
-    If IsMacroAbortRequested() Then GoTo CleanExit
+    If IsMacroAbortRequested() Then
+        If propagateErrors Then Err.Raise 5, "Run_Full_Update", "PLANNING_ABORTED"
+        GoTo CleanExit
+    End If
     RunButtonsTrace_Checkpoint "SCurve", "Run_SCurve_Engine start Run_Full_Update"
-    Run_SCurve_Engine
+    Run_SCurve_Engine propagateErrors
     RunButtonsTrace_Checkpoint "SCurve", "Run_SCurve_Engine returned Run_Full_Update"
 
 CleanExit:
@@ -384,9 +404,15 @@ CleanExit:
     If workflowStarted And Not deferredConsoleShown Then RunButtons_ShowDeferredWorkflowConsole
     If workflowStarted Then EndPlanningWorkflow
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Full_Update"
+    If propagateErrors And failureNumber <> 0 Then
+        On Error GoTo 0
+        Err.Raise failureNumber, failureSource, failureDescription
+    End If
     Exit Sub
 
 SafeExit:
+    failureNumber = Err.Number: failureSource = Err.Source: failureDescription = Err.Description
+    If propagateErrors Then Resume CleanExit
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Full_Update Err=" & CStr(Err.Number)
     If workflowStarted Then
         RunButtons_ShowDeferredWorkflowConsole "Run_Full_Update"
@@ -397,6 +423,7 @@ SafeExit:
     Resume CleanExit
 
 End Sub
+
 
 
 

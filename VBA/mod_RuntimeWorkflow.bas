@@ -96,6 +96,7 @@ Public Sub EndPlanningWorkflow()
         On Error Resume Next
         GanttDrag_ReconcileWatchState
         On Error GoTo 0
+        EventHistory_FlushPendingProjection
     End If
     If Not ValidatePlanningWorkflowStack() Then
         ResetPlanningWorkflowContextSafe "EndPlanningWorkflow.InvalidStackAfterPop"
@@ -199,6 +200,7 @@ End Sub
 '------------------------------------------------------------------------------
 Public Function EnsurePlanningWorkflowStarted(Optional ByVal sourceProcedure As String = "") As Boolean
 
+    WorkbookSchema_RequireWritable
     EnsurePlanningWorkflowStack
     If Not ValidatePlanningWorkflowStack() Then
         ResetPlanningWorkflowContextSafe "EnsurePlanningWorkflowStarted.InvalidStack"
@@ -388,7 +390,6 @@ End Function
 Public Sub DeferPlanningWorkflowDisplayMessages(ByVal messages As Collection)
 
     Dim item As Variant
-    Dim deferredItem As Object
 
     If messages Is Nothing Then Exit Sub
     If messages.Count = 0 Then Exit Sub
@@ -396,11 +397,7 @@ Public Sub DeferPlanningWorkflowDisplayMessages(ByVal messages As Collection)
     EnsurePlanningWorkflowDeferredMessages
 
     For Each item In messages
-        Set deferredItem = CreateObject("Scripting.Dictionary")
-        deferredItem("Type") = CStr(item("Type"))
-        deferredItem("Message") = CStr(item("Message"))
-        deferredItem("HistoryHandled") = True
-        gPlanningWorkflowDeferredDisplayMessages.Add deferredItem
+        gPlanningWorkflowDeferredDisplayMessages.Add item
     Next item
 
 End Sub

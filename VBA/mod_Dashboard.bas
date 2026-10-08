@@ -159,6 +159,24 @@ Public Sub Dashboard_ApplyLanguage(Optional ByVal languageCode As String = "")
 End Sub
 
 '------------------------------------------------------------------------------
+' FR: Reconnecte les selecteurs de snapshots a leur source possedee sans rendu.
+' EN: Rebinds snapshot selectors to their owned source without rendering.
+'------------------------------------------------------------------------------
+Public Sub Dashboard_RebindSnapshotSelectors()
+
+    Dim ws As Worksheet
+    Dim selectedFromLabel As String
+    Dim selectedToLabel As String
+
+    Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
+    Set ws = Dashboard_EnsureSheet()
+    selectedFromLabel = CStr(ws.Range("C4").Value2)
+    selectedToLabel = CStr(ws.Range("G4").Value2)
+    Dashboard_SetupSnapshotControls ws, selectedFromLabel, selectedToLabel, False
+
+End Sub
+
+'------------------------------------------------------------------------------
 ' FR: Bascule l'etat Dashboard Language et met a jour les sorties associees.
 ' EN: Toggles Dashboard Language state and updates related outputs.
 '------------------------------------------------------------------------------
@@ -172,6 +190,7 @@ End Sub
 '------------------------------------------------------------------------------
 
 Public Sub Reset_Dashboard()
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
 
     Dim ws As Worksheet
     Dim oldScreenUpdating As Boolean
@@ -238,11 +257,9 @@ ErrHandler:
 
     Set consoleMessages = New Collection
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Erreur dans Run_Dashboard_Update" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Run_Dashboard_Update" & vbCrLf & _
-            "-> " & Err.Description)
+        PlanningMessageText_Format("DASHBOARD.ERROR.UPDATE", _
+            TextCatalog_Arguments("Details", Err.Description), _
+            TextCatalog_Arguments("Details", Err.Description))
     CalcBridge_ShowPlanningConsole consoleMessages
     Resume CleanExit
 
@@ -371,7 +388,8 @@ Public Sub Refresh_Dashboard_Comparison()
     Exit Sub
 
 ErrHandler:
-    MsgBox Dashboard_L("Erreur dans Refresh_Dashboard_Comparison", "Error in Refresh_Dashboard_Comparison") & vbCrLf & Err.Description, vbExclamation
+    CalcBridge_ShowSingleConsoleMessage "WARNING", "DASHBOARD.ERROR.COMPARISON", _
+        TextCatalog_Arguments("Details", Err.Description)
 
 End Sub
 
@@ -482,7 +500,7 @@ Private Sub Dashboard_RenderExecutiveSummaryEmpty(ByVal ws As Worksheet)
     cardWidth = (widthVal - (gapVal * 3)) / 4
 
     ws.Range("B6:M6").Merge
-    ws.Range("B6").value = Dashboard_L("Synthèse exécutive", "Executive Summary")
+    ws.Range("B6").value = TextCatalog_Get("DASHBOARD.TITLE.EXECUTIVE_SUMMARY", Dashboard_CurrentLanguage())
     ws.Range("B6").Font.Bold = True
     ws.Range("B6").Font.Size = 15
     ws.Range("B6").Font.Color = RGB(20, 34, 51)
@@ -496,19 +514,19 @@ Private Sub Dashboard_RenderExecutiveSummaryEmpty(ByVal ws As Worksheet)
         .VerticalAlignment = xlCenter
     End With
 
-    Dashboard_UpdateKpiCard ws, 1, Dashboard_L("Avancement projet", "Project Progress"), Dashboard_NoDataText(), _
+    Dashboard_UpdateKpiCard ws, 1, TextCatalog_Get("DASHBOARD.KPI.PROGRESS", Dashboard_CurrentLanguage()), Dashboard_NoDataText(), _
         Dashboard_NoProjectLoadedText(), _
         leftPos + 18, topPos, cardWidth - 10, 78, RGB(160, 170, 181)
 
-    Dashboard_UpdateKpiCard ws, 2, Dashboard_L("Fin prévisionnelle", "Forecast Finish"), Dashboard_NoDataText(), _
+    Dashboard_UpdateKpiCard ws, 2, TextCatalog_Get("DASHBOARD.KPI.FORECAST_FINISH", Dashboard_CurrentLanguage()), Dashboard_NoDataText(), _
         Dashboard_NoProjectLoadedText(), _
         leftPos + 18 + cardWidth + gapVal, topPos, cardWidth - 10, 78, RGB(160, 170, 181)
 
-    Dashboard_UpdateKpiCard ws, 3, Dashboard_L("Activités critiques", "Critical Activities"), Dashboard_NoDataText(), _
+    Dashboard_UpdateKpiCard ws, 3, TextCatalog_Get("DASHBOARD.KPI.CRITICAL_ACTIVITIES", Dashboard_CurrentLanguage()), Dashboard_NoDataText(), _
         Dashboard_NoProjectLoadedText(), _
         leftPos + 18 + ((cardWidth + gapVal) * 2), topPos, cardWidth - 10, 78, RGB(160, 170, 181)
 
-    Dashboard_UpdateKpiCard ws, 4, Dashboard_L("Momentum planning", "Schedule Momentum"), Dashboard_NoDataText(), _
+    Dashboard_UpdateKpiCard ws, 4, TextCatalog_Get("DASHBOARD.KPI.MOMENTUM", Dashboard_CurrentLanguage()), Dashboard_NoDataText(), _
         Dashboard_NoProjectLoadedText(), _
         leftPos + 18 + ((cardWidth + gapVal) * 3), topPos, cardWidth - 10, 78, RGB(160, 170, 181)
 
@@ -532,7 +550,7 @@ Private Sub Dashboard_RenderSCurveEmpty(ByVal ws As Worksheet)
     heightVal = ws.Range("B13:I29").Height
 
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
-    Dashboard_AddCenteredSectionTitle ws, Dashboard_L("Snapshot S-Curve", "S-Curve Snapshot"), leftPos + 22, topPos + 10, widthVal - 44
+    Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
     Dashboard_WriteDashboardEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44
 
 End Sub
@@ -555,7 +573,7 @@ Private Sub Dashboard_RenderPlanningOverviewEmpty(ByVal ws As Worksheet)
     heightVal = ws.Range("J13:Q29").Height
 
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
-    Dashboard_AddCenteredSectionTitle ws, Dashboard_L("Vue planning", "Planning Overview"), leftPos + 22, topPos + 10, widthVal - 44
+    Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
     Dashboard_WriteDashboardEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44
 
 End Sub
@@ -583,7 +601,7 @@ Private Sub Dashboard_RenderHotSpotsEmpty(ByVal ws As Worksheet)
     widthVal = ws.Range("B32:Q56").Width
     heightVal = ws.Range("B32:Q56").Height
 
-    Dashboard_AddSectionTitle ws, Dashboard_L("Points chauds", "Hot Spots"), leftPos + 22, topPos + 10, widthVal - 36
+    Dashboard_AddSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 36
 
     cardTop = topPos + 48
     cardHeight = heightVal - 64
@@ -592,10 +610,10 @@ Private Sub Dashboard_RenderHotSpotsEmpty(ByVal ws As Worksheet)
     largeW = (widthVal - 44 - rightW - (gapVal * 2)) / 2
     smallH = (cardHeight - gapVal) / 2
 
-    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22, cardTop, largeW, cardHeight, Dashboard_L("Dérives majeures", "Top Delays")
-    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + largeW + gapVal, cardTop, largeW, cardHeight, Dashboard_L("Santé deadlines", "Deadline Health")
-    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop, rightW, smallH, Dashboard_L("Prochain jalon", "Next Milestone")
-    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH, Dashboard_L("Activité critique", "Next Critical Activity")
+    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22, cardTop, largeW, cardHeight, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
+    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + largeW + gapVal, cardTop, largeW, cardHeight, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage())
+    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop, rightW, smallH, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage())
+    Dashboard_AddEmptyHotSpotCard ws, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage())
 
 End Sub
 '------------------------------------------------------------------------------
@@ -608,17 +626,17 @@ End Sub
 Private Sub Dashboard_UpdateHeaderTexts(ByVal ws As Worksheet)
 
     With ws.Range("B1:P2")
-        .value = Dashboard_L("Tableau de bord", "Dashboard")
+        .value = TextCatalog_Get("DASHBOARD.TITLE.PAGE", Dashboard_CurrentLanguage())
     End With
 
     With ws.Range("B3:P3")
-        .value = Dashboard_L("Pilotage projet PM / Engineering - snapshot de comparaison", "PM / Engineering dashboard - comparison snapshots")
+        .value = TextCatalog_Get("DASHBOARD.TITLE.SUBTITLE", Dashboard_CurrentLanguage())
     End With
 
     On Error Resume Next
-    ws.Shapes("btn_Update_Dashboard").TextFrame2.TextRange.Text = Dashboard_L("Nouveau snapshot", "New snapshot")
-    ws.Shapes("btn_Dashboard_Refresh_Comparison").TextFrame2.TextRange.Text = Dashboard_L("Rafraîchir comparaison", "Refresh Comparison")
-    ws.Shapes("btn_Dashboard_Reset").TextFrame2.TextRange.Text = Dashboard_L("Nettoyer Dashboard", "Clean Dashboard")
+    ws.Shapes("btn_Update_Dashboard").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
+    ws.Shapes("btn_Dashboard_Refresh_Comparison").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
+    ws.Shapes("btn_Dashboard_Reset").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
     On Error GoTo 0
 
 End Sub
@@ -755,27 +773,27 @@ Private Sub Dashboard_UpdateKnownShapeTexts(ByVal ws As Worksheet)
         If shp.TextFrame2.HasText Then
             txt = Trim$(shp.TextFrame2.TextRange.Text)
             Select Case txt
-                Case "Snapshot S-Curve", "S-Curve Snapshot"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Snapshot S-Curve", "S-Curve Snapshot")
-                Case "Vue planning", "Planning Overview"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Vue planning", "Planning Overview")
-                Case "Points chauds", "Hot Spots"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Points chauds", "Hot Spots")
-                Case "Dérives majeures", "Derives majeures", "Top Delays"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Dérives majeures", "Top Delays")
-                Case "Risques jalons", "Deadline Risks"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Risques jalons", "Deadline Risks")
-                Case "Alertes forecast", "Forecast Issues"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Alertes forecast", "Forecast Issues")
-                Case "Aucune dérive planning détectée", "Aucune derive planning detectee", "No schedule delays detected"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Aucune dérive planning détectée", "No schedule delays detected")
-                Case "Aucun risque deadline détecté", "Aucun risque deadline detecte", "No deadline risks detected"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Aucun risque deadline détecté", "No deadline risks detected")
-                Case "Aucune alerte forecast détectée", "Aucune alerte forecast detectee", "No forecast issues detected"
-                    shp.TextFrame2.TextRange.Text = Dashboard_L("Aucune alerte forecast détectée", "No forecast issues detected")
-                Case "Aucun projet chargé", "Aucun projet charge", "No project loaded"
+                Case TextCatalog_Get("DASHBOARD.SECTION.SCURVE", "FR"), TextCatalog_Get("DASHBOARD.SECTION.SCURVE", "EN")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", "FR"), TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", "EN")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", "FR"), TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", "EN")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", "FR"), TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.TOP_DELAYS", "FR")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", "FR"), TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", "EN")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", "FR"), TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", "EN")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DELAYS", "FR")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DEADLINE_RISKS", "FR")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_FORECAST_ISSUES", "FR")
+                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", Dashboard_CurrentLanguage())
+                Case TextCatalog_Get("DASHBOARD.EMPTY.NO_PROJECT", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_PROJECT", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_PROJECT", "FR")
                     shp.TextFrame2.TextRange.Text = Dashboard_NoProjectLoadedText()
-                Case "AUCUNE DONNÉE", "AUCUNE DONNEE", "NO DATA"
+                Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DATA", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DATA", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DATA", "FR")
                     shp.TextFrame2.TextRange.Text = Dashboard_NoDataText()
             End Select
         End If
@@ -793,7 +811,7 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
 
     With ws.Range("B1:P2")
         .Merge
-        .value = Dashboard_L("Tableau de bord", "Dashboard")
+        .value = TextCatalog_Get("DASHBOARD.TITLE.PAGE", Dashboard_CurrentLanguage())
         .Font.Size = 24
         .Font.Bold = True
         .Font.Color = RGB(20, 34, 51)
@@ -803,7 +821,7 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
 
     With ws.Range("B3:P3")
         .Merge
-        .value = Dashboard_L("Pilotage projet PM / Engineering - snapshot de comparaison", "PM / Engineering dashboard - comparison snapshots")
+        .value = TextCatalog_Get("DASHBOARD.TITLE.SUBTITLE", Dashboard_CurrentLanguage())
         .Font.Size = 10
         .Font.Color = RGB(96, 111, 128)
         .HorizontalAlignment = xlLeft
@@ -840,7 +858,7 @@ Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal x As Double, 
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = Dashboard_L("Nouveau snapshot", "New snapshot")
+        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
         .TextRange.Font.Name = "Segoe UI"
         .TextRange.Font.Size = 9
         .TextRange.Font.Bold = msoTrue
@@ -883,7 +901,7 @@ Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double
     labelShape.Name = "DASH_Language_Label"
     labelShape.OnAction = "Toggle_Dashboard_Language"
     labelShape.Placement = xlMove
-    Dashboard_FormatSwitchLabel labelShape, "FR / EN"
+    Dashboard_FormatSwitchLabel labelShape, TextCatalog_Get("DASHBOARD.LANGUAGE.SWITCH", Dashboard_CurrentLanguage())
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, y, trackW, trackH)
     trackShape.Name = "DASH_Language_BG"
@@ -991,7 +1009,7 @@ Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal x 
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = Dashboard_L("Rafraîchir comparaison", "Refresh Comparison")
+        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
         .TextRange.Font.Name = "Segoe UI"
         .TextRange.Font.Size = 9
         .TextRange.Font.Bold = msoTrue
@@ -1024,7 +1042,7 @@ Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal x As Double, B
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = Dashboard_L("Nettoyer Dashboard", "Clean Dashboard")
+        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
         .TextRange.Font.Name = "Segoe UI"
         .TextRange.Font.Size = 9
         .TextRange.Font.Bold = msoTrue
@@ -1053,7 +1071,7 @@ Private Sub Dashboard_EnsureResetButton(ByVal ws As Worksheet)
         btn.Line.Visible = msoFalse
         btn.Visible = msoTrue
         btn.OnAction = "Reset_Dashboard"
-        btn.TextFrame2.TextRange.Text = Dashboard_L("Nettoyer Dashboard", "Clean Dashboard")
+        btn.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
     End If
 
 End Sub
@@ -1076,8 +1094,8 @@ Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selecte
     If selectedFromLabel <> "" And Dashboard_SnapshotLabelExists(tbl, selectedFromLabel) Then fromDefault = selectedFromLabel
     If selectedToLabel <> "" And Dashboard_SnapshotLabelExists(tbl, selectedToLabel) Then toDefault = selectedToLabel
 
-    ws.Range("B4").value = Dashboard_L("De", "From")
-    ws.Range("F4").value = Dashboard_L("A", "To")
+    ws.Range("B4").value = TextCatalog_Get("DASHBOARD.SNAPSHOT.FROM", Dashboard_CurrentLanguage())
+    ws.Range("F4").value = TextCatalog_Get("DASHBOARD.SNAPSHOT.TO", Dashboard_CurrentLanguage())
     ws.Range("B4,F4").Font.Bold = True
     ws.Range("B4,F4").Font.Color = RGB(96, 111, 128)
 
@@ -1142,13 +1160,9 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
     Dim baselineFinish As Variant
     Dim calcFinish As Variant
     Dim driftDays As Variant
-    Dim deadlineExceeded As Long
-    Dim forecastIssues As Long
     Dim cpCount As Long
     Dim lpCount As Long
     Dim lpRemaining As Long
-    Dim statusText As String
-    Dim statusColor As Long
     Dim contractText As String
     Dim contractColor As Long
     Dim momentumText As String
@@ -1185,22 +1199,9 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
     calcFinish = Dashboard_MaxDate(tblCalc, mapCalc, "Calculated Finish")
     If Dashboard_HasDateValue(baselineFinish) And Dashboard_HasDateValue(calcFinish) Then driftDays = CLng(Dashboard_DateNumber(calcFinish) - Dashboard_DateNumber(baselineFinish))
 
-    deadlineExceeded = Dashboard_CountNumericBelow(tblCalc, mapCalc, "Deadline Float", 0#)
-    forecastIssues = Dashboard_CountErrorContains(tblCalc, mapCalc, "Forecast")
     cpCount = Dashboard_CountMarker(tblCalc, mapCalc, "Critical Path")
     lpCount = Dashboard_CountMarker(tblCalc, mapCalc, "Longest Path")
     lpRemaining = Dashboard_CountMarkerRemaining(tblCalc, mapCalc, "Longest Path")
-
-    If deadlineExceeded > 0 Or forecastIssues > 0 Then
-        statusText = "ACTION"
-        statusColor = RGB(192, 80, 77)
-    ElseIf HasValue(driftDays) And CLng(driftDays) > 0 Then
-        statusText = "WATCH"
-        statusColor = RGB(238, 156, 68)
-    Else
-        statusText = "ON TRACK"
-        statusColor = RGB(0, 145, 112)
-    End If
 
     fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
     toLabel = CStr(ws.Range(DASH_TO_CELL).value)
@@ -1232,24 +1233,24 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
     cardWidth = (widthVal - (gapVal * 3)) / 4
 
     ws.Range("B6:M6").Merge
-    ws.Range("B6").value = Dashboard_L("Synthèse exécutive", "Executive Summary")
+    ws.Range("B6").value = TextCatalog_Get("DASHBOARD.TITLE.EXECUTIVE_SUMMARY", Dashboard_CurrentLanguage())
     ws.Range("B6").Font.Bold = True
     ws.Range("B6").Font.Size = 15
     ws.Range("B6").Font.Color = RGB(20, 34, 51)
 
-    Dashboard_UpdateKpiCard ws, 1, Dashboard_L("Avancement projet", "Project Progress"), Format$(actualProgress, "0%"), _
+    Dashboard_UpdateKpiCard ws, 1, TextCatalog_Get("DASHBOARD.KPI.PROGRESS", Dashboard_CurrentLanguage()), Format$(actualProgress, "0%"), _
         progressDeltaText, _
         leftPos + 18, ws.Range("B7").Top, cardWidth - 10, 78, progressColor
 
-    Dashboard_UpdateKpiCard ws, 2, Dashboard_L("Fin prévisionnelle", "Forecast Finish"), Dashboard_FormatDateShort(calcFinish), _
+    Dashboard_UpdateKpiCard ws, 2, TextCatalog_Get("DASHBOARD.KPI.FORECAST_FINISH", Dashboard_CurrentLanguage()), Dashboard_FormatDateShort(calcFinish), _
         forecastDeltaText, _
         leftPos + 18 + cardWidth + gapVal, ws.Range("B7").Top, cardWidth - 10, 78, forecastColor
 
-    Dashboard_UpdateKpiCard ws, 3, Dashboard_L("Activités critiques", "Critical Activities"), criticalHeroText, _
+    Dashboard_UpdateKpiCard ws, 3, TextCatalog_Get("DASHBOARD.KPI.CRITICAL_ACTIVITIES", Dashboard_CurrentLanguage()), criticalHeroText, _
         criticalSubText, _
         leftPos + 18 + ((cardWidth + gapVal) * 2), ws.Range("B7").Top, cardWidth - 10, 78, criticalColor
 
-    Dashboard_UpdateKpiCard ws, 4, Dashboard_L("Momentum planning", "Schedule Momentum"), Dashboard_LocalMomentumStatus(momentumText), _
+    Dashboard_UpdateKpiCard ws, 4, TextCatalog_Get("DASHBOARD.KPI.MOMENTUM", Dashboard_CurrentLanguage()), Dashboard_LocalMomentumStatus(momentumText), _
         momentumSubText, _
         leftPos + 18 + ((cardWidth + gapVal) * 3), ws.Range("B7").Top, cardWidth - 10, 78, momentumColor
 
@@ -1316,9 +1317,9 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal scur
     ch.HasTitle = False
     ch.HasLegend = True
     ch.Legend.Position = xlLegendPositionBottom
-    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, actualRange, RGB(0, 145, 112), 2.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.BASELINE", Dashboard_CurrentLanguage()), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.ACTUAL", Dashboard_CurrentLanguage()), xRange, actualRange, RGB(0, 145, 112), 2.5, False
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.FORECAST", Dashboard_CurrentLanguage()), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
 
     On Error Resume Next
     ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
@@ -1362,7 +1363,7 @@ Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal scurveProje
     widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
     heightVal = ws.Range("B13:I29").Height
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
-    Dashboard_AddCenteredSectionTitle ws, Dashboard_L("Snapshot S-Curve", "S-Curve Snapshot"), leftPos + 22, topPos + 10, widthVal - 44
+    Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
     Set chartObj = ws.ChartObjects.Add(leftPos + 16, topPos + 38, widthVal - 24, heightVal - 56)
     chartObj.Name = DASH_CHART_SCURVE
     Set ch = chartObj.Chart
@@ -1370,9 +1371,9 @@ Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal scurveProje
     ch.HasTitle = False
     ch.HasLegend = True
     ch.Legend.Position = xlLegendPositionBottom
-    Dashboard_AddLineSeries ch, Dashboard_L("Référence", "Baseline"), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Réel", "Actual"), xRange, actualRange, RGB(0, 145, 112), 2.5, False
-    Dashboard_AddLineSeries ch, Dashboard_L("Prévision", "Forecast"), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.BASELINE", Dashboard_CurrentLanguage()), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.ACTUAL", Dashboard_CurrentLanguage()), xRange, actualRange, RGB(0, 145, 112), 2.5, False
+    Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.FORECAST", Dashboard_CurrentLanguage()), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
     On Error Resume Next
     ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
     ch.Axes(xlCategory).TickLabels.NumberFormat = Dashboard_ChartDateNumberFormat(False)
@@ -1507,7 +1508,7 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
 
     If renderShell Then
         Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
-        Dashboard_AddCenteredSectionTitle ws, Dashboard_L("Vue planning", "Planning Overview"), leftPos + 22, topPos + 10, widthVal - 44
+        Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
     End If
 
     arr = tblCalc.DataBodyRange.value
@@ -1515,7 +1516,7 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
 
     Set rowsToShow = Dashboard_PlanningOverviewRows(arr, mapCalc, axisMin, axisMax)
     If rowsToShow.Count = 0 Or axisMin <= 0 Or axisMax < axisMin Then
-        Dashboard_WriteEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44, Dashboard_L("Aucune donnée planning summary disponible", "No summary schedule data available")
+        Dashboard_WriteEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44, TextCatalog_Get("DASHBOARD.EMPTY.NO_SUMMARY", Dashboard_CurrentLanguage())
         Exit Sub
     End If
 
@@ -1601,7 +1602,7 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
     Next rowRef
 
     If shown = 0 Then
-        Dashboard_WriteEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44, Dashboard_L("Aucune donnée planning summary disponible", "No summary schedule data available")
+        Dashboard_WriteEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44, TextCatalog_Get("DASHBOARD.EMPTY.NO_SUMMARY", Dashboard_CurrentLanguage())
     End If
 
     If CDbl(Date) >= axisMin And CDbl(Date) <= axisMax Then
@@ -1655,7 +1656,7 @@ Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As List
     widthVal = ws.Range("B32:Q56").Width
     heightVal = ws.Range("B32:Q56").Height
 
-    If renderShell Then Dashboard_AddSectionTitle ws, Dashboard_L("Points chauds", "Hot Spots"), leftPos + 22, topPos + 10, widthVal - 36
+    If renderShell Then Dashboard_AddSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 36
 
     cardTop = topPos + 48
     cardHeight = heightVal - 64
@@ -1718,7 +1719,7 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
         accentColor = RGB(0, 145, 112)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Dérives majeures", "Top Delays"), Dashboard_L("Où est le retard ?", "Where is the delay?"), accentColor
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), accentColor
 
     For i = 1 To TOP_DELAY_COUNT
         lineY = y + 66 + ((i - 1) * 68)
@@ -1733,18 +1734,18 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
     Next i
 
     If topIds(1) = "" Then
-        Dashboard_AddHotSpotText ws, Dashboard_L("Aucune dérive planning détectée", "No schedule delays detected"), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Dérives majeures", "Top Delays"), Dashboard_L("Où est le retard ?", "Where is the delay?"), RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, Dashboard_L("Aucune donnée de dérive disponible", "No delay data available"), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAY_DATA", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, "Top Delays"
+    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -1821,13 +1822,13 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
         accentColor = RGB(0, 145, 112)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Santé deadlines", "Deadline Health"), Dashboard_L("Mes engagements sont-ils tenus ?", "Are commitments safe?"), accentColor
-    Dashboard_AddHotSpotKpiBlock ws, x + 18, y + 62, (w - 48) / 2, 64, Dashboard_L("En retard", "Overdue"), CStr(overdueCount), IIf(overdueCount > 0, RGB(192, 80, 77), RGB(0, 145, 112)), IIf(overdueCount > 0, RGB(252, 235, 232), RGB(229, 246, 239))
-    Dashboard_AddHotSpotKpiBlock ws, x + 30 + ((w - 48) / 2), y + 62, (w - 48) / 2, 64, Dashboard_L("OK", "On Track"), CStr(onTrackCount), RGB(0, 145, 112), RGB(229, 246, 239)
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), accentColor
+    Dashboard_AddHotSpotKpiBlock ws, x + 18, y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.OVERDUE", Dashboard_CurrentLanguage()), CStr(overdueCount), IIf(overdueCount > 0, RGB(192, 80, 77), RGB(0, 145, 112)), IIf(overdueCount > 0, RGB(252, 235, 232), RGB(229, 246, 239))
+    Dashboard_AddHotSpotKpiBlock ws, x + 30 + ((w - 48) / 2), y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.ON_TRACK", Dashboard_CurrentLanguage()), CStr(onTrackCount), RGB(0, 145, 112), RGB(229, 246, 239)
 
     closestY = y + 152
     If worstFound Then
-        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, Dashboard_L("Plus critique", "Worst Offender"), worstWbs, Dashboard_TruncateText(worstName, 30), CStr(CLng(worstFloat)) & Dashboard_DurationSuffix(), RGB(192, 80, 77), RGB(252, 235, 232)
+        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.WORST", Dashboard_CurrentLanguage()), worstWbs, Dashboard_TruncateText(worstName, 30), CStr(CLng(worstFloat)) & Dashboard_DurationSuffix(), RGB(192, 80, 77), RGB(252, 235, 232)
         closestY = y + 242
     End If
 
@@ -1839,20 +1840,20 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
             riskColor = RGB(0, 145, 112)
             riskFill = RGB(229, 246, 239)
         End If
-        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, Dashboard_L("Risque proche", "Closest Risk"), riskWbs, Dashboard_TruncateText(riskName, 30), "+" & CStr(CLng(riskFloat)) & Dashboard_DurationSuffix(), riskColor, riskFill
+        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.NEAREST_RISK", Dashboard_CurrentLanguage()), riskWbs, Dashboard_TruncateText(riskName, 30), "+" & CStr(CLng(riskFloat)) & Dashboard_DurationSuffix(), riskColor, riskFill
     ElseIf activeDeadlineCount = 0 Then
-        Dashboard_AddHotSpotText ws, Dashboard_L("Aucune deadline active", "No active deadline"), x + 18, closestY + 10, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_DEADLINE", Dashboard_CurrentLanguage()), x + 18, closestY + 10, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Santé deadlines", "Deadline Health"), Dashboard_L("Mes engagements sont-ils tenus ?", "Are commitments safe?"), RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, Dashboard_L("Aucune deadline disponible", "No deadline data available"), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_DATA", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, "Deadline Health"
+    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -1928,7 +1929,7 @@ Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc A
         dateColor = RGB(96, 111, 128)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Prochain jalon", "Next Milestone"), "", accentColor
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", accentColor
 
     If bestFutureFound Or bestPastFound Then
         Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), x + 16, y + 58, w - 32, 28, RGB(20, 34, 51)
@@ -1936,18 +1937,18 @@ Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc A
         Dashboard_AddHotSpotText ws, Dashboard_FormatDate(bestDate, True), x + 16, y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
         Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), x + 16, y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
     Else
-        Dashboard_AddHotSpotText ws, Dashboard_L("Aucun jalon actif", "No active milestone"), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_MILESTONE", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Prochain jalon", "Next Milestone"), "", RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, Dashboard_L("Aucun jalon disponible", "No milestone data available"), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_MILESTONE_DATA", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, "Next Milestone"
+    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -2040,27 +2041,27 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
         End If
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Activité critique", "Next Critical Activity"), "", accentColor
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", accentColor
 
     If bestFound Then
         Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), x + 16, y + 58, w - 32, 28, RGB(20, 34, 51)
         Dashboard_AddHotSpotText ws, bestWbs, x + 16, y + 86, w - 32, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
-        Dashboard_AddHotSpotText ws, Dashboard_L("Début ", "Starts ") & Dashboard_FormatDate(bestDate, True), x + 16, y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.STARTS", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Date", Dashboard_FormatDate(bestDate, True))), x + 16, y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
         Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), x + 16, y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
-        If IsNumeric(bestFloat) Then Dashboard_AddHotSpotText ws, Dashboard_L("Marge: ", "Float: ") & CStr(CLng(bestFloat)) & Dashboard_DurationSuffix(), x + 16, y + h - 24, w - 32, 16, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        If IsNumeric(bestFloat) Then Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.FLOAT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", CStr(CLng(bestFloat)) & Dashboard_DurationSuffix())), x + 16, y + h - 24, w - 32, 16, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Else
-        Dashboard_AddHotSpotText ws, Dashboard_L("Aucune activité critique active", "No active critical activity"), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_CRITICAL", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, Dashboard_L("Activité critique", "Next Critical Activity"), "", RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, Dashboard_L("Aucune activité critique disponible", "No critical activity data available"), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_CRITICAL_DATA", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, "Next Critical Activity"
+    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -2095,7 +2096,7 @@ Private Sub Dashboard_WriteHotSpotRuntimeError( _
 
     errNum = Err.Number
     errDesc = Err.Description
-    msg = Dashboard_L("Erreur rendu ", "Render error ") & CStr(errNum) & " - " & errDesc & " | " & cardName & " | " & gHotSpotHelper & " | " & gHotSpotStep
+    msg = TextCatalog_Format("DASHBOARD.ERROR.RENDER", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Number", CStr(errNum), "Details", errDesc, "Card", cardName, "Helper", gHotSpotHelper, "Step", gHotSpotStep))
     Debug.Print "Dashboard Hot Spots | " & cardName & " | " & gHotSpotHelper & " | " & gHotSpotStep & " | RenderFailed " & CStr(errNum) & ": " & errDesc
 
     On Error Resume Next
@@ -2486,11 +2487,11 @@ End Function
 Private Function Dashboard_DaysRemainingText(ByVal daysVal As Long) As String
 
     If daysVal < 0 Then
-        Dashboard_DaysRemainingText = CStr(Abs(daysVal)) & Dashboard_L("j de retard", " days overdue")
+        Dashboard_DaysRemainingText = TextCatalog_Format("DASHBOARD.DEADLINE.OVERDUE", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(Abs(daysVal))))
     ElseIf daysVal = 0 Then
-        Dashboard_DaysRemainingText = Dashboard_L("aujourd'hui", "today")
+        Dashboard_DaysRemainingText = TextCatalog_Get("DASHBOARD.LABEL.TODAY", Dashboard_CurrentLanguage())
     Else
-        Dashboard_DaysRemainingText = CStr(daysVal) & Dashboard_L("j restants", " days remaining")
+        Dashboard_DaysRemainingText = TextCatalog_Format("DASHBOARD.DEADLINE.REMAINING", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(daysVal)))
     End If
 
 End Function
@@ -2498,41 +2499,6 @@ End Function
 ' FR: Actualise Render Forecast Issues sans modifier les regles metier qui produisent les donnees.
 ' EN: Refreshes Render Forecast Issues without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
-
-Private Sub Dashboard_RenderForecastIssues(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
-
-    Dim arr As Variant
-    Dim r As Long
-    Dim shown As Long
-    Dim errMsg As String
-    Dim lineY As Double
-
-    Dashboard_AddTableTitle ws, Dashboard_L("Alertes forecast", "Forecast Issues"), x, y, w
-    Dashboard_WriteHotspotHeader ws, x, y + 24, Array("WBS", Dashboard_L("Tâche", "Task"), Dashboard_L("Alerte", "Issue"))
-
-    If tblCalc Is Nothing Then Exit Sub
-    If tblCalc.DataBodyRange Is Nothing Then Exit Sub
-    If Not mapCalc.Exists("ErrorMsg") Then Exit Sub
-
-    arr = tblCalc.DataBodyRange.value
-    For r = 1 To UBound(arr, 1)
-        errMsg = Trim$(CStr(Dashboard_ArrayVal(arr, mapCalc, r, "ErrorMsg")))
-        If InStr(1, errMsg, "Forecast", vbTextCompare) > 0 Then
-            shown = shown + 1
-            If shown > 5 Then Exit For
-            lineY = y + 44 + ((shown - 1) * 24)
-            Dashboard_WriteHotspotRow ws, x, lineY, _
-                CStr(Dashboard_ArrayVal(arr, mapCalc, r, "WBS")), _
-                Left$(CStr(Dashboard_ArrayVal(arr, mapCalc, r, "Task Name")), 18), _
-                "Forecast", RGB(192, 80, 77)
-        End If
-    Next r
-
-    If shown = 0 Then
-        Dashboard_WriteEmptyState ws, x, y + 54, w, Dashboard_L("Aucune alerte forecast détectée", "No forecast issues detected")
-    End If
-
-End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Retourne la map Max Date sans modifier les donnees d'entree.
@@ -2670,26 +2636,14 @@ Private Function Dashboard_CountNumericBelow(ByVal tbl As ListObject, ByVal mapT
 End Function
 
 '------------------------------------------------------------------------------
-' FR: Retourne la map Error Contains sans exposer de mutateur sur l'etat source.
-' EN: Returns the Error Contains map without exposing a mutator for source state.
+' FR: Compte les lignes portant un diagnostic Forecast structure.
+' EN: Counts rows carrying a structured Forecast diagnostic.
 '------------------------------------------------------------------------------
 
-Private Function Dashboard_CountErrorContains(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal needle As String) As Long
-
-    Dim arr As Variant
-    Dim r As Long
-
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists("ErrorMsg") Then Exit Function
-
-    arr = tbl.DataBodyRange.value
-    For r = 1 To UBound(arr, 1)
-        If InStr(1, CStr(arr(r, mapTbl("ErrorMsg"))), needle, vbTextCompare) > 0 Then Dashboard_CountErrorContains = Dashboard_CountErrorContains + 1
-    Next r
-
-End Function
-
+'------------------------------------------------------------------------------
+' FR: Reconnait les diagnostics Forecast par code stable, jamais par texte rendu.
+' EN: Recognizes Forecast diagnostics by stable code, never rendered text.
+'------------------------------------------------------------------------------
 '------------------------------------------------------------------------------
 ' FR: Retourne la map Marker sans exposer de mutateur sur l'etat source.
 ' EN: Returns the Marker map without exposing a mutator for source state.
@@ -2806,7 +2760,6 @@ Private Function Dashboard_BuildMetrics( _
         metrics("DriftDays") = Empty
     End If
     metrics("DeadlineRiskCount") = Dashboard_CountNumericBelow(tblCalc, mapCalc, "Deadline Float", 0#)
-    metrics("ForecastIssueCount") = Dashboard_CountErrorContains(tblCalc, mapCalc, "Forecast")
     metrics("LongestPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Longest Path")
     metrics("LongestPathRemaining") = Dashboard_CountMarkerRemaining(tblCalc, mapCalc, "Longest Path")
     metrics("CriticalPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Critical Path")
@@ -2853,7 +2806,6 @@ Private Sub Dashboard_CreateSnapshotFromCurrentData()
         If HasValue(metrics("DriftDays")) Then .Cells(1, tblSnap.ListColumns("DriftDays").Index).value = CLng(metrics("DriftDays"))
         .Cells(1, tblSnap.ListColumns("ContractStatus").Index).value = metrics("ContractStatus")
         .Cells(1, tblSnap.ListColumns("DeadlineRiskCount").Index).value = metrics("DeadlineRiskCount")
-        .Cells(1, tblSnap.ListColumns("ForecastIssueCount").Index).value = metrics("ForecastIssueCount")
         .Cells(1, tblSnap.ListColumns("LongestPathCount").Index).value = metrics("LongestPathCount")
         .Cells(1, tblSnap.ListColumns("LongestPathRemaining").Index).value = metrics("LongestPathRemaining")
         .Cells(1, tblSnap.ListColumns("CriticalPathCount").Index).value = metrics("CriticalPathCount")
@@ -2903,7 +2855,10 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     ThisWorkbook.names("DashboardSnapshotLabels").Delete
     On Error GoTo 0
     If Not tbl.DataBodyRange Is Nothing Then
-        ThisWorkbook.names.Add Name:="DashboardSnapshotLabels", RefersTo:="=" & DASHBOARD_SNAPSHOT_TABLE & "[SnapshotLabel]"
+        ' Refresh the owned physical extent whenever snapshot controls are rebuilt.
+        ThisWorkbook.names.Add Name:="DashboardSnapshotLabels", _
+            RefersTo:="='" & Replace$(ws.Name, "'", "''") & "'!" & _
+                tbl.ListColumns("SnapshotLabel").DataBodyRange.Address(True, True, xlA1)
     End If
 
     Set Dashboard_EnsureSnapshotsTable = tbl
@@ -2945,7 +2900,11 @@ End Function
 
 Private Function Dashboard_SnapshotLabel(ByVal snapshotId As Long, ByVal snapshotDate As Date) As String
 
-    Dashboard_SnapshotLabel = "#" & CStr(snapshotId) & " - " & Format$(snapshotDate, "dd/mm/yyyy hh:nn")
+    Dashboard_SnapshotLabel = TextCatalog_Format( _
+        "DASHBOARD.SNAPSHOT.LABEL", Dashboard_CurrentLanguage(), _
+        TextCatalog_Arguments( _
+            "Id", CStr(snapshotId), _
+            "Date", Format$(snapshotDate, "dd/mm/yyyy hh:nn")))
 
 End Function
 
@@ -3013,8 +2972,8 @@ Private Function Dashboard_MomentumStatus(ByVal fromLabel As String, ByVal toLab
     Dim toDefault As String
 
     statusColor = RGB(96, 111, 128)
-    compareText = Dashboard_L("Aucun snapshot", "No snapshots")
-    subText = Dashboard_L("Historique insuffisant", "Insufficient history")
+    compareText = TextCatalog_Get("DASHBOARD.EMPTY.NO_SNAPSHOTS", Dashboard_CurrentLanguage())
+    subText = TextCatalog_Get("DASHBOARD.EMPTY.HISTORY_TITLE", Dashboard_CurrentLanguage())
     Dashboard_MomentumStatus = "INSUFFICIENT HISTORY"
 
     Set tbl = Dashboard_EnsureSnapshotsTable()
@@ -3034,9 +2993,7 @@ Private Function Dashboard_MomentumStatus(ByVal fromLabel As String, ByVal toLab
     progressDelta = CDbl(toRow("ActualProgress")) - CDbl(fromRow("ActualProgress"))
     forecastDelta = Dashboard_DateNumber(toRow("ForecastFinish")) - Dashboard_DateNumber(fromRow("ForecastFinish"))
     riskDelta = CDbl(toRow("DeadlineRiskCount")) - CDbl(fromRow("DeadlineRiskCount"))
-    subText = Dashboard_L("Avancement ", "Progress ") & Dashboard_FormatPercentSigned(progressDelta) & _
-        " | " & Dashboard_L("Fin ", "Forecast ") & Dashboard_FormatSignedCompactDays(forecastDelta) & _
-        " | " & Dashboard_L("Risques ", "Risks ") & Dashboard_FormatSignedNumber(riskDelta)
+    subText = TextCatalog_Format("DASHBOARD.MOMENTUM.SUMMARY", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Progress", Dashboard_FormatPercentSigned(progressDelta), "Forecast", Dashboard_FormatSignedCompactDays(forecastDelta), "Risks", Dashboard_FormatSignedNumber(riskDelta)))
 
     If forecastDelta > 0 Or riskDelta > 0 Then
         Dashboard_MomentumStatus = "DETERIORATING"
@@ -3109,12 +3066,12 @@ End Sub
 Private Function Dashboard_ComparisonText(ByVal fromRow As Object, ByVal toRow As Object) As String
 
     If fromRow Is Nothing Or toRow Is Nothing Then
-        Dashboard_ComparisonText = Dashboard_L("Comparaison indisponible", "Comparison unavailable")
+        Dashboard_ComparisonText = TextCatalog_Get("DASHBOARD.EMPTY.COMPARISON", Dashboard_CurrentLanguage())
         Exit Function
     End If
 
     If Not Dashboard_HasDateValue(fromRow("SnapshotDateTime")) Or Not Dashboard_HasDateValue(toRow("SnapshotDateTime")) Then
-        Dashboard_ComparisonText = Dashboard_L("Comparaison indisponible", "Comparison unavailable")
+        Dashboard_ComparisonText = TextCatalog_Get("DASHBOARD.EMPTY.COMPARISON", Dashboard_CurrentLanguage())
         Exit Function
     End If
 
@@ -3134,12 +3091,12 @@ Private Function Dashboard_ProgressDeltaText(ByVal fromRow As Object, ByVal toRo
     Dim deltaVal As Double
 
     If fromRow Is Nothing Or toRow Is Nothing Then
-        Dashboard_ProgressDeltaText = Dashboard_L("Delta indisponible", "Delta unavailable")
+        Dashboard_ProgressDeltaText = TextCatalog_Get("DASHBOARD.EMPTY.DELTA", Dashboard_CurrentLanguage())
         Exit Function
     End If
 
     deltaVal = CDbl(toRow("ActualProgress")) - CDbl(fromRow("ActualProgress"))
-    Dashboard_ProgressDeltaText = Dashboard_FormatPercentSigned(deltaVal) & " " & Dashboard_L("vs Début", "vs From")
+    Dashboard_ProgressDeltaText = TextCatalog_Format("DASHBOARD.PROGRESS.DELTA", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Delta", Dashboard_FormatPercentSigned(deltaVal)))
 
 End Function
 
@@ -3156,13 +3113,13 @@ Private Function Dashboard_BehindPlanText(ByVal plannedProgress As Double, ByVal
 
     If behindPlan <= 0# Then
         statusColor = RGB(0, 145, 112)
-        Dashboard_BehindPlanText = Dashboard_L("a l'heure ou en avance", "ahead or on plan")
+        Dashboard_BehindPlanText = TextCatalog_Get("DASHBOARD.STATUS.AHEAD", Dashboard_CurrentLanguage())
     ElseIf behindPlan <= 0.1 Then
         statusColor = RGB(238, 156, 68)
-        Dashboard_BehindPlanText = Format$(behindPlan, "0%") & Dashboard_L(" de retard vs plan", " behind plan")
+        Dashboard_BehindPlanText = TextCatalog_Format("DASHBOARD.PROGRESS.BEHIND", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Progress", Format$(behindPlan, "0%")))
     Else
         statusColor = RGB(192, 80, 77)
-        Dashboard_BehindPlanText = Format$(behindPlan, "0%") & Dashboard_L(" de retard vs plan", " behind plan")
+        Dashboard_BehindPlanText = TextCatalog_Format("DASHBOARD.PROGRESS.BEHIND", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Progress", Format$(behindPlan, "0%")))
     End If
 
 End Function
@@ -3177,21 +3134,21 @@ Private Function Dashboard_ForecastDeltaText(ByVal fromRow As Object, ByVal toRo
     Dim deltaDays As Long
 
     If fromRow Is Nothing Or toRow Is Nothing Then
-        Dashboard_ForecastDeltaText = Dashboard_L("Comparaison indisponible", "Comparison unavailable")
+        Dashboard_ForecastDeltaText = TextCatalog_Get("DASHBOARD.EMPTY.COMPARISON", Dashboard_CurrentLanguage())
         Exit Function
     End If
     If Not Dashboard_HasDateValue(fromRow("ForecastFinish")) Or Not Dashboard_HasDateValue(toRow("ForecastFinish")) Then
-        Dashboard_ForecastDeltaText = Dashboard_L("Fin non comparable", "Forecast not comparable")
+        Dashboard_ForecastDeltaText = TextCatalog_Get("DASHBOARD.EMPTY.FORECAST_COMPARISON", Dashboard_CurrentLanguage())
         Exit Function
     End If
 
     deltaDays = CLng(Dashboard_DateNumber(toRow("ForecastFinish")) - Dashboard_DateNumber(fromRow("ForecastFinish")))
     If deltaDays < 0 Then
-        Dashboard_ForecastDeltaText = Dashboard_L("Fin améliorée de ", "Forecast improved by ") & CStr(Abs(deltaDays)) & Dashboard_L("j", "d")
+        Dashboard_ForecastDeltaText = TextCatalog_Format("DASHBOARD.FORECAST.IMPROVED", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(Abs(deltaDays))))
     ElseIf deltaDays > 0 Then
-        Dashboard_ForecastDeltaText = Dashboard_L("Fin décalée de ", "Forecast slipped by ") & CStr(deltaDays) & Dashboard_L("j", "d")
+        Dashboard_ForecastDeltaText = TextCatalog_Format("DASHBOARD.FORECAST.SLIPPED", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(deltaDays)))
     Else
-        Dashboard_ForecastDeltaText = Dashboard_L("Fin stable vs Début", "Forecast stable vs From")
+        Dashboard_ForecastDeltaText = TextCatalog_Get("DASHBOARD.STATUS.FORECAST_STABLE", Dashboard_CurrentLanguage())
     End If
 
 End Function
@@ -3205,16 +3162,16 @@ Private Function Dashboard_ContractDriftText(ByVal driftDays As Variant, ByRef s
 
     If Not HasValue(driftDays) Then
         statusColor = RGB(96, 111, 128)
-        Dashboard_ContractDriftText = Dashboard_L("dérive contrat indisponible", "contract drift unavailable")
+        Dashboard_ContractDriftText = TextCatalog_Get("DASHBOARD.EMPTY.CONTRACT_DRIFT", Dashboard_CurrentLanguage())
     ElseIf CLng(driftDays) <= 0 Then
         statusColor = RGB(0, 145, 112)
-        Dashboard_ContractDriftText = CStr(CLng(driftDays)) & Dashboard_L("j vs contrat", "d vs contract")
+        Dashboard_ContractDriftText = TextCatalog_Format("DASHBOARD.CONTRACT.DRIFT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", CStr(CLng(driftDays))))
     ElseIf CLng(driftDays) <= 30 Then
         statusColor = RGB(238, 156, 68)
-        Dashboard_ContractDriftText = "+" & CStr(CLng(driftDays)) & Dashboard_L("j vs contrat", "d vs contract")
+        Dashboard_ContractDriftText = TextCatalog_Format("DASHBOARD.CONTRACT.DRIFT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", "+" & CStr(CLng(driftDays))))
     Else
         statusColor = RGB(192, 80, 77)
-        Dashboard_ContractDriftText = "+" & CStr(CLng(driftDays)) & Dashboard_L("j vs contrat", "d vs contract")
+        Dashboard_ContractDriftText = TextCatalog_Format("DASHBOARD.CONTRACT.DRIFT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", "+" & CStr(CLng(driftDays))))
     End If
 
 End Function
@@ -3231,7 +3188,7 @@ Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal
     Dim deltaVal As Long
 
     statusColor = RGB(96, 111, 128)
-    subText = Dashboard_L("historique insuffisant", "insufficient history")
+    subText = TextCatalog_Get("DASHBOARD.EMPTY.HISTORY_SENTENCE", Dashboard_CurrentLanguage())
     Dashboard_CriticalActivitiesHero = "-"
 
     If toRow Is Nothing Then Exit Function
@@ -3248,15 +3205,15 @@ Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal
     If deltaVal > 0 Then
         statusColor = RGB(192, 80, 77)
         Dashboard_CriticalActivitiesHero = CStr(toCount) & " " & ChrW(8599)
-        subText = "+" & CStr(deltaVal) & Dashboard_L(" nouvelles activités critiques", " new critical activities")
+        subText = TextCatalog_Format("DASHBOARD.CRITICAL.ADDED", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(deltaVal)))
     ElseIf deltaVal < 0 Then
         statusColor = RGB(0, 145, 112)
         Dashboard_CriticalActivitiesHero = CStr(toCount) & " " & ChrW(8600)
-        subText = CStr(deltaVal) & Dashboard_L(" activités critiques retirées", " critical activities removed")
+        subText = TextCatalog_Format("DASHBOARD.CRITICAL.REMOVED", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Count", CStr(deltaVal)))
     Else
         statusColor = RGB(238, 156, 68)
         Dashboard_CriticalActivitiesHero = CStr(toCount) & " " & ChrW(8594)
-        subText = Dashboard_L("0 changement activités critiques", "0 critical activities change")
+        subText = TextCatalog_Get("DASHBOARD.STATUS.CRITICAL_UNCHANGED", Dashboard_CurrentLanguage())
     End If
 
 End Function
@@ -3273,7 +3230,7 @@ Private Function Dashboard_ScheduleMomentumStatus(ByVal fromRow As Object, ByVal
     Dim delayDelta As Double
 
     statusColor = RGB(96, 111, 128)
-    subText = Dashboard_L("Snapshots requis", "Need snapshots")
+    subText = TextCatalog_Get("DASHBOARD.EMPTY.SNAPSHOTS_REQUIRED", Dashboard_CurrentLanguage())
     Dashboard_ScheduleMomentumStatus = "INSUFFICIENT HISTORY"
 
     If fromRow Is Nothing Or toRow Is Nothing Then Exit Function
@@ -3286,15 +3243,15 @@ Private Function Dashboard_ScheduleMomentumStatus(ByVal fromRow As Object, ByVal
     If delayDelta < 0 Then
         statusColor = RGB(0, 145, 112)
         Dashboard_ScheduleMomentumStatus = "IMPROVING"
-        subText = Dashboard_FormatMomentumDelayPercent(delayDelta) & Dashboard_L(" retard vs snapshot precedent", " delay vs previous snapshot")
+        subText = TextCatalog_Format("DASHBOARD.MOMENTUM.DELAY", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Delta", Dashboard_FormatMomentumDelayPercent(delayDelta)))
     ElseIf delayDelta > 0 Then
         statusColor = RGB(192, 80, 77)
         Dashboard_ScheduleMomentumStatus = "DETERIORATING"
-        subText = Dashboard_FormatMomentumDelayPercent(delayDelta) & Dashboard_L(" retard vs snapshot precedent", " delay vs previous snapshot")
+        subText = TextCatalog_Format("DASHBOARD.MOMENTUM.DELAY", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Delta", Dashboard_FormatMomentumDelayPercent(delayDelta)))
     Else
         statusColor = RGB(238, 156, 68)
         Dashboard_ScheduleMomentumStatus = "STABLE"
-        subText = Dashboard_L("0% évolution du retard", "0% delay change")
+        subText = TextCatalog_Get("DASHBOARD.STATUS.DELAY_UNCHANGED", Dashboard_CurrentLanguage())
     End If
 
 End Function
@@ -3307,9 +3264,9 @@ End Function
 Private Function Dashboard_LocalContractStatus(ByVal statusText As String) As String
 
     Select Case UCase$(Trim$(statusText))
-        Case "ON CONTRACT": Dashboard_LocalContractStatus = Dashboard_L("CONTRAT OK", "ON CONTRACT")
-        Case "MINOR DELAY": Dashboard_LocalContractStatus = Dashboard_L("RETARD MINEUR", "MINOR DELAY")
-        Case "CONTRACT DELAY": Dashboard_LocalContractStatus = Dashboard_L("RETARD CONTRAT", "CONTRACT DELAY")
+        Case "ON CONTRACT": Dashboard_LocalContractStatus = TextCatalog_Get("DASHBOARD.STATUS.ON_CONTRACT", Dashboard_CurrentLanguage())
+        Case "MINOR DELAY": Dashboard_LocalContractStatus = TextCatalog_Get("DASHBOARD.STATUS.MINOR_DELAY", Dashboard_CurrentLanguage())
+        Case "CONTRACT DELAY": Dashboard_LocalContractStatus = TextCatalog_Get("DASHBOARD.STATUS.CONTRACT_DELAY", Dashboard_CurrentLanguage())
         Case Else: Dashboard_LocalContractStatus = statusText
     End Select
 
@@ -3323,10 +3280,10 @@ End Function
 Private Function Dashboard_LocalMomentumStatus(ByVal statusText As String) As String
 
     Select Case UCase$(Trim$(statusText))
-        Case "IMPROVING": Dashboard_LocalMomentumStatus = Dashboard_L("AMÉLIORATION", "IMPROVING")
-        Case "DETERIORATING": Dashboard_LocalMomentumStatus = Dashboard_L("DÉGRADATION", "DETERIORATING")
-        Case "STABLE": Dashboard_LocalMomentumStatus = Dashboard_L("STABLE", "STABLE")
-        Case "INSUFFICIENT HISTORY": Dashboard_LocalMomentumStatus = Dashboard_L("PAS D'HIST.", "NO HISTORY")
+        Case "IMPROVING": Dashboard_LocalMomentumStatus = TextCatalog_Get("DASHBOARD.STATUS.IMPROVING", Dashboard_CurrentLanguage())
+        Case "DETERIORATING": Dashboard_LocalMomentumStatus = TextCatalog_Get("DASHBOARD.STATUS.DETERIORATING", Dashboard_CurrentLanguage())
+        Case "STABLE": Dashboard_LocalMomentumStatus = TextCatalog_Get("DASHBOARD.STATUS.STABLE", Dashboard_CurrentLanguage())
+        Case "INSUFFICIENT HISTORY": Dashboard_LocalMomentumStatus = TextCatalog_Get("DASHBOARD.STATUS.NO_HISTORY", Dashboard_CurrentLanguage())
         Case Else: Dashboard_LocalMomentumStatus = statusText
     End Select
 
@@ -4274,7 +4231,7 @@ End Sub
 
 Private Sub Dashboard_WriteEmptyState(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal txt As String)
 
-    Dashboard_AddTinyText ws, Dashboard_L("OK - ", "OK - ") & txt, x, y, w, 16, RGB(0, 145, 112)
+    Dashboard_AddTinyText ws, TextCatalog_Format("DASHBOARD.STATUS.OK_DETAIL", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Details", txt)), x, y, w, 16, RGB(0, 145, 112)
 
 End Sub
 
@@ -4486,7 +4443,7 @@ Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Dou
                 Case "d"
                     labelText = Dashboard_FormatDate(tickDate, False)
                 Case "ww"
-                    labelText = Dashboard_L("S", "W") & Format$(tickDate, "ww", vbMonday, vbFirstFourDays)
+                    labelText = TextCatalog_Get("DASHBOARD.UNIT.WEEK_PREFIX", Dashboard_CurrentLanguage()) & Format$(tickDate, "ww", vbMonday, vbFirstFourDays)
                 Case "m"
                     labelText = Dashboard_FormatMonthShort(tickDate)
                 Case Else
@@ -4597,9 +4554,9 @@ Private Function Dashboard_FormatSignedDays(ByVal dayVal As Variant) As String
     If Not HasValue(dayVal) Then
         Dashboard_FormatSignedDays = "-"
     ElseIf CLng(dayVal) > 0 Then
-        Dashboard_FormatSignedDays = "+" & CStr(CLng(dayVal)) & Dashboard_L(" jours", " days")
+        Dashboard_FormatSignedDays = "+" & CStr(CLng(dayVal)) & TextCatalog_Get("DASHBOARD.UNIT.DAY_LONG", Dashboard_CurrentLanguage())
     Else
-        Dashboard_FormatSignedDays = CStr(CLng(dayVal)) & Dashboard_L(" jours", " days")
+        Dashboard_FormatSignedDays = CStr(CLng(dayVal)) & TextCatalog_Get("DASHBOARD.UNIT.DAY_LONG", Dashboard_CurrentLanguage())
     End If
 
 End Function
@@ -4614,9 +4571,9 @@ Private Function Dashboard_FormatSignedCompactDays(ByVal dayVal As Variant) As S
     If Not HasValue(dayVal) Then
         Dashboard_FormatSignedCompactDays = "-"
     ElseIf CLng(dayVal) > 0 Then
-        Dashboard_FormatSignedCompactDays = "+" & CStr(CLng(dayVal)) & Dashboard_L("j", "d")
+        Dashboard_FormatSignedCompactDays = "+" & CStr(CLng(dayVal)) & TextCatalog_Get("DASHBOARD.UNIT.DAY_COMPACT", Dashboard_CurrentLanguage())
     Else
-        Dashboard_FormatSignedCompactDays = CStr(CLng(dayVal)) & Dashboard_L("j", "d")
+        Dashboard_FormatSignedCompactDays = CStr(CLng(dayVal)) & TextCatalog_Get("DASHBOARD.UNIT.DAY_COMPACT", Dashboard_CurrentLanguage())
     End If
 
 End Function
@@ -4702,15 +4659,6 @@ End Function
 ' EN: Returns the L value without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function Dashboard_L(ByVal frText As String, ByVal enText As String) As String
-
-    If Dashboard_IsFrench() Then
-        Dashboard_L = frText
-    Else
-        Dashboard_L = enText
-    End If
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Retourne la valeur No Project Loaded Text sans modifier les donnees d'entree.
@@ -4719,7 +4667,7 @@ End Function
 
 Private Function Dashboard_NoProjectLoadedText() As String
 
-    Dashboard_NoProjectLoadedText = Dashboard_L("Aucun projet chargé", "No project loaded")
+    Dashboard_NoProjectLoadedText = TextCatalog_Get("DASHBOARD.EMPTY.NO_PROJECT", Dashboard_CurrentLanguage())
 
 End Function
 
@@ -4730,7 +4678,7 @@ End Function
 
 Private Function Dashboard_NoDataText() As String
 
-    Dashboard_NoDataText = Dashboard_L("AUCUNE DONNÉE", "NO DATA")
+    Dashboard_NoDataText = TextCatalog_Get("DASHBOARD.EMPTY.NO_DATA", Dashboard_CurrentLanguage())
 
 End Function
 
@@ -4741,7 +4689,7 @@ End Function
 
 Private Function Dashboard_DurationSuffix() As String
 
-    Dashboard_DurationSuffix = Dashboard_L("j", "d")
+    Dashboard_DurationSuffix = TextCatalog_Get("DASHBOARD.UNIT.DAY_COMPACT", Dashboard_CurrentLanguage())
 
 End Function
 
@@ -4758,13 +4706,8 @@ Private Function Dashboard_FormatMonthShort(ByVal dateVal As Variant) As String
     If Not Dashboard_HasDateValue(dateVal) Then Exit Function
     d = CDate(Dashboard_DateNumber(dateVal))
 
-    If Dashboard_IsFrench() Then
-        monthNames = Array("janv", "fév", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc")
-    Else
-        monthNames = Array("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-    End If
-
-    Dashboard_FormatMonthShort = CStr(monthNames(Month(d) - 1))
+    monthNames = Array("DASHBOARD.MONTH.JAN", "DASHBOARD.MONTH.FEB", "DASHBOARD.MONTH.MAR", "DASHBOARD.MONTH.APR", "DASHBOARD.MONTH.MAY", "DASHBOARD.MONTH.JUN", "DASHBOARD.MONTH.JUL", "DASHBOARD.MONTH.AUG", "DASHBOARD.MONTH.SEP", "DASHBOARD.MONTH.OCT", "DASHBOARD.MONTH.NOV", "DASHBOARD.MONTH.DEC")
+    Dashboard_FormatMonthShort = TextCatalog_Get(CStr(monthNames(Month(d) - 1)), Dashboard_CurrentLanguage())
 
 End Function
 
@@ -4795,7 +4738,7 @@ End Function
 
 Private Function Dashboard_FormatTimestamp(ByVal dateVal As Date) As String
 
-    Dashboard_FormatTimestamp = Dashboard_L("Mis à jour ", "Updated ") & Dashboard_FormatDate(dateVal, True) & " " & Format$(dateVal, "hh:nn")
+    Dashboard_FormatTimestamp = TextCatalog_Format("DASHBOARD.TIMESTAMP.DISPLAY", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Date", Dashboard_FormatDate(dateVal, True), "Time", Format$(dateVal, "hh:nn")))
 
 End Function
 
@@ -4806,7 +4749,8 @@ End Function
 
 Private Function Dashboard_IsTimestampText(ByVal txt As String) As Boolean
 
-    Dashboard_IsTimestampText = (Left$(txt, 8) = "Updated " Or Left$(txt, 11) = "Mis à jour ")
+    Dashboard_IsTimestampText = (Left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN") Or _
+        Left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))
 
 End Function
 

@@ -247,7 +247,7 @@ Public Sub Core_AddErrorMessage_Row( _
 
     If currentMsg = "" Then
         Core_SetVal dataArr, rowIdx, mapCol, "ErrorMsg", msgText
-    ElseIf InStr(1, currentMsg, msgText, vbTextCompare) = 0 Then
+    ElseIf Not Core_ErrorMessageListContainsExact(currentMsg, msgText) Then
         Core_SetVal dataArr, rowIdx, mapCol, "ErrorMsg", currentMsg & " / " & msgText
     End If
 
@@ -256,6 +256,23 @@ Public Sub Core_AddErrorMessage_Row( _
     End If
 
 End Sub
+
+Private Function Core_ErrorMessageListContainsExact( _
+    ByVal currentMessages As String, _
+    ByVal candidateMessage As String) As Boolean
+
+    Dim parts As Variant
+    Dim part As Variant
+
+    parts = Split(currentMessages, " / ")
+    For Each part In parts
+        If StrComp(Trim$(CStr(part)), Trim$(candidateMessage), vbTextCompare) = 0 Then
+            Core_ErrorMessageListContainsExact = True
+            Exit Function
+        End If
+    Next part
+
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Reinitialise Core Clear Error State Row dans le perimetre possede par le composant.
@@ -382,8 +399,10 @@ Public Sub Core_RequireColumns( _
     Next c
 
     If missing <> "" Then
-        Err.Raise vbObjectError + 701, "Core_RequireColumns", _
-            "Missing required columns in " & contextName & ":" & vbCrLf & missing
+    Err.Raise vbObjectError + 701, "Core_RequireColumns", _
+        PlanningMessageText_Format("DIAG.TECH.MISSING_REQUIRED_COLUMNS", _
+            TextCatalog_Arguments("Context", contextName, "Columns", missing), _
+            TextCatalog_Arguments("Context", contextName, "Columns", missing))
     End If
 
 End Sub

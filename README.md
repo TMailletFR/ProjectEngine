@@ -42,7 +42,7 @@ They can display dates and colored bars, but they do not understand the logic co
 
 Define the WBS, dates, progress, calendars, constraints and dependencies. ProjectEngine calculates the network, propagates changes, identifies the Critical and Longest Paths, measures float, surfaces planning risks and keeps the Gantt, analytics, Dashboard and S-Curve aligned.
 
-All inside the Excel environment your organization already uses.
+All inside the Excel environment your organization already uses — with a dedicated ProjectEngine Ribbon tab, guided project setup, and no separate add-in.
 
 ---
 
@@ -82,6 +82,31 @@ ProjectEngine does **not** claim to replace every capability of Microsoft Projec
 It fills a different gap:
 
 > **Professional dependency-driven scheduling for teams that need to remain in Excel.**
+
+---
+
+## Built into Excel — ready for everyday planning
+
+ProjectEngine brings its main actions together in a **dedicated Excel Ribbon tab**, with 18 custom-icon commands embedded in the workbook. Controls adapt to the active sheet:
+
+- **WBS:** Planning Update, Gantt Update, S-Curve Update, Forced Planning Update and Full Update.
+- **Gantt:** TEST, SCENARIO, LOCK and Reset.
+- **Navigation:** Show Full Timeline and Go to Selected Task, plus quick access to Settings and project import.
+- **Project management:** Planning Reset, Full Reset, history, acknowledgement and Dashboard cleanup actions.
+
+The WBS and Gantt no longer need redundant worksheet command buttons. Ribbon labels and guidance are available in English and French. **No installation, external assets or additional user account is needed.**
+
+### Start fresh or bring an existing project forward
+
+An empty workbook offers **Start New Project** or **Import Previous Project**. Users of older ProjectEngine versions can move supported WBS inputs, dependencies, dates, constraints, settings, warning acknowledgements, Dashboard snapshots, compatible event history and supported WBS input formulas into the newer workbook.
+
+Import leaves the original source workbook unchanged and **does not recalculate the schedule automatically**. Review the imported WBS and Constraints, then choose Planning Update or Full Update. Import replaces supported project data in the destination workbook, so **keep a backup of the destination before importing**. Unsupported or incompatible data may be rejected rather than silently discarded.
+
+### Navigate and update more efficiently
+
+**Show Full Timeline** frames the available project timeline within Excel's zoom limits. **Go to Selected Task** navigates from a selected WBS or Gantt task to its rendered position, with support for milestones and summary tasks and without silently leaving Summary mode.
+
+Full Update **still recalculates the entire schedule and analytics**. It now avoids rewriting calculated output columns that are already identical. This saves time especially on unchanged schedules; it does not mean a complete rebuild is inherently faster. Gantt rendering also reuses valid existing task graphics and dependency routes where possible, with a full rebuild retained for changes that require one.
 
 ---
 
@@ -141,7 +166,7 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 - positive and negative lags;
 - multiple predecessors;
 - automatic schedule propagation;
-- 5-day and 6-day working calendars;
+- 5-day, 6-day and 7-day working calendars;
 - milestones and Level of Effort activities;
 - parent / child date rollups;
 - cycle and missing-predecessor detection;
@@ -189,7 +214,8 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 - workload distribution;
 - structured `INFO`, `WARNING` and `STOP` messages;
 - Event History and Alarm History;
-- warning acknowledgement and message navigation.
+- warning acknowledgement and message navigation;
+- project welcome screen and import from supported earlier versions.
 
 </td>
 </tr>
@@ -228,10 +254,14 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 - fractional positioning in Week and Month scales;
 - predictive Shape Registry;
 - deterministic fallback and lazy geometry repair;
-- independently refreshable Gantt, Dashboard and S-Curve outputs.
+- independently refreshable Gantt, Dashboard and S-Curve outputs;
+- Show Full Timeline and Go to Selected Task navigation;
+- retained Gantt graphics and targeted dependency-route updates where valid.
 
 ### Workbook lifecycle and safety
 
+- embedded, context-sensitive Ribbon with custom icons;
+- guided project import from supported earlier workbooks;
 - Planning Reset for project turnover;
 - Full Reset for complete workbook cleanup;
 - Safe Empty State for Gantt and S-Curve;
@@ -248,29 +278,27 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 
 ## Get started
 
-1. Go to the [latest release](https://github.com/TMailletFR/ProjectEngine/releases/latest).
-2. Download the `ProjectEngine_*.xlsm` workbook from **Assets**.
-3. Open it in Microsoft Excel and enable the workbook's macros.
-4. Use the integrated Quick Start guide on the WBS sheet.
-5. Enter activities, hierarchy, dates, progress and dependencies.
-6. Run **Planning Update** to calculate and publish the schedule.
-7. Review diagnostics, then explore the Gantt, analytics, Dashboard and S-Curve.
+1. Visit the [latest release](https://github.com/TMailletFR/ProjectEngine/releases/latest) and download the prepared `ProjectEngine_*.xlsm` file under **Assets**.
+2. Open it in **Microsoft Excel for Windows** and enable macros if you trust the downloaded workbook.
+3. In the welcome screen, choose **Start New Project** or **Import Previous Project**.
+4. For a new project, use the integrated Quick Start guide in WBS and enter activities, hierarchy, dates, progress and dependencies.
+5. For an import, choose a supported older ProjectEngine file and **review the transferred WBS, Constraints and settings** before calculating.
+6. Run **Planning Update** from the ProjectEngine Ribbon to calculate and publish the schedule. Use **Full Update** when you want a complete recalculation and the associated reporting workflow.
+7. Review diagnostics and explore the Gantt, analytics, Dashboard and S-Curve. Use **Go to Selected Task** or **Show Full Timeline** to navigate the Gantt.
 
-The WBS onboarding is available in **English and French** and includes:
+WBS onboarding is available in **English and French**, with Required / Optional / Calculated field indicators, contextual column help and an integrated Quick Start guide. The Ribbon and workbook support global or per-area language preferences.
 
-- Required / Optional / Calculated field indicators;
-- contextual help for every input column;
-- an integrated Quick Start guide;
-- automatic localization when the workbook language changes.
-
-> Download the prepared `.xlsm` asset from the release page.  
-> The automatically generated “Source code” archives do not contain a ready-to-use Excel workbook.
+> **Upgrading an existing project?** Import replaces supported data in the **destination** workbook. Keep a backup of that destination before starting. The selected source is opened read-only and is not modified. Derived calculations, old Gantt graphics and TEST/SCENARIO states are not imported; rebuild the required views after reviewing the inputs.
+>
+> Download the prepared `.xlsm` asset from the release page. GitHub's automatically generated **Source code** archives are not ready-to-use Excel workbooks.
 
 ---
 
 ## Typical planning workflow
 
 ```text
+Welcome: Start New / Import Previous
+   ↓
 WBS inputs
    ↓
 Planning Update
@@ -333,7 +361,7 @@ For the full technical design:
 
 ProjectEngine reached its first stable baseline with v1.0.0. The scheduling engine, simulation workflows, diagnostics, Gantt rendering, analytics, Dashboard, S-Curve, localization, reset workflows and guarded workbook lifecycle are operational and protected by permanent validation harnesses.
 
-The project remains actively maintained. Future development is driven by real planning use cases, reported issues and community feedback.
+The project remains actively maintained. Recent development adds a workbook-embedded Ribbon, a welcome and previous-project import workflow, task navigation and selective output/graphics reuse. Future development is driven by real planning use cases, reported issues and community feedback.
 
 - [Latest release](https://github.com/TMailletFR/ProjectEngine/releases/latest)
 - [All releases](https://github.com/TMailletFR/ProjectEngine/releases)
@@ -408,7 +436,28 @@ Yes. TEST mode supports focused non-destructive changes, while SCENARIO mode sup
 <details>
 <summary><strong>Which languages are supported?</strong></summary>
 
-The workbook onboarding and planning messages support English and French, with global and per-module localization controls.
+The workbook onboarding, Ribbon commands and planning messages support English and French, with global and per-area language controls.
+
+</details>
+
+<details>
+<summary><strong>Can I upgrade an older ProjectEngine project without re-entering every task?</strong></summary>
+
+Yes. Open the newer workbook and choose **Import Previous Project** from the welcome screen or Ribbon. Supported WBS inputs, constraints, settings, acknowledgements and historical Dashboard snapshots can be transferred. Import does not execute the older workbook's VBA or copy its calculated Gantt/S-Curve outputs. Review the imported inputs and run the planning update yourself. **Back up the destination workbook first**; the original source remains unchanged. Some custom formulas or unsupported structures may be refused.
+
+</details>
+
+<details>
+<summary><strong>Does Full Update always rebuild everything in Excel?</strong></summary>
+
+Full Update **always runs a complete schedule and analytics recalculation**. However, if calculated output columns already match, ProjectEngine can leave those Excel cells untouched instead of rewriting them. A genuinely new or substantially changed schedule still requires the necessary work; Full Update is not a substitute for incremental Planning Update.
+
+</details>
+
+<details>
+<summary><strong>Do I need to install a Ribbon add-in?</strong></summary>
+
+No. The ProjectEngine Ribbon and its custom icons are included in the downloadable `.xlsm` workbook. You do need a supported desktop Excel environment with VBA macros enabled.
 
 </details>
 

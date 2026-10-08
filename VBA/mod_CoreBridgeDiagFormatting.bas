@@ -25,28 +25,17 @@ Option Explicit
 Public Function CalcBridge_BuildGroupedMessage( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String) As String
+    ByVal messageKey As String) As String
 
     Dim idsLine As String
     Dim wbsLine As String
+    Dim arguments As Object
 
     idsLine = CalcBridge_BuildInlineList(idsDict, 20)
     wbsLine = CalcBridge_BuildInlineWBSList(idsDict, idToWbs, 20)
 
-    CalcBridge_BuildGroupedMessage = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
+    Set arguments = TextCatalog_Arguments("Ids", idsLine, "Wbs", wbsLine)
+    CalcBridge_BuildGroupedMessage = PlanningMessageText_Format(messageKey, arguments, arguments)
 
 End Function
 
@@ -255,7 +244,9 @@ Private Function CalcBridge_DiagnosticTaskLabel( _
     ElseIf nameVal <> "" Then
         CalcBridge_DiagnosticTaskLabel = nameVal
     Else
-        CalcBridge_DiagnosticTaskLabel = "ID " & taskId
+        CalcBridge_DiagnosticTaskLabel = TextCatalog_Format( _
+            "DIAG.COMMON.ID_TASK_LABEL", TEXT_LANGUAGE_EN, _
+            TextCatalog_Arguments("Id", taskId))
     End If
 
 End Function
@@ -326,212 +317,29 @@ Public Function CalcBridge_ToPMConstraintMessage(ByVal rawMessage As String) As 
 
     msg = CStr(rawMessage)
 
-    CalcBridge_ReplacePMMessage msg, _
-        "Type de contrainte debut non reconnu", _
-        "Type de contrainte d" & ChrW$(233) & "but invalide", _
-        "choisir une contrainte d" & ChrW$(233) & "but support" & ChrW$(233) & "e"
-    CalcBridge_ReplacePMMessage msg, _
-        "Unknown start constraint type", _
-        "Invalid start constraint type", _
-        "choose a supported start constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Type de contrainte fin non reconnu", _
-        "Type de contrainte fin invalide", _
-        "choisir une contrainte fin support" & ChrW$(233) & "e"
-    CalcBridge_ReplacePMMessage msg, _
-        "Unknown finish constraint type", _
-        "Invalid finish constraint type", _
-        "choose a supported finish constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start avant contrainte debut", _
-        "Actual Start incompatible avec Start No Earlier Than", _
-        "repousser Actual Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start is before start constraint", _
-        "Actual Start is incompatible with Start No Earlier Than", _
-        "move Actual Start later or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start avant contrainte debut", _
-        "Forecast Start incompatible avec Start No Earlier Than", _
-        "repousser Forecast Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start is before start constraint", _
-        "Forecast Start is incompatible with Start No Earlier Than", _
-        "move Forecast Start later or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start apres contrainte debut max", _
-        "Actual Start incompatible avec Start No Later Than", _
-        "aligner Actual Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start is after latest start constraint", _
-        "Actual Start is incompatible with Start No Later Than", _
-        "align Actual Start or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start apres contrainte debut max", _
-        "Forecast Start incompatible avec Start No Later Than", _
-        "aligner Forecast Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start is after latest start constraint", _
-        "Forecast Start is incompatible with Start No Later Than", _
-        "align Forecast Start or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start apres contrainte debut max", _
-        "Start No Later Than impossible " & ChrW$(224) & " respecter", _
-        "corriger la logique, la dur" & ChrW$(233) & "e ou la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start is after latest start constraint", _
-        "Start No Later Than cannot be met", _
-        "fix logic, duration, or the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start different de contrainte Must Start On", _
-        "Actual Start incompatible avec Must Start On", _
-        "aligner Actual Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start differs from Must Start On constraint", _
-        "Actual Start is incompatible with Must Start On", _
-        "align Actual Start or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start different de contrainte Must Start On", _
-        "Forecast Start incompatible avec Must Start On", _
-        "aligner Forecast Start ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start differs from Must Start On constraint", _
-        "Forecast Start is incompatible with Must Start On", _
-        "align Forecast Start or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start different de contrainte Must Start On", _
-        "Must Start On impossible " & ChrW$(224) & " respecter", _
-        "corriger la logique amont, la dur" & ChrW$(233) & "e ou la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start differs from Must Start On constraint", _
-        "Must Start On cannot be met", _
-        "fix upstream logic, duration, or the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish avant contrainte fin", _
-        "Actual Finish incompatible avec Finish No Earlier Than", _
-        "repousser Actual Finish ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish is before finish constraint", _
-        "Actual Finish is incompatible with Finish No Earlier Than", _
-        "move Actual Finish later or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish avant contrainte fin amont", _
-        "Forecast Finish incompatible avec les contraintes de fin amont", _
-        "repousser Forecast Finish ou corriger la logique amont"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish is before upstream finish constraint", _
-        "Forecast Finish is incompatible with upstream finish constraints", _
-        "move Forecast Finish later or fix upstream logic"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish avant contrainte fin", _
-        "Forecast Finish incompatible avec Finish No Earlier Than", _
-        "repousser Forecast Finish ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish is before finish constraint", _
-        "Forecast Finish is incompatible with Finish No Earlier Than", _
-        "move Forecast Finish later or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish apres contrainte fin max", _
-        "Actual Finish incompatible avec Finish No Later Than", _
-        "aligner Actual Finish ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish is after latest finish constraint", _
-        "Actual Finish is incompatible with Finish No Later Than", _
-        "align Actual Finish or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish apres contrainte fin max", _
-        "Forecast Finish incompatible avec Finish No Later Than", _
-        "avancer Forecast Finish, r" & ChrW$(233) & "duire la dur" & ChrW$(233) & "e ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish is after latest finish constraint", _
-        "Forecast Finish is incompatible with Finish No Later Than", _
-        "move Forecast Finish earlier, reduce duration, or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Finish apres contrainte fin max", _
-        "Finish No Later Than impossible " & ChrW$(224) & " respecter", _
-        "corriger la logique, la dur" & ChrW$(233) & "e ou la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Finish is after latest finish constraint", _
-        "Finish No Later Than cannot be met", _
-        "fix logic, duration, or the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish different de contrainte Must Finish On", _
-        "Actual Finish incompatible avec Must Finish On", _
-        "aligner Actual Finish ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Finish differs from Must Finish On constraint", _
-        "Actual Finish is incompatible with Must Finish On", _
-        "align Actual Finish or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish different de contrainte Must Finish On", _
-        "Forecast Finish incompatible avec Must Finish On", _
-        "aligner Forecast Finish ou modifier la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Finish differs from Must Finish On constraint", _
-        "Forecast Finish is incompatible with Must Finish On", _
-        "align Forecast Finish or update the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Finish different de contrainte Must Finish On", _
-        "Must Finish On impossible " & ChrW$(224) & " respecter", _
-        "corriger la logique amont, la dur" & ChrW$(233) & "e ou la contrainte"
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Finish differs from Must Finish On constraint", _
-        "Must Finish On cannot be met", _
-        "fix upstream logic, duration, or the constraint"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start avant reseau impose par contrainte Must Finish On", _
-        "Must Finish On incompatible avec la logique amont", _
-        "le r" & ChrW$(233) & "seau impose un d" & ChrW$(233) & "marrage trop tardif pour respecter la fin impos" & ChrW$(233) & "e"
-    CalcBridge_ReplacePMMessage msg, _
-        "Calculated Start is before network allowed start due to Must Finish On constraint", _
-        "Must Finish On is incompatible with upstream logic", _
-        "the network forces a start too late to meet the imposed finish"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start different du debut impose par Must Finish On", _
-        "Actual Start incompatible avec Must Finish On", _
-        "la date saisie ne permet pas de respecter la fin impos" & ChrW$(233) & "e avec la dur" & ChrW$(233) & "e actuelle"
-    CalcBridge_ReplacePMMessage msg, _
-        "Actual Start differs from start implied by Must Finish On constraint", _
-        "Actual Start is incompatible with Must Finish On", _
-        "the entered date cannot meet the imposed finish with the current duration"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start different du debut impose par Must Finish On", _
-        "Forecast Start incompatible avec Must Finish On", _
-        "la date saisie ne permet pas de respecter la fin impos" & ChrW$(233) & "e avec la dur" & ChrW$(233) & "e actuelle"
-    CalcBridge_ReplacePMMessage msg, _
-        "Forecast Start differs from start implied by Must Finish On constraint", _
-        "Forecast Start is incompatible with Must Finish On", _
-        "the entered date cannot meet the imposed finish with the current duration"
-
-    CalcBridge_ReplacePMMessage msg, _
-        "Duree incompatible avec contraintes Must Start On / Must Finish On", _
-        "Dur" & ChrW$(233) & "e incompatible avec Must Start On et Must Finish On", _
-        "corriger la dur" & ChrW$(233) & "e ou l'une des deux contraintes"
-    CalcBridge_ReplacePMMessage msg, _
-        "Duration is incompatible with Must Start On / Must Finish On constraints", _
-        "Duration is incompatible with Must Start On and Must Finish On", _
-        "fix duration or one of the two constraints"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.UNKNOWN_START_TYPE", "DIAG.CONSTRAINT.PM.UNKNOWN_START_TYPE"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.UNKNOWN_FINISH_TYPE", "DIAG.CONSTRAINT.PM.UNKNOWN_FINISH_TYPE"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_START_BEFORE_START", "DIAG.CONSTRAINT.PM.ACTUAL_START_BEFORE_START"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_START_BEFORE_START", "DIAG.CONSTRAINT.PM.FORECAST_START_BEFORE_START"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_START_AFTER_LATEST", "DIAG.CONSTRAINT.PM.ACTUAL_START_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_START_AFTER_LATEST", "DIAG.CONSTRAINT.PM.FORECAST_START_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.CALCULATED_START_AFTER_LATEST", "DIAG.CONSTRAINT.PM.CALCULATED_START_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_START_DIFFERS_MSO", "DIAG.CONSTRAINT.PM.ACTUAL_START_DIFFERS_MSO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_START_DIFFERS_MSO", "DIAG.CONSTRAINT.PM.FORECAST_START_DIFFERS_MSO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.CALCULATED_START_DIFFERS_MSO", "DIAG.CONSTRAINT.PM.CALCULATED_START_DIFFERS_MSO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_FINISH_BEFORE_FINISH", "DIAG.CONSTRAINT.PM.ACTUAL_FINISH_BEFORE_FINISH"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_FINISH_BEFORE_UPSTREAM", "DIAG.CONSTRAINT.PM.FORECAST_FINISH_BEFORE_UPSTREAM"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_FINISH_BEFORE_FINISH", "DIAG.CONSTRAINT.PM.FORECAST_FINISH_BEFORE_FINISH"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_FINISH_AFTER_LATEST", "DIAG.CONSTRAINT.PM.ACTUAL_FINISH_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_FINISH_AFTER_LATEST", "DIAG.CONSTRAINT.PM.FORECAST_FINISH_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.CALCULATED_FINISH_AFTER_LATEST", "DIAG.CONSTRAINT.PM.CALCULATED_FINISH_AFTER_LATEST"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_FINISH_DIFFERS_MFO", "DIAG.CONSTRAINT.PM.ACTUAL_FINISH_DIFFERS_MFO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_FINISH_DIFFERS_MFO", "DIAG.CONSTRAINT.PM.FORECAST_FINISH_DIFFERS_MFO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.CALCULATED_FINISH_DIFFERS_MFO", "DIAG.CONSTRAINT.PM.CALCULATED_FINISH_DIFFERS_MFO"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.CALCULATED_START_BEFORE_MFO_NETWORK", "DIAG.CONSTRAINT.PM.CALCULATED_START_BEFORE_MFO_NETWORK"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.ACTUAL_START_DIFFERS_MFO_IMPLIED", "DIAG.CONSTRAINT.PM.ACTUAL_START_DIFFERS_MFO_IMPLIED"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.FORECAST_START_DIFFERS_MFO_IMPLIED", "DIAG.CONSTRAINT.PM.FORECAST_START_DIFFERS_MFO_IMPLIED"
+    CalcBridge_ReplacePMMessageKey msg, "DIAG.CONSTRAINT.DURATION_INCOMPATIBLE_MSO_MFO", "DIAG.CONSTRAINT.PM.DURATION_INCOMPATIBLE_MSO_MFO"
 
     CalcBridge_ToPMConstraintMessage = msg
 
@@ -543,19 +351,15 @@ End Function
 ' EN: Transforms the Replace PM Message value without changing source-message semantics.
 '------------------------------------------------------------------------------
 
-Private Sub CalcBridge_ReplacePMMessage( _
+Private Sub CalcBridge_ReplacePMMessageKey( _
     ByRef msg As String, _
-    ByVal oldProblem As String, _
-    ByVal newProblem As String, _
-    ByVal actionText As String)
+    ByVal sourceKey As String, _
+    ByVal replacementKey As String)
 
-    msg = Replace( _
-        msg, _
-        oldProblem, _
-        newProblem & vbCrLf & "-> " & actionText, _
-        1, _
-        -1, _
-        vbTextCompare)
+    msg = Replace(msg, TextCatalog_Get(sourceKey, TEXT_LANGUAGE_FR), _
+        TextCatalog_Get(replacementKey, TEXT_LANGUAGE_FR), 1, -1, vbTextCompare)
+    msg = Replace(msg, TextCatalog_Get(sourceKey, TEXT_LANGUAGE_EN), _
+        TextCatalog_Get(replacementKey, TEXT_LANGUAGE_EN), 1, -1, vbTextCompare)
 
 End Sub
 
@@ -575,17 +379,10 @@ Public Function CalcBridge_BuildMissingBaselineRexMessage( _
     idsLine = CalcBridge_BuildInlineList(missingIds, 20)
     wbsLine = CalcBridge_BuildInlineWBSList(missingIds, idToWbs, 20)
 
-    CalcBridge_BuildMissingBaselineRexMessage = _
-        "FR:" & vbCrLf & _
-        "Analytics REX partiellement non calculées : état Baseline temporel incomplet sur au moins une tâche feuille." & vbCrLf & _
-        "-> compléter une Baseline explicite ou une chaîne de dépendances Baseline exploitable sur les lignes listées ci-dessous." & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "REX analytics partially not calculated: the Baseline temporal state is incomplete on at least one leaf task." & vbCrLf & _
-        "-> complete an explicit Baseline or a usable Baseline dependency chain on the lines listed below." & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
+    CalcBridge_BuildMissingBaselineRexMessage = PlanningMessageText_Format( _
+        "DIAG.ANALYTICS.MISSING_BASELINE_REX", _
+        TextCatalog_Arguments("Ids", idsLine, "Wbs", wbsLine), _
+        TextCatalog_Arguments("Ids", idsLine, "Wbs", wbsLine))
 
 End Function
 
@@ -603,31 +400,19 @@ Public Function CalcBridge_BuildLOEExplicitPredecessorMessage(ByVal details As C
 
     For Each detail In details
         CalcBridge_AppendTextBlock blocksFR, _
-            "La tache " & CStr(detail("Succ WBS")) & " reference directement la LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
-            "Details :" & vbCrLf & vbCrLf & _
-            "Successeur :" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
-            "LOE detectee :" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
-            "Lien :" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+            TextCatalog_Format("DIAG.LOE.EXPLICIT.DETAIL_BLOCK", TEXT_LANGUAGE_FR, _
+                TextCatalog_Arguments("SuccWbs", CStr(detail("Succ WBS")), "SuccId", CStr(detail("Succ ID")), _
+                    "LoeWbs", CStr(detail("LOE WBS")), "LoeId", CStr(detail("LOE ID")), "Link", CalcBridge_FormatLOELinkLabel(detail)))
 
         CalcBridge_AppendTextBlock blocksEN, _
-            "Task " & CStr(detail("Succ WBS")) & " directly references LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
-            "Details:" & vbCrLf & vbCrLf & _
-            "Successor:" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
-            "Detected LOE:" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
-            "Link:" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+            TextCatalog_Format("DIAG.LOE.EXPLICIT.DETAIL_BLOCK", TEXT_LANGUAGE_EN, _
+                TextCatalog_Arguments("SuccWbs", CStr(detail("Succ WBS")), "SuccId", CStr(detail("Succ ID")), _
+                    "LoeWbs", CStr(detail("LOE WBS")), "LoeId", CStr(detail("LOE ID")), "Link", CalcBridge_FormatLOELinkLabel(detail)))
     Next detail
 
-    CalcBridge_BuildLOEExplicitPredecessorMessage = _
-        "FR:" & vbCrLf & _
-        "LOE utilisee comme predecesseur" & vbCrLf & vbCrLf & _
-        blocksFR & vbCrLf & vbCrLf & _
-        "Une LOE est pilotee par le reseau mais ne doit pas piloter d'autres taches." & vbCrLf & vbCrLf & _
-        "-> remplacer la LOE par une vraie tache feuille ou une milestone." & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "LOE used as predecessor" & vbCrLf & vbCrLf & _
-        blocksEN & vbCrLf & vbCrLf & _
-        "A LOE is driven by the network but must not drive other tasks." & vbCrLf & vbCrLf & _
-        "-> replace the LOE with a real leaf task or milestone."
+    CalcBridge_BuildLOEExplicitPredecessorMessage = PlanningMessageText_Format( _
+        "DIAG.LOE.EXPLICIT.MESSAGE", _
+        TextCatalog_Arguments("Details", blocksFR), TextCatalog_Arguments("Details", blocksEN))
 
 End Function
 
@@ -645,35 +430,21 @@ Public Function CalcBridge_BuildLOEParentPredecessorMessage(ByVal details As Col
 
     For Each detail In details
         CalcBridge_AppendTextBlock blocksFR, _
-            "La tache " & CStr(detail("Succ WBS")) & " reference le parent " & CStr(detail("Parent WBS")) & "." & vbCrLf & _
-            "Ce parent contient la LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
-            "Lors de l'expansion du lien parent, la LOE devient predecesseur indirect." & vbCrLf & vbCrLf & _
-            "Details :" & vbCrLf & vbCrLf & _
-            "Successeur :" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
-            "Predecesseur saisi :" & vbCrLf & CStr(detail("Parent WBS")) & " (ID " & CStr(detail("Parent ID")) & ")" & vbCrLf & vbCrLf & _
-            "LOE detectee :" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
-            "Lien :" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+            TextCatalog_Format("DIAG.LOE.PARENT.DETAIL_BLOCK", TEXT_LANGUAGE_FR, _
+                TextCatalog_Arguments("SuccWbs", CStr(detail("Succ WBS")), "SuccId", CStr(detail("Succ ID")), _
+                    "ParentWbs", CStr(detail("Parent WBS")), "ParentId", CStr(detail("Parent ID")), _
+                    "LoeWbs", CStr(detail("LOE WBS")), "LoeId", CStr(detail("LOE ID")), "Link", CalcBridge_FormatLOELinkLabel(detail)))
 
         CalcBridge_AppendTextBlock blocksEN, _
-            "Task " & CStr(detail("Succ WBS")) & " references parent " & CStr(detail("Parent WBS")) & "." & vbCrLf & _
-            "This parent contains LOE " & CStr(detail("LOE WBS")) & "." & vbCrLf & vbCrLf & _
-            "When the parent link is expanded, the LOE becomes an indirect predecessor." & vbCrLf & vbCrLf & _
-            "Details:" & vbCrLf & vbCrLf & _
-            "Successor:" & vbCrLf & CStr(detail("Succ WBS")) & " (ID " & CStr(detail("Succ ID")) & ")" & vbCrLf & vbCrLf & _
-            "Entered predecessor:" & vbCrLf & CStr(detail("Parent WBS")) & " (ID " & CStr(detail("Parent ID")) & ")" & vbCrLf & vbCrLf & _
-            "Detected LOE:" & vbCrLf & CStr(detail("LOE WBS")) & " (ID " & CStr(detail("LOE ID")) & ")" & vbCrLf & vbCrLf & _
-            "Link:" & vbCrLf & CalcBridge_FormatLOELinkLabel(detail)
+            TextCatalog_Format("DIAG.LOE.PARENT.DETAIL_BLOCK", TEXT_LANGUAGE_EN, _
+                TextCatalog_Arguments("SuccWbs", CStr(detail("Succ WBS")), "SuccId", CStr(detail("Succ ID")), _
+                    "ParentWbs", CStr(detail("Parent WBS")), "ParentId", CStr(detail("Parent ID")), _
+                    "LoeWbs", CStr(detail("LOE WBS")), "LoeId", CStr(detail("LOE ID")), "Link", CalcBridge_FormatLOELinkLabel(detail)))
     Next detail
 
-    CalcBridge_BuildLOEParentPredecessorMessage = _
-        "FR:" & vbCrLf & _
-        "LOE utilisee comme predecesseur via un lien parent" & vbCrLf & vbCrLf & _
-        blocksFR & vbCrLf & vbCrLf & _
-        "-> remplacer le parent par une tache feuille ou une milestone de fin." & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "LOE used as predecessor through a parent link" & vbCrLf & vbCrLf & _
-        blocksEN & vbCrLf & vbCrLf & _
-        "-> replace the parent with a leaf task or finish milestone."
+    CalcBridge_BuildLOEParentPredecessorMessage = PlanningMessageText_Format( _
+        "DIAG.LOE.PARENT.MESSAGE", _
+        TextCatalog_Arguments("Details", blocksFR), TextCatalog_Arguments("Details", blocksEN))
 
 End Function
 
@@ -789,6 +560,8 @@ Public Function CalcBridge_BuildConstraintDiagnosticMessage( _
     Dim checkedField As String
     Dim relationText As String
     Dim cascadeText As String
+    Dim frenchArguments As Object
+    Dim englishArguments As Object
 
     If diag Is Nothing Then Exit Function
     If Not diag.Exists("TaskID") Then Exit Function
@@ -800,30 +573,55 @@ Public Function CalcBridge_BuildConstraintDiagnosticMessage( _
     relationText = CalcBridge_DiagString(diag, "ExpectedOperator")
     cascadeText = CalcBridge_BuildCascadeRootCauseText(taskId, cascadeDiagnostics, idToWbs, idToTaskName)
 
-    If constraintType = "" Then constraintType = CalcBridge_DiagString(diag, "ConstraintSide") & " constraint"
-    If checkedField = "" Then checkedField = "Calculated date"
+    If constraintType = "" Then
+        If CalcBridge_DiagString(diag, "ConstraintSide") = "FINISH" Then
+            constraintType = "DIAG.CONSTRAINT.TYPE.FINISH_GENERIC"
+        Else
+            constraintType = "DIAG.CONSTRAINT.TYPE.START_GENERIC"
+        End If
+    End If
+    If checkedField = "" Then checkedField = "DIAG.LABEL.CALCULATED_DATE"
     If relationText = "" Then relationText = "="
 
-    CalcBridge_BuildConstraintDiagnosticMessage = _
-        "FR:" & vbCrLf & _
-        "Contrainte impossible a respecter." & vbCrLf & vbCrLf & _
-        "Tache : " & taskLabel & vbCrLf & _
-        "Contrainte : " & constraintType & vbCrLf & _
-        "Date contrainte : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")) & vbCrLf & _
-        checkedField & " : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")) & vbCrLf & _
-        "Valeur attendue : " & relationText & " " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")) & vbCrLf & _
-        "Calculated Start : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")) & vbCrLf & _
-        "Calculated Finish : " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish")) & _
-        cascadeText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "Constraint cannot be met." & vbCrLf & vbCrLf & _
-        "Task: " & taskLabel & vbCrLf & _
-        "Constraint: " & constraintType & vbCrLf & _
-        "Constraint date: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")) & vbCrLf & _
-        checkedField & ": " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")) & vbCrLf & _
-        "Expected value: " & relationText & " " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")) & vbCrLf & _
-        "Calculated Start: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")) & vbCrLf & _
-        "Calculated Finish: " & CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish"))
+    Set frenchArguments = TextCatalog_Arguments( _
+        "Task", taskLabel, "ConstraintType", CalcBridge_LocalizedDiagnosticToken(constraintType, TEXT_LANGUAGE_FR), _
+        "ConstraintDate", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")), _
+        "CheckedField", CalcBridge_LocalizedDiagnosticToken(checkedField, TEXT_LANGUAGE_FR), "CheckedValue", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")), _
+        "Relation", relationText, "AllowedValue", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")), _
+        "CalculatedStart", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")), _
+        "CalculatedFinish", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish")), _
+        "Cascade", cascadeText)
+    Set englishArguments = TextCatalog_Arguments( _
+        "Task", taskLabel, "ConstraintType", CalcBridge_LocalizedDiagnosticToken(constraintType, TEXT_LANGUAGE_EN), _
+        "ConstraintDate", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "ConstraintDate")), _
+        "CheckedField", CalcBridge_LocalizedDiagnosticToken(checkedField, TEXT_LANGUAGE_EN), "CheckedValue", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CheckedValue")), _
+        "Relation", relationText, "AllowedValue", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "AllowedValue")), _
+        "CalculatedStart", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedStart")), _
+        "CalculatedFinish", CalcBridge_DiagnosticAnyValueText(CalcBridge_DiagValue(diag, "CalculatedFinish")), _
+        "Cascade", vbNullString)
+    CalcBridge_BuildConstraintDiagnosticMessage = PlanningMessageText_Format( _
+        "DIAG.CONSTRAINT.STRUCTURED_DETAIL", frenchArguments, englishArguments)
+
+End Function
+
+Private Function CalcBridge_LocalizedDiagnosticToken( _
+    ByVal value As String, _
+    ByVal languageKey As String) As String
+
+    Select Case value
+        Case "Start No Earlier Than": value = "DIAG.CONSTRAINT.TYPE.START_NO_EARLIER"
+        Case "Start No Later Than": value = "DIAG.CONSTRAINT.TYPE.START_NO_LATER"
+        Case "Finish No Earlier Than": value = "DIAG.CONSTRAINT.TYPE.FINISH_NO_EARLIER"
+        Case "Finish No Later Than": value = "DIAG.CONSTRAINT.TYPE.FINISH_NO_LATER"
+        Case "Must Start On": value = "DIAG.CONSTRAINT.TYPE.MUST_START_ON_CANONICAL"
+        Case "Must Finish On": value = "DIAG.CONSTRAINT.TYPE.MUST_FINISH_ON_CANONICAL"
+    End Select
+
+    If Left$(value, 5) = "DIAG." Then
+        CalcBridge_LocalizedDiagnosticToken = TextCatalog_Get(value, languageKey)
+    Else
+        CalcBridge_LocalizedDiagnosticToken = value
+    End If
 
 End Function
 
@@ -854,11 +652,11 @@ Private Function CalcBridge_BuildCascadeRootCauseText( _
 
     If parentId = "" And rootId = "" Then Exit Function
 
-    CalcBridge_BuildCascadeRootCauseText = _
-        vbCrLf & vbCrLf & _
-        "Propagation :" & vbCrLf & _
-        "Bloque par : " & CalcBridge_DiagnosticTaskLabel(parentId, idToWbs, idToTaskName) & vbCrLf & _
-        "Cause racine : " & CalcBridge_DiagnosticTaskLabel(rootId, idToWbs, idToTaskName)
+    CalcBridge_BuildCascadeRootCauseText = TextCatalog_Format( _
+        "DIAG.CONSTRAINT.CASCADE", TEXT_LANGUAGE_FR, _
+        TextCatalog_Arguments( _
+            "Parent", CalcBridge_DiagnosticTaskLabel(parentId, idToWbs, idToTaskName), _
+            "Root", CalcBridge_DiagnosticTaskLabel(rootId, idToWbs, idToTaskName)))
 
 End Function
 
@@ -883,6 +681,8 @@ Public Function CalcBridge_BuildForecastStartDependencyDiagnosticMessage( _
     Dim predDateKindEn As String
     Dim requestedLabelFr As String
     Dim requestedLabelEn As String
+    Dim frenchArguments As Object
+    Dim englishArguments As Object
 
     If diag Is Nothing Then Exit Function
     If Not diag.Exists("TaskID") Then Exit Function
@@ -895,39 +695,34 @@ Public Function CalcBridge_BuildForecastStartDependencyDiagnosticMessage( _
     linkText = CStr(diag("BlockingLinkType")) & " " & CalcBridge_FormatDiagnosticLag(CDbl(diag("BlockingLag")))
 
     If UCase$(Trim$(CStr(diag("BlockingPredecessorDateKind")))) = "START" Then
-        predDateKindFr = "Debut predecesseur"
-        predDateKindEn = "Predecessor start"
+        predDateKindFr = TextCatalog_Get("DIAG.LABEL.PREDECESSOR_START", TEXT_LANGUAGE_FR)
+        predDateKindEn = TextCatalog_Get("DIAG.LABEL.PREDECESSOR_START", TEXT_LANGUAGE_EN)
     Else
-        predDateKindFr = "Fin predecesseur"
-        predDateKindEn = "Predecessor finish"
+        predDateKindFr = TextCatalog_Get("DIAG.LABEL.PREDECESSOR_FINISH", TEXT_LANGUAGE_FR)
+        predDateKindEn = TextCatalog_Get("DIAG.LABEL.PREDECESSOR_FINISH", TEXT_LANGUAGE_EN)
     End If
 
     If UCase$(Trim$(contextKey)) = "SCENARIO" Then
-        requestedLabelFr = "Scenario Start demande"
-        requestedLabelEn = "Requested Scenario Start"
+        requestedLabelFr = TextCatalog_Get("DIAG.LABEL.REQUESTED_SCENARIO_START", TEXT_LANGUAGE_FR)
+        requestedLabelEn = TextCatalog_Get("DIAG.LABEL.REQUESTED_SCENARIO_START", TEXT_LANGUAGE_EN)
     Else
-        requestedLabelFr = "Test Start demande"
-        requestedLabelEn = "Requested Test Start"
+        requestedLabelFr = TextCatalog_Get("DIAG.LABEL.REQUESTED_TEST_START", TEXT_LANGUAGE_FR)
+        requestedLabelEn = TextCatalog_Get("DIAG.LABEL.REQUESTED_TEST_START", TEXT_LANGUAGE_EN)
     End If
 
-    CalcBridge_BuildForecastStartDependencyDiagnosticMessage = _
-        "FR:" & vbCrLf & _
-        "Test Start impossible." & vbCrLf & vbCrLf & _
-        "Tache : " & taskLabel & vbCrLf & _
-        "Dependance bloquante : " & predLabel & " (" & linkText & ")" & vbCrLf & _
-        predDateKindFr & " : " & CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")) & vbCrLf & _
-        "Debut minimum autorise : " & CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & vbCrLf & _
-        requestedLabelFr & " : " & CalcBridge_DiagnosticDateText(diag("RequestedStart")) & vbCrLf & _
-        "-> avancer le predecesseur, modifier le lien/lag, ou choisir un Start >= " & _
-            CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & "." & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "Test Start impossible." & vbCrLf & vbCrLf & _
-        "Task: " & taskLabel & vbCrLf & _
-        "Blocking dependency: " & predLabel & " (" & linkText & ")" & vbCrLf & _
-        predDateKindEn & ": " & CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")) & vbCrLf & _
-        "Earliest allowed start: " & CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & vbCrLf & _
-        requestedLabelEn & ": " & CalcBridge_DiagnosticDateText(diag("RequestedStart")) & vbCrLf & _
-        "-> move the predecessor earlier, update the link/lag, or choose a Start >= " & _
-            CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")) & "."
+    Set frenchArguments = TextCatalog_Arguments( _
+        "Task", taskLabel, "Predecessor", predLabel, "Link", linkText, _
+        "PredecessorDateLabel", predDateKindFr, _
+        "PredecessorDate", CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")), _
+        "MinimumStart", CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")), _
+        "RequestedLabel", requestedLabelFr, "RequestedStart", CalcBridge_DiagnosticDateText(diag("RequestedStart")))
+    Set englishArguments = TextCatalog_Arguments( _
+        "Task", taskLabel, "Predecessor", predLabel, "Link", linkText, _
+        "PredecessorDateLabel", predDateKindEn, _
+        "PredecessorDate", CalcBridge_DiagnosticDateText(diag("BlockingPredecessorDate")), _
+        "MinimumStart", CalcBridge_DiagnosticDateText(diag("MinimumAllowedStart")), _
+        "RequestedLabel", requestedLabelEn, "RequestedStart", CalcBridge_DiagnosticDateText(diag("RequestedStart")))
+    CalcBridge_BuildForecastStartDependencyDiagnosticMessage = PlanningMessageText_Format( _
+        "DIAG.FORECAST_START.DEPENDENCY", frenchArguments, englishArguments)
 
 End Function

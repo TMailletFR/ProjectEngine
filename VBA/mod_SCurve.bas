@@ -39,7 +39,7 @@ Private gSCurveLanguage As String
 ' FR: Lance le workflow SCurve Engine.
 ' EN: Runs the SCurve Engine workflow.
 '------------------------------------------------------------------------------
-Public Sub Run_SCurve_Engine()
+Public Sub Run_SCurve_Engine(Optional ByVal propagateErrors As Boolean = False)
 
     Dim perfScope As clsPerfScope
 
@@ -81,6 +81,7 @@ Public Sub Run_SCurve_Engine()
     Dim totalRawWeight As Double
     Dim consoleMessages As Collection
     Dim ackTokens As String
+    Dim warningReceiptsById As Object
 
     Set perfScope = Profiler_BeginScope("Run_SCurve_Engine", "Workflow")
 
@@ -188,7 +189,7 @@ Public Sub Run_SCurve_Engine()
 
         If Not calcRowById.Exists(taskId) Then
             blockingErrorIds(taskId) = True
-            errorText = "TASK MISSING IN CALC"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.TASK_MISSING", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -216,7 +217,7 @@ Public Sub Run_SCurve_Engine()
 
         If Not isLeaf Then
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
-            outCalc(r, mapCalcSCurve("SCurve Warning")) = "SUMMARY TASK EXCLUDED"
+            outCalc(r, mapCalcSCurve("SCurve Warning")) = TextCatalog_Get("SCURVE.ROW.WARNING.SUMMARY_EXCLUDED", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("Error flag")) = ""
             GoTo WritePass1Row
         End If
@@ -227,7 +228,7 @@ Public Sub Run_SCurve_Engine()
             End If
 
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
-            outCalc(r, mapCalcSCurve("SCurve Warning")) = "TASK TYPE EXCLUDED FROM S-CURVE"
+            outCalc(r, mapCalcSCurve("SCurve Warning")) = TextCatalog_Get("SCURVE.ROW.WARNING.TYPE_EXCLUDED", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("Error flag")) = ""
             GoTo WritePass1Row
         End If
@@ -235,14 +236,14 @@ Public Sub Run_SCurve_Engine()
         If Not HasValue(rawWeight) Then
             missingWeightIds(taskId) = True
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
-            outCalc(r, mapCalcSCurve("SCurve Warning")) = "MISSING WEIGHT - EXCLUDED"
+            outCalc(r, mapCalcSCurve("SCurve Warning")) = TextCatalog_Get("SCURVE.ROW.WARNING.MISSING_WEIGHT", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("Error flag")) = ""
             GoTo WritePass1Row
         End If
 
         If Not IsNumeric(rawWeight) Then
             blockingErrorIds(taskId) = True
-            errorText = "INVALID WEIGHT"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.INVALID_WEIGHT", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -251,7 +252,7 @@ Public Sub Run_SCurve_Engine()
 
         If CDbl(rawWeight) <= 0 Then
             blockingErrorIds(taskId) = True
-            errorText = "NON-POSITIVE WEIGHT"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.NON_POSITIVE_WEIGHT", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -267,7 +268,7 @@ Public Sub Run_SCurve_Engine()
 
         If Not HasValue(baselineStart) Or Not HasValue(baselineDuration) Then
             blockingErrorIds(taskId) = True
-            errorText = "MISSING BASELINE DATA"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.MISSING_BASELINE", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -276,7 +277,7 @@ Public Sub Run_SCurve_Engine()
 
         If CDbl(baselineDuration) <= 0 Then
             blockingErrorIds(taskId) = True
-            errorText = "INVALID BASELINE DURATION"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.INVALID_BASELINE_DURATION", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -285,7 +286,7 @@ Public Sub Run_SCurve_Engine()
 
         If Not HasValue(calcStart) Or Not HasValue(calcFinish) Then
             blockingErrorIds(taskId) = True
-            errorText = "MISSING CALCULATED DATES"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.MISSING_CALCULATED_DATES", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -294,7 +295,7 @@ Public Sub Run_SCurve_Engine()
 
         If CDbl(calcFinish) < CDbl(calcStart) Then
             blockingErrorIds(taskId) = True
-            errorText = "CALCULATED FINISH BEFORE START"
+            errorText = TextCatalog_Get("SCURVE.ROW.WARNING.FINISH_BEFORE_START", SCurve_CurrentLanguage())
             outCalc(r, mapCalcSCurve("SCurve Included")) = "NO"
             outCalc(r, mapCalcSCurve("SCurve Warning")) = errorText
             outCalc(r, mapCalcSCurve("Error flag")) = "ERROR"
@@ -335,16 +336,14 @@ NextPass1Row:
 
     If blockingErrorIds.Count > 0 Then
         SCurve_AddGroupedMessage consoleMessages, "STOP", blockingErrorIds, idToWbs, _
-            "Données bloquantes pour S-curve", "corriger les champs nécessaires avant recalcul", _
-            "Blocking data for S-curve", "fix required fields before recalculation"
+            "SCURVE.DIAG.BLOCKING_GROUP"
         SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
     If includedIds.Count = 0 Then
         SCurve_AddConsoleMessage consoleMessages, "WARNING", _
-            "Aucune tâche feuille exploitable pour la S-curve.", _
-            "No valid leaf task available for S-curve.", _
+            "SCURVE.DIAG.NO_VALID_LEAF", Nothing, _
             "SCURVE_NO_VALID_LEAF_TASK"
         SCurve_SafeEmptyState
         GoTo SafeExit
@@ -352,42 +351,41 @@ NextPass1Row:
 
     If totalRawWeight <= 0 Then
         SCurve_AddConsoleMessage consoleMessages, "STOP", _
-            "La somme des poids exploités pour la S-curve est nulle ou invalide.", _
-            "The total usable S-curve weight is zero or invalid."
+            "SCURVE.DIAG.INVALID_TOTAL_WEIGHT"
         SCurve_SafeEmptyState
         GoTo SafeExit
     End If
 
     If missingWeightIds.Count > 0 Then
+        Set warningReceiptsById = CreateObject("Scripting.Dictionary")
         ackTokens = SCurve_LogGroupedWarningEvents( _
             missingWeightIds, idToWbs, _
             "SCURVE_MISSING_WEIGHT", _
-            "Poids manquant sur certaines taches feuilles", _
-            "Missing weight on some leaf tasks", _
-            "les taches sont exclues de la S-curve ; completer Weight (%) si necessaire", _
-            "tasks are excluded from the S-curve; fill Weight (%) if needed")
+            "SCURVE.EVENT.MISSING_WEIGHT.MESSAGE", _
+            "SCURVE.EVENT.MISSING_WEIGHT.DETAIL", _
+            warningReceiptsById)
 
         SCurve_AddGroupedMessage consoleMessages, "WARNING", missingWeightIds, idToWbs, _
-            "Poids manquant sur certaines tâches feuilles - non prises en compte dans la S-curve", "compléter Weight (%) si nécessaire", _
-            "Missing weight on some leaf tasks - excluded from S-curve", "fill Weight (%) if needed", _
+            "SCURVE.DIAG.MISSING_WEIGHT_GROUP", _
             True, _
-            ackTokens
+            ackTokens, _
+            warningReceiptsById
     End If
 
     If excludedTaskTypeWithWeightIds.Count > 0 Then
+        Set warningReceiptsById = CreateObject("Scripting.Dictionary")
         ackTokens = SCurve_LogGroupedWarningEvents( _
             excludedTaskTypeWithWeightIds, idToWbs, _
             "SCURVE_EXCLUDED_TASK_TYPE_WITH_WEIGHT", _
-            "Poids renseigne sur des Milestones ou Level of Effort", _
-            "Weight entered on Milestones or Level of Effort", _
-            "les taches sont exclues de la S-curve ; supprimer Weight (%) si vous voulez eviter ce warning", _
-            "tasks are excluded from the S-curve; remove Weight (%) if you want to avoid this warning")
+            "SCURVE.EVENT.EXCLUDED_WEIGHT.MESSAGE", _
+            "SCURVE.EVENT.EXCLUDED_WEIGHT.DETAIL", _
+            warningReceiptsById)
 
         SCurve_AddGroupedMessage consoleMessages, "WARNING", excludedTaskTypeWithWeightIds, idToWbs, _
-            "Poids renseigné sur des Milestones ou Level of Effort - non pris en compte dans la S-curve", "supprimer le Weight (%) si vous voulez éviter ce warning", _
-            "Weight entered on Milestones or Level of Effort - excluded from S-curve", "remove Weight (%) if you want to avoid this warning", _
+            "SCURVE.DIAG.EXCLUDED_WEIGHT_GROUP", _
             True, _
-            ackTokens
+            ackTokens, _
+            warningReceiptsById
     End If
 
     '--------------------------------------------------
@@ -475,8 +473,7 @@ NextPass2Row:
 
     If allDates.Count = 0 Then
         SCurve_AddConsoleMessage consoleMessages, "STOP", _
-            "Aucune date exploitable pour générer la S-curve.", _
-            "No usable date found to generate the S-curve."
+            "SCURVE.DIAG.NO_USABLE_DATE"
         SCurve_SafeEmptyState
         GoTo SafeExit
     End If
@@ -486,16 +483,18 @@ NextPass2Row:
     Ensure_SCurve_Chart
 
 SafeExit:
+    If propagateErrors And Err.Number <> 0 Then
+        Dim failureNumber As Long, failureSource As String, failureDescription As String
+        failureNumber = Err.Number: failureSource = Err.Source: failureDescription = Err.Description
+        On Error GoTo 0
+        Err.Raise failureNumber, failureSource, failureDescription
+    End If
     If Err.Number <> 0 Then
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
         SCurve_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur VBA dans Run_SCurve_Engine" & vbCrLf & _
-            "-> vérifier le dernier bloc modifié dans mod_SCurve" & vbCrLf & _
-            "-> " & Err.Description, _
-            "VBA error in Run_SCurve_Engine" & vbCrLf & _
-            "-> check the last edited block in mod_SCurve" & vbCrLf & _
-            "-> " & Err.Description
+            "SCURVE.DIAG.RUN_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description)
     End If
 
 
@@ -536,13 +535,17 @@ Private Sub ValidateSCurveSourceColumns(ByVal mapWBS As Object, ByVal mapCalc As
 
     For Each c In requiredWbsCols
         If Not mapWBS.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 810, , "Missing source column in tbl_WBS: " & CStr(c)
+            Err.Raise vbObjectError + 810, , PlanningMessageText_Format("SCURVE.ERROR.MISSING_SOURCE_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)))
         End If
     Next c
 
     For Each c In requiredCalcCols
         If Not mapCalc.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 813, , "Missing source column in tbl_CALC: " & CStr(c)
+            Err.Raise vbObjectError + 813, , PlanningMessageText_Format("SCURVE.ERROR.MISSING_SOURCE_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)))
         End If
     Next c
 
@@ -572,7 +575,9 @@ Private Sub ValidateSCurveOutputColumns(ByVal mapSCurve As Object)
 
     For Each c In requiredCols
         If Not mapSCurve.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 811, , "Missing column in tbl_SCURVE: " & CStr(c)
+            Err.Raise vbObjectError + 811, , PlanningMessageText_Format("SCURVE.ERROR.MISSING_OUTPUT_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_SCURVE", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_SCURVE", "Column", CStr(c)))
         End If
     Next c
 
@@ -606,7 +611,9 @@ Private Sub ValidateCalcSCurveColumns(ByVal mapCalcSCurve As Object)
 
     For Each c In requiredCols
         If Not mapCalcSCurve.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 812, , "Missing column in tbl_CALC_SCURVE: " & CStr(c)
+            Err.Raise vbObjectError + 812, , PlanningMessageText_Format("SCURVE.ERROR.MISSING_OUTPUT_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_CALC_SCURVE", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_CALC_SCURVE", "Column", CStr(c)))
         End If
     Next c
 
@@ -955,40 +962,6 @@ End Function
 ' FR: Affiche SCurve Grouped Message pour l'utilisateur ou le diagnostic.
 ' EN: Shows SCurve Grouped Message for the user or diagnostics.
 '------------------------------------------------------------------------------
-Private Sub ShowSCurveGroupedMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
-    ByVal boxStyle As VbMsgBoxStyle)
-
-    Dim consoleMessages As Collection
-    Dim ackTokens As String
-    Dim msgType As String
-
-    If idsDict Is Nothing Then Exit Sub
-    If idsDict.Count = 0 Then Exit Sub
-
-    If (boxStyle And vbCritical) = vbCritical Then
-        msgType = "STOP"
-    ElseIf (boxStyle And vbExclamation) = vbExclamation Then
-        msgType = "WARNING"
-    Else
-        msgType = "INFO"
-    End If
-
-
-    Set consoleMessages = New Collection
-
-    SCurve_AddGroupedMessage consoleMessages, msgType, idsDict, idToWbs, _
-        frProblem, frAction, enProblem, enAction
-
-    CalcBridge_ShowPlanningConsole consoleMessages
-
-End Sub
-
 '------------------------------------------------------------------------------
 ' FR: Verifie ou cree SCurve Chart si necessaire.
 ' EN: Ensures or creates SCurve Chart when needed.
@@ -1046,14 +1019,14 @@ Public Sub SCurve_ApplyLanguage(Optional ByVal languageCode As String = "")
     Set ch = chartObj.Chart
 
     ch.HasTitle = True
-    ch.ChartTitle.Text = SCurve_L("S-Curve", "S-Curve")
+    ch.ChartTitle.Text = TextCatalog_Get("SCURVE.CHART.TITLE", SCurve_CurrentLanguage())
 
-    If ch.SeriesCollection.Count >= 1 Then ch.SeriesCollection(1).Name = SCurve_L("Réel journalier", "Daily Actualized")
-    If ch.SeriesCollection.Count >= 2 Then ch.SeriesCollection(2).Name = SCurve_L("Prévu restant journalier", "Daily Remaining Forecast")
-    If ch.SeriesCollection.Count >= 3 Then ch.SeriesCollection(3).Name = SCurve_L("Référence", "Baseline")
-    If ch.SeriesCollection.Count >= 4 Then ch.SeriesCollection(4).Name = SCurve_L("Calculé", "Calculated")
-    If ch.SeriesCollection.Count >= 5 Then ch.SeriesCollection(5).Name = SCurve_L("Prévu", "Forecast")
-    If ch.SeriesCollection.Count >= 6 Then ch.SeriesCollection(6).Name = SCurve_L("Réel", "Actual")
+    If ch.SeriesCollection.Count >= 1 Then ch.SeriesCollection(1).Name = TextCatalog_Get("SCURVE.SERIES.DAILY_ACTUAL", SCurve_CurrentLanguage())
+    If ch.SeriesCollection.Count >= 2 Then ch.SeriesCollection(2).Name = TextCatalog_Get("SCURVE.SERIES.DAILY_FORECAST", SCurve_CurrentLanguage())
+    If ch.SeriesCollection.Count >= 3 Then ch.SeriesCollection(3).Name = TextCatalog_Get("SCURVE.SERIES.BASELINE", SCurve_CurrentLanguage())
+    If ch.SeriesCollection.Count >= 4 Then ch.SeriesCollection(4).Name = TextCatalog_Get("SCURVE.SERIES.CALCULATED", SCurve_CurrentLanguage())
+    If ch.SeriesCollection.Count >= 5 Then ch.SeriesCollection(5).Name = TextCatalog_Get("SCURVE.SERIES.FORECAST", SCurve_CurrentLanguage())
+    If ch.SeriesCollection.Count >= 6 Then ch.SeriesCollection(6).Name = TextCatalog_Get("SCURVE.SERIES.ACTUAL", SCurve_CurrentLanguage())
 
     On Error Resume Next
     ch.Axes(xlCategory).TickLabels.NumberFormat = SCurve_DateAxisNumberFormat()
@@ -1109,21 +1082,6 @@ Private Sub EnsureSCurveLanguageInitialized()
 End Sub
 
 '------------------------------------------------------------------------------
-' FR: Retourne la valeur L sans modifier les donnees d'entree.
-' EN: Returns the L value without mutating input data.
-'------------------------------------------------------------------------------
-
-Private Function SCurve_L(ByVal frText As String, ByVal enText As String) As String
-
-    If SCurve_CurrentLanguage() = "FR" Then
-        SCurve_L = frText
-    Else
-        SCurve_L = enText
-    End If
-
-End Function
-
-'------------------------------------------------------------------------------
 ' FR: Retourne la valeur Date Axis Number Format sans modifier les donnees d'entree.
 ' EN: Returns the Date Axis Number Format value without mutating input data.
 '------------------------------------------------------------------------------
@@ -1172,12 +1130,12 @@ Private Sub Create_SCurve_Chart()
     Loop
 
     ch.HasTitle = True
-    ch.ChartTitle.Text = "S-Curve"
+    ch.ChartTitle.Text = TextCatalog_Get("SCURVE.CHART.TITLE", SCurve_CurrentLanguage())
     ch.HasLegend = True
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Réel journalier", "Daily Actualized")
+        .Name = TextCatalog_Get("SCURVE.SERIES.DAILY_ACTUAL", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DAILY_ACTUALIZED).DataBodyRange
         .AxisGroup = xlPrimary
@@ -1188,7 +1146,7 @@ Private Sub Create_SCurve_Chart()
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Prévu restant journalier", "Daily Remaining Forecast")
+        .Name = TextCatalog_Get("SCURVE.SERIES.DAILY_FORECAST", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DAILY_REMAINING_FORECAST).DataBodyRange
         .AxisGroup = xlPrimary
@@ -1199,7 +1157,7 @@ Private Sub Create_SCurve_Chart()
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Référence", "Baseline")
+        .Name = TextCatalog_Get("SCURVE.SERIES.BASELINE", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_CUMULATIVE_BASELINE).DataBodyRange
         .AxisGroup = xlSecondary
@@ -1211,7 +1169,7 @@ Private Sub Create_SCurve_Chart()
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Calculé", "Calculated")
+        .Name = TextCatalog_Get("SCURVE.SERIES.CALCULATED", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_CALCULATED_CURVE_SOLID).DataBodyRange
         .AxisGroup = xlSecondary
@@ -1223,7 +1181,7 @@ Private Sub Create_SCurve_Chart()
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Prévu", "Forecast")
+        .Name = TextCatalog_Get("SCURVE.SERIES.FORECAST", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_CALCULATED_CURVE_DASHED).DataBodyRange
         .AxisGroup = xlSecondary
@@ -1236,7 +1194,7 @@ Private Sub Create_SCurve_Chart()
 
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = SCurve_L("Réel", "Actual")
+        .Name = TextCatalog_Get("SCURVE.SERIES.ACTUAL", SCurve_CurrentLanguage())
         .XValues = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_DATE).DataBodyRange
         .Values = SchemaListColumn(tbl, VTS_TABLE_SCURVE, VTS_COL_CUMULATIVE_ACTUAL).DataBodyRange
         .AxisGroup = xlSecondary
@@ -1486,7 +1444,7 @@ Private Sub SCurveStoreChartSignature(ByVal signatureKey As String)
        Left$(signatureKey, Len(SCURVE_CHART_SIGNATURE_VERSION)) <> _
             SCURVE_CHART_SIGNATURE_VERSION Then
         Err.Raise vbObjectError + 2713, "SCurveStoreChartSignature", _
-            "Invalid fixed-length S-Curve chart signature key."
+            PlanningMessageText_Format("SCURVE.ERROR.INVALID_SIGNATURE_KEY")
     End If
 
     refersToValue = "=""" & signatureKey & """"

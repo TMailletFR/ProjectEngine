@@ -38,6 +38,10 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     Dim dataArr As Variant
     Dim linksBySuccId As Object
     Dim executionNetwork As clsCompiledExecutionNetwork
+    Dim dependencyDiagnostics As Object
+    Dim constraintDiagnostics As Object
+    Dim cascadeDiagnostics As Object
+    Dim coreDiagnostics As Object
 
     Dim changedIds As Object
     Dim forceFullRecalc As Boolean
@@ -68,7 +72,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
     If Planning_WBSIsEmpty() Then
         Planning_CalcSafeEmptyState
-        Application.StatusBar = "No project data - calculation outputs cleared."
+        Application.StatusBar = TextCatalog_Get("COMMON.STATUS.NO_PROJECT_DATA", EventHistory_CurrentLanguage())
         GoTo SafeExit
     End If
     Ensure_Calc_Infrastructure consoleMessages
@@ -99,11 +103,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
     If Not ValidateCalcAfterSync(tblCalc) Then
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-            BiMsg( _
-                "Le sync WBS -> CALC a échoué ou a laissé tbl_CALC dans un état invalide." & vbCrLf & _
-                "Le calcul est arrêté pour éviter un faux succès.", _
-                "WBS -> CALC sync failed or left tbl_CALC in an invalid state." & vbCrLf & _
-                "Calculation stopped to avoid a false success.")
+            PlanningMessageText_Format("DIAG.PLANNING.SYNC_INVALID", Nothing, Nothing)
         Write_CalcState_Snapshot_Console "ERROR", consoleMessages
         CalcBridge_ShowPlanningConsole consoleMessages
         GoTo SafeExit
@@ -140,8 +140,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
                 Write_CalcState_Snapshot_Console "OK", consoleMessages
 
                 CalcBridge_AddInfoMessage consoleMessages, _
-                    "Aucune modification détectée : calcul moteur non relancé.", _
-                    "No change detected: core calculation was not rerun."
+                    "DIAG.PLANNING.NO_CHANGE"
 
                 If Not Profiler_ShouldSuppressUserInterface() Then
                     CalcBridge_ShowPlanningConsole consoleMessages
@@ -164,6 +163,10 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
     Set linksBySuccId = BuildCoreLinksBySucc_FromLogicLinksTable_Expanded(tblCalc)
     Set executionNetwork = CompileExecutionNetwork(dataArr, mapCalc, linksBySuccId)
+    Set dependencyDiagnostics = CreateObject("Scripting.Dictionary")
+    Set constraintDiagnostics = CreateObject("Scripting.Dictionary")
+    Set cascadeDiagnostics = CreateObject("Scripting.Dictionary")
+    Set coreDiagnostics = CreateObject("Scripting.Dictionary")
 
     If CalcBridge_PreCore_CheckLOEAsPredecessor(tblCalc, mapCalc, consoleMessages, linksBySuccId) Then
         Write_CalcState_Snapshot_Console "ERROR", consoleMessages
@@ -217,7 +220,8 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
         Debug.Print "PARTIAL CORE MODE ENABLED"
         Debug.Print "Partial impacted tasks count: " & impactedIds.Count
 
-        Run_Calc_Core dataArr, mapCalc, linksBySuccId, impactedIds, , , , executionNetwork
+        Run_Calc_Core dataArr, mapCalc, linksBySuccId, impactedIds, _
+            dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork, coreDiagnostics
 
         WriteCoreOutputsToCalc_Partial tblCalc, mapCalc, dataArr, impactedIds
         WriteCoreDrivingLogicToCalc_Partial tblCalc, mapCalc, dataArr, impactedIds
@@ -226,7 +230,8 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
         Debug.Print "FULL CORE MODE"
 
-        Run_Calc_Core dataArr, mapCalc, linksBySuccId, , , , , executionNetwork
+        Run_Calc_Core dataArr, mapCalc, linksBySuccId, , _
+            dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork, coreDiagnostics
 
         WriteCoreOutputsToCalc tblCalc, mapCalc, dataArr
         WriteCoreDrivingLogicToCalc tblCalc, mapCalc, dataArr
@@ -237,7 +242,8 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     AbortIfRequested "Run_Calc_Engine_CoreBridge.AfterCoreWrite"
 
     If CalcBridge_HasCoreErrors(tblCalc) Then
-        CalcBridge_AppendCoreErrorMessages consoleMessages, tblCalc
+        CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataArr, mapCalc, , "PROD", _
+            dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, coreDiagnostics
         Write_CalcState_Snapshot_Console "ERROR", consoleMessages
         CalcBridge_ShowPlanningConsole consoleMessages
         GoTo SafeExit
@@ -277,8 +283,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
     Write_CalcState_Snapshot_Console "OK", consoleMessages
 
     CalcBridge_AddInfoMessage consoleMessages, _
-        "Calcul terminé avec succès.", _
-        "Calculation completed successfully."
+        "DIAG.PLANNING.COMPLETE"
 
     CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -296,11 +301,9 @@ ErrHandler:
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Erreur dans Run_Calc_Engine_CoreBridge" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Run_Calc_Engine_CoreBridge" & vbCrLf & _
-            "-> " & Err.Description)
+        PlanningMessageText_Format("DIAG.PLANNING.RUN_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description), _
+            TextCatalog_Arguments("Details", Err.Description))
 
     On Error Resume Next
     Write_CalcState_Snapshot_Console "ERROR", consoleMessages
@@ -330,10 +333,14 @@ Private Function CalcBridge_GetCoreErrorSummary( _
     Dim wbsVal As String
     Dim taskNameVal As String
     Dim errMsg As String
+    Dim wbsPart As String
+    Dim detailsPart As String
+    Dim languageKey As String
 
     On Error GoTo FailSafe
 
     CalcBridge_GetCoreErrorSummary = ""
+    languageKey = EventHistory_CurrentLanguage()
 
     If tblCalc Is Nothing Then Exit Function
     If tblCalc.DataBodyRange Is Nothing Then Exit Function
@@ -363,9 +370,22 @@ Private Function CalcBridge_GetCoreErrorSummary( _
 
             If msg <> "" Then msg = msg & vbCrLf
 
-            msg = msg & "- ID " & idVal
-            If wbsVal <> "" Then msg = msg & " / WBS " & wbsVal
-            If errMsg <> "" Then msg = msg & " : " & errMsg
+            wbsPart = ""
+            detailsPart = ""
+            If wbsVal <> "" Then
+                wbsPart = TextCatalog_Format( _
+                    "DIAG.CORE_ERROR_SUMMARY.WBS_PART", _
+                    languageKey, _
+                    TextCatalog_Arguments("Wbs", wbsVal))
+            End If
+            If errMsg <> "" Then detailsPart = " : " & errMsg
+            msg = msg & TextCatalog_Format( _
+                "DIAG.CORE_ERROR_SUMMARY.ROW", _
+                languageKey, _
+                TextCatalog_Arguments( _
+                    "Id", idVal, _
+                    "WbsPart", wbsPart, _
+                    "DetailsPart", detailsPart))
 
             If countShown >= maxRows Then Exit For
 
@@ -374,14 +394,16 @@ Private Function CalcBridge_GetCoreErrorSummary( _
     Next r
 
     If msg = "" Then
-        msg = "Error flag detected, but no detailed message was available."
+        msg = TextCatalog_Get("DIAG.CORE_ERROR_SUMMARY.NO_DETAILS", languageKey)
     End If
 
     CalcBridge_GetCoreErrorSummary = msg
     Exit Function
 
 FailSafe:
-    CalcBridge_GetCoreErrorSummary = "Unable to build core error summary."
+    CalcBridge_GetCoreErrorSummary = TextCatalog_Get( _
+        "DIAG.CORE_ERROR_SUMMARY.BUILD_FAILED", _
+        EventHistory_CurrentLanguage())
 
 End Function
 

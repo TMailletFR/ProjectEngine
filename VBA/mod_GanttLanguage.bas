@@ -65,29 +65,29 @@ Public Sub Gantt_ApplyLanguage(Optional ByVal languageCode As String = "")
         EnsureGanttLanguageInitialized
     End If
 
-    Gantt_SetCellTextIfDifferent ws.cells(TITLE_ROW, COL_WBS), Gantt_L("VUE GANTT", "GANTT VIEW")
+    Gantt_SetCellTextIfDifferent ws.cells(TITLE_ROW, COL_WBS), TextCatalog_Get("GANTT.VIEW.TITLE", Gantt_CurrentLanguage())
 
     Gantt_SetCellTextIfDifferent ws.Range("A" & HEADER_ROW_2), "WBS"
-    Gantt_SetCellTextIfDifferent ws.Range("B" & HEADER_ROW_2), Gantt_L("Nom tâche", "Task Name")
-    Gantt_SetCellTextIfDifferent ws.Range("C" & HEADER_ROW_2), Gantt_L("Début", "Start")
-    Gantt_SetCellTextIfDifferent ws.Range("D" & HEADER_ROW_2), Gantt_L("Fin", "Finish")
-    Gantt_SetCellTextIfDifferent ws.Range("E" & HEADER_ROW_2), Gantt_L("Début test", "Test Start")
-    Gantt_SetCellTextIfDifferent ws.Range("F" & HEADER_ROW_2), Gantt_L("Fin test", "Test Finish")
-    Gantt_SetCellTextIfDifferent ws.Range("G" & HEADER_ROW_2), Gantt_L("Durée", "Duration")
+    Gantt_SetCellTextIfDifferent ws.Range("B" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.TASK_NAME", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("C" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.START", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("D" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.FINISH", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("E" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.TEST_START", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("F" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.TEST_FINISH", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("G" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.DURATION", Gantt_CurrentLanguage())
     Gantt_SetCellTextIfDifferent ws.Range("H" & HEADER_ROW_2), "%"
-    Gantt_SetCellTextIfDifferent ws.Range("I" & HEADER_ROW_2), Gantt_L("Test %", "Test %")
-    Gantt_SetCellTextIfDifferent ws.Range("J" & HEADER_ROW_2), Gantt_L("Logique", "Logic")
+    Gantt_SetCellTextIfDifferent ws.Range("I" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.TEST_PROGRESS", Gantt_CurrentLanguage())
+    Gantt_SetCellTextIfDifferent ws.Range("J" & HEADER_ROW_2), TextCatalog_Get("GANTT.COLUMN.LOGIC", Gantt_CurrentLanguage())
 
-    Gantt_SetShapeText ws, BTN_RESET_NAME, Gantt_L("Réinitialiser", "Reset")
-    Gantt_SetShapeText ws, BTN_SCENARIO_NAME, Gantt_L("Scénario", "Scenario")
-    Gantt_SetShapeText ws, BTN_TEST_NAME, Gantt_L("Test", "Test")
-    Gantt_SetShapeText ws, BTN_LOCK_NAME, Gantt_L("Verrouiller", "Lock")
+    Gantt_SetShapeText ws, BTN_RESET_NAME, TextCatalog_Get("GANTT.COMMAND.RESET", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_SCENARIO_NAME, TextCatalog_Get("GANTT.COMMAND.SCENARIO", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_TEST_NAME, TextCatalog_Get("GANTT.COMMAND.TEST", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_LOCK_NAME, TextCatalog_Get("GANTT.COMMAND.LOCK", Gantt_CurrentLanguage())
 
-    Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, Gantt_L("Détail / Synthèse", "Detail / Summary")
-    Gantt_SetShapeText ws, BTN_SCALE_LEFT_NAME, Gantt_L("Jour / Sem. / Mois", "Day / Week / Month")
-    Gantt_SetShapeText ws, BTN_CONSTRAINT_LEFT_NAME, Gantt_L("Contrainte", "Constraint")
-    Gantt_SetShapeText ws, BTN_CP_LEFT_NAME, Gantt_L("N/A / Chem. Crit. / Le plus long", "None / Critical Path / Longest Path")
-    Gantt_SetShapeText ws, BTN_CP_MULTI_LEFT_NAME, Gantt_L("Unique / Multi-projet", "Single / Multiple Project")
+    Gantt_SetShapeText ws, BTN_VIEW_LEFT_NAME, TextCatalog_Get("GANTT.CONTROL.VIEW", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_SCALE_LEFT_NAME, TextCatalog_Get("GANTT.CONTROL.SCALE", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_CONSTRAINT_LEFT_NAME, TextCatalog_Get("GANTT.CONTROL.CONSTRAINT", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_CP_LEFT_NAME, TextCatalog_Get("GANTT.CONTROL.PATH", Gantt_CurrentLanguage())
+    Gantt_SetShapeText ws, BTN_CP_MULTI_LEFT_NAME, TextCatalog_Get("GANTT.CONTROL.MULTI_PROJECT", Gantt_CurrentLanguage())
 
     GoTo SafeExit
 
@@ -133,14 +133,6 @@ Public Function Gantt_CurrentLanguage() As String
 End Function
 
 '------------------------------------------------------------------------------
-' FR: Retourne un texte Gantt dans la langue runtime deja hydratee.
-' EN: Returns Gantt text in the already hydrated runtime language.
-'------------------------------------------------------------------------------
-Public Function Gantt_Text(ByVal frText As String, ByVal enText As String) As String
-    Gantt_Text = Gantt_L(frText, enText)
-End Function
-
-'------------------------------------------------------------------------------
 ' FR: Verifie et prepare une ressource GANTT requise avant le rendu ou l'interaction.
 ' EN: Ensures and prepares a GANTT resource required before rendering or interaction.
 '------------------------------------------------------------------------------
@@ -151,20 +143,6 @@ Private Sub EnsureGanttLanguageInitialized()
     End If
 
 End Sub
-
-'------------------------------------------------------------------------------
-' FR: Execute le helper Gantt  L dans le workflow de rendu GANTT.
-' EN: Runs the Gantt  L helper in the GANTT rendering workflow.
-'------------------------------------------------------------------------------
-Private Function Gantt_L(ByVal frText As String, ByVal enText As String) As String
-
-    If Gantt_CurrentLanguage() = "FR" Then
-        Gantt_L = frText
-    Else
-        Gantt_L = enText
-    End If
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Execute le helper Gantt  Set Shape Text dans le workflow de rendu GANTT.

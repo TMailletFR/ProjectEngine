@@ -214,16 +214,9 @@ Private Sub RaiseMissingGanttLiveColumn( _
     ByVal functionName As String)
 
     Err.Raise vbObjectError + 913, functionName, _
-        "FR:" & vbCrLf & _
-        "Colonne requise introuvable pour GANTT live/scenario" & vbCrLf & vbCrLf & _
-        "Table/source : " & sourceName & vbCrLf & _
-        "Colonne : " & colName & vbCrLf & _
-        "Fonction : " & functionName & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        "Required column missing for GANTT live/scenario" & vbCrLf & vbCrLf & _
-        "Source/table: " & sourceName & vbCrLf & _
-        "Column: " & colName & vbCrLf & _
-        "Function: " & functionName
+        PlanningMessageText_Format("GANTT.SIMULATION.MISSING_COLUMN", _
+            TextCatalog_Arguments("Source", sourceName, "Column", colName, "Function", functionName), _
+            TextCatalog_Arguments("Source", sourceName, "Column", colName, "Function", functionName))
 
 End Sub
 
@@ -415,7 +408,9 @@ Public Function GanttSimulation_BuildScenarioBaselineById() As Object
 
     Set mapTest = CanonicalIdentity_BuildColumnMap(tbl)
     For Each requiredColumn In Array("ID", "Task Type", "Is Summary", "Calc Test Start", "Calc Test Duration", "Input Progress")
-        If Not mapTest.Exists(CStr(requiredColumn)) Then Err.Raise vbObjectError + 1291, , "Missing scenario column: " & CStr(requiredColumn)
+        If Not mapTest.Exists(CStr(requiredColumn)) Then Err.Raise vbObjectError + 1291, , _
+            PlanningMessageText_Format("GANTT.ERROR.MISSING_SCENARIO_COLUMN", _
+                TextCatalog_Arguments("Column", CStr(requiredColumn)), TextCatalog_Arguments("Column", CStr(requiredColumn)))
     Next requiredColumn
 
     arr = tbl.DataBodyRange.value

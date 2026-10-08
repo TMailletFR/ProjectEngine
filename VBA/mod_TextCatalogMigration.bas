@@ -1,0 +1,27 @@
+Attribute VB_Name = "mod_TextCatalogMigration"
+Option Explicit
+
+Public Function TextCatalogMigration_Definitions() As Variant
+    TextCatalogMigration_Definitions = Array( _
+        Array("MIGRATION.TITLE", "Import previous ProjectEngine", "Importer un ancien ProjectEngine"), _
+        Array("MIGRATION.WARNING_TITLE", "Warning - Import an existing project", "Attention - Import d'un projet existant"), _
+        Array("MIGRATION.DESTRUCTIVE", "The data in this workbook will be replaced by the imported project.\nUnsaved changes may also be lost.\n\nTo keep the current state, make your own copy before continuing.\nThere is no automatic backup or rollback.\n\nOK: continue import. Cancel: keep this workbook unchanged.", _
+            "Les donnees de ce fichier seront remplacees par le projet importe.\nLes modifications non enregistrees pourront aussi etre perdues.\n\nPour conserver l'etat actuel, creez une copie avant de continuer.\nAucune sauvegarde automatique ni retour en arriere.\n\nOK : continuer l'import. Annuler : conserver ce fichier intact."), _
+        Array("MIGRATION.TARGET", "The destination must be saved, writable and structurally unprotected.", "La destination doit etre enregistree, modifiable et sans protection de structure."), _
+        Array("MIGRATION.POST_SAVE_FAILED", "Import verification failed after saving. The source is unchanged. Start from a clean ProjectEngine copy; no automatic rollback is available.", "La verification de l'import a echoue apres enregistrement. La source est intacte. Repartez d'un ProjectEngine propre ; aucun retour automatique n'est disponible."), _
+        Array("MIGRATION.SELECT", "Select your previous ProjectEngine workbook", "Choisir votre ancien classeur ProjectEngine"), _
+        Array("MIGRATION.BLOCKED", "This workbook is incompatible or an import failed. Start from a clean compatible ProjectEngine workbook.", "Ce classeur est incompatible ou un import a echoue. Repartez d'un ProjectEngine propre et compatible."), _
+        Array("MIGRATION.PROFILE", "The selected workbook is not a supported ProjectEngine profile. Use manual migration; nothing has been replaced.", "Le classeur choisi ne correspond pas a un profil ProjectEngine pris en charge. Utilisez la migration manuelle ; aucune donnee n'a ete remplacee."), _
+        Array("MIGRATION.FUTURE", "This file requires a newer ProjectEngine version. Download a compatible version before importing.", "Ce fichier necessite une version plus recente de ProjectEngine. Telechargez une version compatible avant l'import."), _
+        Array("MIGRATION.OPEN_SOURCE", "Close the source workbook yourself after saving any edits, then select it again.", "Fermez vous-meme le classeur source apres avoir enregistre vos modifications, puis selectionnez-le a nouveau."), _
+        Array("MIGRATION.UNSAFE", "This source has external connections, links, macro sheets or a different date system. Automatic import is not supported; use manual migration.", "Cette source contient des connexions, des liens externes, des feuilles macros ou un systeme de dates different. L'import automatique n'est pas pris en charge ; utilisez la migration manuelle."), _
+        Array("MIGRATION.FORMULA", "A custom formula or override cannot be preserved automatically: {Field}. Use manual migration.", "Une formule personnalisee ou une valeur remplacee ne peut pas etre conservee automatiquement : {Field}. Utilisez la migration manuelle."), _
+        Array("MIGRATION.INVALID", "Invalid source data: {Field}. Correct it in the source file, save and retry. Nothing has been replaced.", "Donnee source invalide : {Field}. Corrigez-la dans le fichier source, enregistrez et recommencez. Aucune donnee n'a ete remplacee."), _
+        Array("MIGRATION.ORPHAN", "A constraint refers to a missing task: ID {Field}. Correct the source before importing.", "Une contrainte reference une tache introuvable : ID {Field}. Corrigez la source avant l'import."), _
+        Array("MIGRATION.FAILED", "Import failed. The source is unchanged. No recovery or rollback is provided; start from a clean ProjectEngine copy before retrying. No final save was intentionally performed.", "L'import a echoue. La source est intacte. Aucun retour automatique ni sauvegarde de recuperation : repartez d'un ProjectEngine propre. Aucun enregistrement final volontaire n'a ete effectue."), _
+        Array("MIGRATION.SUCCESS", "Import completed and saved. Check WBS and Constraints, then run Update Planning when ready.\nSource unchanged.", "Import termine et enregistre. Verifiez WBS et Constraints, puis lancez Update Planning quand vous le souhaitez.\nSource inchangee."), _
+        Array("MIGRATION.STARTED", "ProjectEngine import started.", "Import ProjectEngine commence."), _
+        Array("MIGRATION.HISTORY_SKIPPED", "Old history unavailable; it will not be preserved.", "Ancien historique indisponible ; il ne sera pas conserve."), _
+        Array("MIGRATION.DEFAULTS", "Missing task types become ordinary tasks. Missing Summary visibility is derived from the task hierarchy and milestones.", "Un type de tache absent devient une tache ordinaire. La visibilite Summary manquante est deduite de la hierarchie et des jalons."), _
+        Array("MIGRATION.OPTIONS", "Display language: {Language}; dates: {Date}. Review preferences in Settings after import.", "Langue d'affichage : {Language} ; dates : {Date}. Verifiez vos preferences dans Settings apres l'import."))
+End Function

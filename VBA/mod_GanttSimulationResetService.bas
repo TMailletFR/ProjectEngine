@@ -75,7 +75,7 @@ Public Sub GanttSimulation_ResetToNormal( _
 
     If refreshDisplayIfNeeded Then
         If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_LOCAL_UPDATE, "GanttSimulation_ResetToNormal") Then
-            Err.Raise 5, "GanttSimulation_ResetToNormal", "Gantt Reset render did not reach READY state."
+            Err.Raise 5, "GanttSimulation_ResetToNormal", PlanningMessageText_Format("GANTT.ERROR.RESET_NOT_READY")
         End If
         refreshCount = 1
     End If
@@ -96,10 +96,8 @@ SafeExit:
     End If
 
     If resetErrNumber <> 0 Then
-        CalcBridge_ShowSingleConsoleMessage _
-            "STOP", _
-            "Erreur pendant la réinitialisation du Gantt : " & resetErrDescription, _
-            "Error while resetting the Gantt: " & resetErrDescription
+        CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.GANTT_RESET", _
+            TextCatalog_Arguments("Details", resetErrDescription)
     End If
 
 End Sub

@@ -127,11 +127,13 @@ Public Sub GanttScenarioService_RunScenarioEngine( _
     ValidateCalcGanttTestColumns tblTest
 
     If Not mapCalc.Exists("Calculated Start") Then
-        Err.Raise vbObjectError + 9101, "Run_Gantt_Scenario_Engine", "Missing CALC column: Calculated Start"
+        Err.Raise vbObjectError + 9101, "Run_Gantt_Scenario_Engine", PlanningMessageText_Format("GANTT.ERROR.MISSING_CALC_COLUMN", _
+            TextCatalog_Arguments("Column", "Calculated Start"), TextCatalog_Arguments("Column", "Calculated Start"))
     End If
 
     If Not mapCalc.Exists("Calculated Finish") Then
-        Err.Raise vbObjectError + 9102, "Run_Gantt_Scenario_Engine", "Missing CALC column: Calculated Finish"
+        Err.Raise vbObjectError + 9102, "Run_Gantt_Scenario_Engine", PlanningMessageText_Format("GANTT.ERROR.MISSING_CALC_COLUMN", _
+            TextCatalog_Arguments("Column", "Calculated Finish"), TextCatalog_Arguments("Column", "Calculated Finish"))
     End If
 
     dataWBS = tblWBS.DataBodyRange.value
@@ -297,8 +299,7 @@ Public Sub GanttScenarioService_RunScenarioEngine( _
     End If
 
     GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-        "Scénario mis à jour.", _
-        "Scenario updated."
+        "GANTT.SCENARIO.UPDATED"
 
     CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -375,6 +376,7 @@ Private Function Run_Gantt_Scenario_Backend( _
     Dim dependencyDiagnostics As Object
     Dim constraintDiagnostics As Object
     Dim cascadeDiagnostics As Object
+    Dim coreDiagnostics As Object
 
     Dim rowCount As Long
     Dim r As Long
@@ -408,6 +410,7 @@ Private Function Run_Gantt_Scenario_Backend( _
     Set dependencyDiagnostics = CreateObject("Scripting.Dictionary")
     Set constraintDiagnostics = CreateObject("Scripting.Dictionary")
     Set cascadeDiagnostics = CreateObject("Scripting.Dictionary")
+    Set coreDiagnostics = CreateObject("Scripting.Dictionary")
 
     BuildGanttScenarioCoreDataset tblTest, dataCore, mapCore, idToRowTest, idToWbs
 
@@ -415,7 +418,7 @@ Private Function Run_Gantt_Scenario_Backend( _
         ThisWorkbook.Worksheets(CALC_SHEET).ListObjects(CALC_TABLE))
     Set executionNetwork = CompileExecutionNetwork(dataCore, mapCore, linksBySuccId)
 
-    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork
+    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork, coreDiagnostics
 
     For r = 1 To rowCount
 
@@ -438,7 +441,7 @@ Private Function Run_Gantt_Scenario_Backend( _
                 outWarnText(r, 1) = errorMsg
             End If
 
-            If Not GanttLive_IsInheritedCoreError(errorMsg) Then
+            If CoreDiagnostics_TaskHasClassification(coreDiagnostics, idVal, "ROOT") Then
                 rootErrorIds(idVal) = True
             End If
 
@@ -449,7 +452,7 @@ Private Function Run_Gantt_Scenario_Backend( _
 NextRow:
     Next r
 
-    GanttLive_RemoveDerivedLOERootErrors dataCore, mapCore, errorIds, rootErrorIds
+    GanttLive_RemoveDerivedLOERootErrors coreDiagnostics, errorIds, rootErrorIds
 
     tblTest.ListColumns("Calc Test Start").DataBodyRange.value = outStart
     tblTest.ListColumns("Calc Test Finish").DataBodyRange.value = outFinish
@@ -463,11 +466,10 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "SCENARIO", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "SCENARIO", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, coreDiagnostics
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
-                "Erreur de calcul dans le scénario", "corriger les valeurs de test ou la logique amont", _
-                "Calculation error in scenario", "fix test values or upstream logic", vbCritical, consoleMessages
+                "GANTT.SCENARIO.CALCULATION_ERROR_GROUP", vbCritical, consoleMessages
         End If
 
         Exit Function
@@ -647,7 +649,7 @@ Private Sub GanttLive_ApplyScenarioRender(ByVal wsGantt As Worksheet)
     SetGanttPreserveTestInputs True
     GanttLive_RequestScenarioRender
     If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_LOCAL_UPDATE, "GanttLive_ApplyScenarioRender") Then
-        Err.Raise 5, "GanttLive_ApplyScenarioRender", "Gantt SCENARIO render did not reach READY state."
+        Err.Raise 5, "GanttLive_ApplyScenarioRender", PlanningMessageText_Format("GANTT.ERROR.SCENARIO_NOT_READY")
     End If
     GanttLive_SetActiveSimulationMode "SCENARIO"
     SetGanttPreserveTestInputs False

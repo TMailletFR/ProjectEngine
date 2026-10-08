@@ -125,14 +125,10 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
 
             If IsMacroRunActive() Then
 
-                RequestMacroAbort _
+                RequestMacroAbortKey _
                     "Handle_WBS_Change", _
-                    "Écriture moteur interdite dans une colonne calculée de WBS." & vbCrLf & _
-                    "-> source : " & GetAuthorizedWBSWriteSource() & vbCrLf & _
-                    "-> le macro-run est arrêté pour éviter une corruption de données.", _
-                    "Engine write not allowed in a calculated WBS column." & vbCrLf & _
-                    "-> source: " & GetAuthorizedWBSWriteSource() & vbCrLf & _
-                    "-> the macro run was stopped to prevent data corruption."
+                    "WBS.EVENTS.MACRO.CALCULATED_EDIT", _
+                    TextCatalog_Arguments("Source", GetAuthorizedWBSWriteSource())
                 Exit Sub
 
             End If
@@ -141,10 +137,7 @@ Public Sub Handle_WBS_Change(ByVal ws As Worksheet, ByVal Target As Range)
             Application.Undo
 
             WBS_ShowConsoleMessage vbExclamation, _
-                "Modification interdite dans une colonne calculée (grise)." & vbCrLf & _
-                "-> modifier uniquement les colonnes d'entrée (bleues).", _
-                "Manual edit not allowed in calculated column (gray)." & vbCrLf & _
-                "-> edit input columns only (blue)."
+                "WBS.EVENTS.CALCULATED_EDIT"
             GoTo SafeExit
 
         End If
@@ -180,12 +173,9 @@ ContinueValidation:
                 If Not reWBS.Test(cellValue) Then
 
                     If IsMacroRunActive() Then
-                        RequestMacroAbort _
+                        RequestMacroAbortKey _
                             "Handle_WBS_Change", _
-                            "Format invalide détecté dans WBS pendant l'exécution d'un macro." & vbCrLf & _
-                            "-> format attendu : 1 | 1.2 | 1.2.3", _
-                            "Invalid WBS format detected during macro execution." & vbCrLf & _
-                            "-> expected format: 1 | 1.2 | 1.2.3"
+                            "WBS.EVENTS.MACRO.WBS_FORMAT"
                         Exit Sub
                     End If
 
@@ -193,10 +183,7 @@ ContinueValidation:
             Application.Undo
 
                     WBS_ShowConsoleMessage vbExclamation, _
-                        "Format invalide dans WBS." & vbCrLf & _
-                        "-> format attendu : 1 | 1.2 | 1.2.3", _
-                        "Invalid format in WBS." & vbCrLf & _
-                        "-> expected format: 1 | 1.2 | 1.2.3"
+                        "WBS.EVENTS.WBS_FORMAT"
                     GoTo SafeExit
                 End If
             End If
@@ -220,10 +207,9 @@ ContinueValidation:
                 If cellValue = "" Or Not IsValidPredecessorsWBSInput(cellValue) Then
 
                     If IsMacroRunActive() Then
-                        RequestMacroAbort _
+                        RequestMacroAbortKey _
                             "Handle_WBS_Change", _
-                            WBS_BuildPredecessorsFormatMessageFR(), _
-                            WBS_BuildPredecessorsFormatMessageEN()
+                            "WBS.EVENTS.PREDECESSORS_FORMAT"
                         Exit Sub
                     End If
 
@@ -231,8 +217,7 @@ ContinueValidation:
                     Application.Undo
 
                     WBS_ShowConsoleMessage vbExclamation, _
-                        WBS_BuildPredecessorsFormatMessageFR(), _
-                        WBS_BuildPredecessorsFormatMessageEN()
+                        "WBS.EVENTS.PREDECESSORS_FORMAT"
                     GoTo SafeExit
                 End If
             End If
@@ -243,12 +228,9 @@ ContinueValidation:
                 If Not IsValidTaskTypeInput(cellValue) Then
 
                     If IsMacroRunActive() Then
-                        RequestMacroAbort _
+                        RequestMacroAbortKey _
                             "Handle_WBS_Change", _
-                            "Task Type invalide détecté pendant l'exécution d'un macro." & vbCrLf & _
-                            "-> valeurs autorisées : Task | Milestone | Level of Effort", _
-                            "Invalid Task Type detected during macro execution." & vbCrLf & _
-                            "-> allowed values: Task | Milestone | Level of Effort"
+                            "WBS.EVENTS.MACRO.TASK_TYPE"
                         Exit Sub
                     End If
 
@@ -256,10 +238,7 @@ ContinueValidation:
             Application.Undo
 
                     WBS_ShowConsoleMessage vbExclamation, _
-                        "Task Type invalide." & vbCrLf & _
-                        "-> valeurs autorisées : Task | Milestone | Level of Effort", _
-                        "Invalid Task Type." & vbCrLf & _
-                        "-> allowed values: Task | Milestone | Level of Effort"
+                        "WBS.EVENTS.TASK_TYPE"
                     GoTo SafeExit
                 End If
             End If
@@ -271,12 +250,9 @@ ContinueValidation:
                     If Not IsValidSummaryDisplayInput(cellValue) Then
 
                         If IsMacroRunActive() Then
-                            RequestMacroAbort _
+                            RequestMacroAbortKey _
                                 "Handle_WBS_Change", _
-                                "Valeur S invalide detectee pendant l'execution d'un macro." & vbCrLf & _
-                                "-> valeurs autorisees : vide | Y | N", _
-                                "Invalid S detected during macro execution." & vbCrLf & _
-                                "-> allowed values: blank | Y | N"
+                                "WBS.EVENTS.MACRO.SUMMARY_DISPLAY"
                             Exit Sub
                         End If
 
@@ -284,10 +260,7 @@ ContinueValidation:
                         Application.Undo
 
                         WBS_ShowConsoleMessage vbExclamation, _
-                            "Valeur invalide dans S." & vbCrLf & _
-                            "-> valeurs autorisees : vide | Y | N", _
-                            "Invalid S." & vbCrLf & _
-                            "-> allowed values: blank | Y | N"
+                            "WBS.EVENTS.SUMMARY_DISPLAY"
                         GoTo SafeExit
                     End If
 
@@ -309,23 +282,17 @@ ContinueValidation:
                     If Not IsValidCalendarType(cellValue) Then
 
                         If IsMacroRunActive() Then
-                            RequestMacroAbort _
+                            RequestMacroAbortKey _
                                 "Handle_WBS_Change", _
-                                "Calendrier invalide detecte pendant l'execution d'un macro." & vbCrLf & _
-                                "-> valeurs autorisees : vide | 7j/7 | 6j/7 | 5j/7", _
-                                "Invalid Cal detected during macro execution." & vbCrLf & _
-                                "-> allowed values: blank | 7j/7 | 6j/7 | 5j/7"
+                                "WBS.EVENTS.MACRO.CALENDAR"
                             Exit Sub
                         End If
 
                         Application.EnableEvents = False
                         Application.Undo
 
-                        WBS_ShowConsoleMessage vbExclamation, _
-                            "Calendrier invalide." & vbCrLf & _
-                            "-> valeurs autorisees : vide | 7j/7 | 6j/7 | 5j/7", _
-                            "Invalid Cal." & vbCrLf & _
-                            "-> allowed values: blank | 7j/7 | 6j/7 | 5j/7"
+                    WBS_ShowConsoleMessage vbExclamation, _
+                        "WBS.EVENTS.CALENDAR"
                         GoTo SafeExit
                     End If
                 End If
@@ -336,23 +303,17 @@ ContinueValidation:
                 If Not IsValidDurationInput(cellValue) Then
 
                     If IsMacroRunActive() Then
-                        RequestMacroAbort _
+                        RequestMacroAbortKey _
                             "Handle_WBS_Change", _
-                            "Duree invalide detectee pendant l'execution d'un macro." & vbCrLf & _
-                            "-> saisir une duree numerique strictement positive.", _
-                            "Invalid duration detected during macro execution." & vbCrLf & _
-                            "-> enter a strictly positive numeric duration."
+                            "WBS.EVENTS.MACRO.DURATION"
                         Exit Sub
                     End If
 
                     Application.EnableEvents = False
                     Application.Undo
 
-                    WBS_ShowConsoleMessage vbExclamation, _
-                        "Duree invalide." & vbCrLf & _
-                            "-> saisir une duree numerique strictement positive.", _
-                        "Invalid duration." & vbCrLf & _
-                        "-> enter a strictly positive numeric duration."
+                WBS_ShowConsoleMessage vbExclamation, _
+                    "WBS.EVENTS.DURATION"
                     GoTo SafeExit
                 End If
             End If
@@ -367,20 +328,14 @@ SafeExit:
     If Err.Number <> 0 Then
 
         If IsMacroRunActive() Then
-            RequestMacroAbort _
+            RequestMacroAbortKey _
                 "Handle_WBS_Change", _
-                "Erreur VBA dans Handle_WBS_Change." & vbCrLf & _
-                "-> le macro-run est arrêté pour éviter une cascade d'erreurs.", _
-                "VBA error in Handle_WBS_Change." & vbCrLf & _
-                "-> the macro run was stopped to avoid an error cascade."
+                "WBS.EVENTS.MACRO.HANDLE_ERROR"
             Exit Sub
         End If
 
         WBS_ShowConsoleMessage vbCritical, _
-            "Erreur VBA dans Handle_WBS_Change" & vbCrLf & _
-            "-> vérifier le dernier bloc modifié dans mod_WBSEvents", _
-            "VBA error in Handle_WBS_Change" & vbCrLf & _
-            "-> check the last edited block in mod_WBSEvents"
+            "WBS.EVENTS.HANDLE_ERROR"
     End If
 
 End Sub
@@ -495,7 +450,7 @@ Private Function WBSProjectListColumn(ByVal tbl As ListObject) As ListColumn
         Set WBSProjectListColumn = tbl.ListColumns("Package")
     Else
         Err.Raise vbObjectError + 2340, "WBSProjectListColumn", _
-            "Missing canonical WBS column: Project (legacy alias: Package)."
+            PlanningMessageText_Format("WBS.ERROR.MISSING_PROJECT_COLUMN")
     End If
 
 End Function
@@ -630,54 +585,6 @@ End Function
 ' EN: Builds the WBS Build Predecessors Format Message FR value from data supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Function WBS_BuildPredecessorsFormatMessageFR() As String
-
-    WBS_BuildPredecessorsFormatMessageFR = _
-        "Format invalide dans Predecessors WBS" & vbCrLf & vbCrLf & _
-        "Formats acceptes :" & vbCrLf & vbCrLf & _
-        "* 1" & vbCrLf & _
-        "* 1+3" & vbCrLf & _
-        "* 1-2" & vbCrLf & _
-        "* 1SS" & vbCrLf & _
-        "* 1FF" & vbCrLf & _
-        "* 1SS-2" & vbCrLf & _
-        "* 1FF+4" & vbCrLf & _
-        "* 1;2SS+3;4FF-2" & vbCrLf & vbCrLf & _
-        "Regles :" & vbCrLf & vbCrLf & _
-        "* FS est implicite si aucun type n'est indique" & vbCrLf & _
-        "* le lag 0 est implicite" & vbCrLf & _
-        "* plusieurs liens sont separes par ;" & vbCrLf & _
-        "* les espaces ne sont pas autorises" & vbCrLf & _
-        "* les elements vides ne sont pas autorises"
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Construit la valeur WBS Build Predecessors Format Message EN a partir des donnees fournies par l'appelant.
-' EN: Builds the WBS Build Predecessors Format Message EN value from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function WBS_BuildPredecessorsFormatMessageEN() As String
-
-    WBS_BuildPredecessorsFormatMessageEN = _
-        "Invalid format in Predecessors WBS" & vbCrLf & vbCrLf & _
-        "Accepted formats:" & vbCrLf & vbCrLf & _
-        "* 1" & vbCrLf & _
-        "* 1+3" & vbCrLf & _
-        "* 1-2" & vbCrLf & _
-        "* 1SS" & vbCrLf & _
-        "* 1FF" & vbCrLf & _
-        "* 1SS-2" & vbCrLf & _
-        "* 1FF+4" & vbCrLf & _
-        "* 1;2SS+3;4FF-2" & vbCrLf & vbCrLf & _
-        "Rules:" & vbCrLf & vbCrLf & _
-        "* FS is implicit when no type is provided" & vbCrLf & _
-        "* zero lag is implicit" & vbCrLf & _
-        "* multiple links are separated by ;" & vbCrLf & _
-        "* spaces are not allowed" & vbCrLf & _
-        "* empty tokens are not allowed"
-
-End Function
 '------------------------------------------------------------------------------
 ' FR: Indique si Valid Predecessors WBSInput est vrai pour le contexte courant.
 ' EN: Returns whether Valid Predecessors WBSInput is true for the current context.
@@ -813,8 +720,7 @@ End Function
 
 Private Sub WBS_ShowConsoleMessage( _
     ByVal boxStyle As VbMsgBoxStyle, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String)
 
     Dim consoleMessages As Collection
     Dim msgType As String
@@ -822,11 +728,7 @@ Private Sub WBS_ShowConsoleMessage( _
 
     msgType = WBS_MessageTypeFromMsgBoxStyle(boxStyle)
 
-    msg = _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText
+    msg = PlanningMessageText_Format(messageKey, Nothing, Nothing)
 
     Set consoleMessages = New Collection
     CalcBridge_AddConsoleMessage consoleMessages, msgType, msg

@@ -234,7 +234,8 @@ Public Function ParsePredecessorToken( _
     ByRef linkType As String, _
     ByRef lagVal As Long, _
     ByRef rawToken As String, _
-    ByRef errText As String) As Boolean
+    ByRef errText As String, _
+    Optional ByRef errTextFrench As Variant) As Boolean
 
     Dim t As String
     Dim posType As Long
@@ -250,18 +251,21 @@ Public Function ParsePredecessorToken( _
     lagVal = 0
     rawToken = ""
     errText = ""
+    If Not IsMissing(errTextFrench) Then errTextFrench = ""
 
     t = Trim$(token)
 
     If ContainsForbiddenWhitespace(t) Then
-        errText = "Spaces are not allowed in predecessor tokens."
+        PredecessorParser_SetError errText, errTextFrench, _
+            "DIAG.PARSER.PREDECESSOR.SPACES"
         Exit Function
     End If
 
     t = Replace$(t, ",", ".")
 
     If t = "" Then
-        errText = "Token vide."
+        PredecessorParser_SetError errText, errTextFrench, _
+            "DIAG.PARSER.PREDECESSOR.EMPTY_TOKEN"
         Exit Function
     End If
 
@@ -327,12 +331,15 @@ Public Function ParsePredecessorToken( _
     predWbs = Trim$(predWbs)
 
     If predWbs = "" Then
-        errText = "Prédécesseur WBS vide."
+        PredecessorParser_SetError errText, errTextFrench, _
+            "DIAG.PARSER.PREDECESSOR.EMPTY_WBS"
         Exit Function
     End If
 
     If Not IsValidPureWBS(predWbs) Then
-        errText = "WBS prédécesseur invalide : " & predWbs
+        PredecessorParser_SetError errText, errTextFrench, _
+            "DIAG.PARSER.PREDECESSOR.INVALID_WBS", _
+            TextCatalog_Arguments("Value", predWbs)
         Exit Function
     End If
 
@@ -341,14 +348,18 @@ Public Function ParsePredecessorToken( _
     '----------------------------------------
     If suffix <> "" Then
         If Left$(suffix, 1) <> "+" And Left$(suffix, 1) <> "-" Then
-            errText = "Suffix invalide : " & suffix
+            PredecessorParser_SetError errText, errTextFrench, _
+                "DIAG.PARSER.PREDECESSOR.INVALID_SUFFIX", _
+                TextCatalog_Arguments("Value", suffix)
             Exit Function
         End If
 
         lagText = suffix
 
         If Not IsNumeric(lagText) Then
-            errText = "Lag invalide : " & lagText
+            PredecessorParser_SetError errText, errTextFrench, _
+                "DIAG.PARSER.PREDECESSOR.INVALID_LAG", _
+                TextCatalog_Arguments("Value", lagText)
             Exit Function
         End If
 
@@ -365,6 +376,25 @@ Public Function ParsePredecessorToken( _
     ParsePredecessorToken = True
 
 End Function
+
+Private Sub PredecessorParser_SetError( _
+    ByRef englishText As String, _
+    ByRef frenchText As Variant, _
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Variant)
+
+    Dim args As Object
+
+    If Not IsMissing(namedArguments) Then
+        If IsObject(namedArguments) Then Set args = namedArguments
+    End If
+
+    englishText = TextCatalog_Format(messageKey, TEXT_LANGUAGE_EN, args)
+    If Not IsMissing(frenchText) Then
+        frenchText = TextCatalog_Format(messageKey, TEXT_LANGUAGE_FR, args)
+    End If
+
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Retourne la valeur Contains Forbidden Whitespace sans modifier les donnees d'entree.
@@ -424,7 +454,8 @@ Public Function ParsePredecessorsText( _
     ByVal predText As String, _
     ByVal wbsToId As Object, _
     ByRef linksOut As Collection, _
-    ByRef errText As String) As Boolean
+    ByRef errText As String, _
+    Optional ByRef errTextFrench As Variant) As Boolean
 
     Dim perfScope As clsPerfScope
 
@@ -437,6 +468,10 @@ Public Function ParsePredecessorsText( _
     Dim linkType As String
     Dim lagVal As Long
     Dim rawToken As String
+    Dim detailEnglish As String
+    Dim detailFrench As Variant
+    Dim englishArguments As Object
+    Dim frenchArguments As Object
 
     Dim linkRow As Object
 
@@ -444,6 +479,7 @@ Public Function ParsePredecessorsText( _
 
     Set linksOut = New Collection
     errText = ""
+    If Not IsMissing(errTextFrench) Then errTextFrench = ""
 
     predText = Replace$(Trim$(predText), ",", ".")
 
@@ -459,12 +495,29 @@ Public Function ParsePredecessorsText( _
         tokenText = Trim$(CStr(parts(i)))
 
         If tokenText = "" Then
-            errText = "Empty predecessor token in: " & predText
+            PredecessorParser_SetError errText, errTextFrench, _
+                "DIAG.PARSER.PREDECESSOR.EMPTY_IN_TEXT", _
+                TextCatalog_Arguments("Text", predText)
             Exit Function
         End If
 
-        If Not ParsePredecessorToken(tokenText, predWbs, linkType, lagVal, rawToken, errText) Then
-            errText = "Successor WBS " & succWBS & " -> " & errText
+        detailFrench = Empty
+        If Not ParsePredecessorToken(tokenText, predWbs, linkType, lagVal, rawToken, errText, detailFrench) Then
+            detailEnglish = errText
+            Set englishArguments = TextCatalog_Arguments( _
+                "Successor", succWBS, _
+                "Details", detailEnglish)
+            Set frenchArguments = TextCatalog_Arguments( _
+                "Successor", succWBS, _
+                "Details", CStr(detailFrench))
+            errText = TextCatalog_Format( _
+                "DIAG.PARSER.PREDECESSOR.SUCCESSOR_CONTEXT", _
+                TEXT_LANGUAGE_EN, englishArguments)
+            If Not IsMissing(errTextFrench) Then
+                errTextFrench = TextCatalog_Format( _
+                    "DIAG.PARSER.PREDECESSOR.SUCCESSOR_CONTEXT", _
+                    TEXT_LANGUAGE_FR, frenchArguments)
+            End If
             Exit Function
         End If
 

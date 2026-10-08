@@ -96,6 +96,7 @@ Public Sub WriteCoreOutputsToCalc_Partial( _
             tblCalc.DataBodyRange.Cells(rowIdx, mapCalc("ErrorMsg")).value = _
                 dataArr(rowIdx, mapCalc("ErrorMsg"))
 
+
         End If
 
     Next idVal
@@ -154,12 +155,12 @@ Public Sub Push_Calculated_Back_To_WBS_Partial(ByVal impactedIds As Object)
 
     If Not mapWBS.Exists(VTS_COL_ID) Then
         Err.Raise vbObjectError + 2101, "Push_Calculated_Back_To_WBS_Partial", _
-            "Missing column in tbl_WBS: ID"
+            PlanningMessageText_Format("DIAG.TECH.MISSING_COLUMN", TextCatalog_Arguments("Table", "tbl_WBS", "Column", "ID"), TextCatalog_Arguments("Table", "tbl_WBS", "Column", "ID"))
     End If
 
     If Not mapCalc.Exists("ID") Then
         Err.Raise vbObjectError + 2102, "Push_Calculated_Back_To_WBS_Partial", _
-            "Missing column in tbl_CALC: ID"
+            PlanningMessageText_Format("DIAG.TECH.MISSING_COLUMN", TextCatalog_Arguments("Table", "tbl_CALC", "Column", "ID"), TextCatalog_Arguments("Table", "tbl_CALC", "Column", "ID"))
     End If
 
     allowedFields = Array( _
@@ -182,12 +183,16 @@ Public Sub Push_Calculated_Back_To_WBS_Partial(ByVal impactedIds As Object)
 
         If Not mapWBS.Exists(fieldKey) Then
             Err.Raise vbObjectError + 2110 + i, "Push_Calculated_Back_To_WBS_Partial", _
-                "Missing output column in tbl_WBS: " & fieldKey
+                PlanningMessageText_Format("DIAG.TECH.MISSING_OUTPUT_COLUMN", _
+                    TextCatalog_Arguments("Table", "tbl_WBS", "Column", fieldKey), _
+                    TextCatalog_Arguments("Table", "tbl_WBS", "Column", fieldKey))
         End If
 
         If Not mapCalc.Exists(calcFieldName) Then
             Err.Raise vbObjectError + 2120 + i, "Push_Calculated_Back_To_WBS_Partial", _
-                "Missing output column in tbl_CALC: " & calcFieldName
+                PlanningMessageText_Format("DIAG.TECH.MISSING_OUTPUT_COLUMN", _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", calcFieldName), _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", calcFieldName))
         End If
 
     Next i
@@ -242,10 +247,8 @@ SafeExit:
     On Error GoTo 0
 
     If errorNumber <> 0 Then
-        CalcBridge_ShowSingleConsoleMessage _
-            "STOP", _
-            "Erreur dans Push_Calculated_Back_To_WBS_Partial : " & errorDescription, _
-            "Error in Push_Calculated_Back_To_WBS_Partial: " & errorDescription
+        CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+            TextCatalog_Arguments("Procedure", "Push_Calculated_Back_To_WBS_Partial", "Details", errorDescription)
     End If
 
 End Sub
@@ -316,6 +319,7 @@ Public Sub Push_Calculated_Back_To_WBS()
     Dim authorizedFields As Variant
     Dim writeScopeToken As Long
     Dim outCols As Object
+    Dim outputRange As Range, formulaState As Variant, columnCurrent As Boolean
 
     Dim arrWBS As Variant
     Dim arrCalc As Variant
@@ -392,15 +396,13 @@ Public Sub Push_Calculated_Back_To_WBS()
 
     If Not mapWBS.Exists(VTS_COL_ID) Then
         CoreBridgeOutputWriter_AddConsoleMessage consoleMessages, "STOP", _
-            "La colonne ID est introuvable dans tbl_WBS.", _
-            "Column ID was not found in tbl_WBS."
+            "DIAG.OUTPUT.WBS_ID_MISSING"
         GoTo SafeExit
     End If
 
     If Not mapCalc.Exists("ID") Then
         CoreBridgeOutputWriter_AddConsoleMessage consoleMessages, "STOP", _
-            "La colonne ID est introuvable dans tbl_CALC.", _
-            "Column ID was not found in tbl_CALC."
+            "DIAG.OUTPUT.CALC_ID_MISSING"
         GoTo SafeExit
     End If
 
@@ -411,15 +413,15 @@ Public Sub Push_Calculated_Back_To_WBS()
 
         If Not mapWBS.Exists(fieldKey) Then
             CoreBridgeOutputWriter_AddConsoleMessage consoleMessages, "STOP", _
-                "Colonne de sortie introuvable dans tbl_WBS : " & fieldKey, _
-                "Output column not found in tbl_WBS: " & fieldKey
+                "DIAG.OUTPUT.WBS_COLUMN_MISSING", _
+                TextCatalog_Arguments("Column", fieldKey)
             GoTo SafeExit
         End If
 
         If Not mapCalc.Exists(calcFieldName) Then
             CoreBridgeOutputWriter_AddConsoleMessage consoleMessages, "STOP", _
-                "Colonne de sortie introuvable dans tbl_CALC : " & calcFieldName, _
-                "Output column not found in tbl_CALC: " & calcFieldName
+                "DIAG.OUTPUT.CALC_COLUMN_MISSING", _
+                TextCatalog_Arguments("Column", calcFieldName)
             GoTo SafeExit
         End If
 
@@ -472,7 +474,27 @@ Public Sub Push_Calculated_Back_To_WBS()
 
     For i = LBound(allowedFields) To UBound(allowedFields)
         fieldKey = CStr(allowedFields(i))
-        SchemaListColumn(tblWBS, VTS_TABLE_WBS, fieldKey).DataBodyRange.value = outCols(fieldKey)
+        Set outputRange = SchemaListColumn(tblWBS, VTS_TABLE_WBS, fieldKey).DataBodyRange
+        formulaState = outputRange.HasFormula
+        columnCurrent = False
+        outArr = outCols(fieldKey)
+        If Not IsNull(formulaState) Then
+            If Not CBool(formulaState) Then
+                columnCurrent = True
+                For r = 1 To wbsRows
+                    If Not DataSync_ValuesEqual(arrWBS(r, mapWBS(fieldKey)), outArr(r, 1)) Then
+                        columnCurrent = False
+                        Exit For
+                    End If
+                Next r
+            End If
+        End If
+        If columnCurrent Then
+            Profiler_RecordCounter "WBSOutputColumnsSkipped", 1
+        Else
+            outputRange.value = outArr
+            Profiler_RecordCounter "WBSOutputColumnsWritten", 1
+        End If
     Next i
 
     RestoreWBSFormulaColumns tblWBS
@@ -487,8 +509,8 @@ SafeExit:
     If errorNumber <> 0 Then
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
         CoreBridgeOutputWriter_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur dans Push_Calculated_Back_To_WBS : " & errorDescription, _
-            "Error in Push_Calculated_Back_To_WBS: " & errorDescription
+            "DIAG.OUTPUT.PUSH_ERROR", _
+            TextCatalog_Arguments("Details", errorDescription)
     End If
 
     If Not consoleMessages Is Nothing Then
@@ -504,12 +526,12 @@ End Sub
 Private Sub CoreBridgeOutputWriter_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
 End Sub

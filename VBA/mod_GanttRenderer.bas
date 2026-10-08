@@ -760,19 +760,11 @@ Public Function GanttHierarchy_BuildLeafCompletionByAncestorForRows( _
             If i >= 1 And i <= rowCount Then
                 wbsVal = NormalizeWBS(CStr(dataArr(i, mapWBS(VTS_COL_WBS))))
                 If wbsVal <> "" Then
-                    If HasValue(dataArr(i, mapWBS(VTS_COL_PROGRESS_PERCENT))) Then
-                        parentMap(wbsVal) = (CDbl(dataArr(i, mapWBS(VTS_COL_PROGRESS_PERCENT))) >= 1)
-                    Else
-                        parentMap(wbsVal) = False
-                    End If
                     targetParents(wbsVal) = True
                 End If
             End If
         Next key
         Profiler_RecordOperation "GanttHierarchyTargetParents", targetParents.Count, 0#
-        Profiler_RecordOperation "GanttHierarchyLeafCompletionRows", affectedRows.Count, 0#
-        Set GanttHierarchy_BuildLeafCompletionByAncestorForRows = parentMap
-        Exit Function
     End If
 
     For i = 1 To rowCount
@@ -792,8 +784,10 @@ Public Function GanttHierarchy_BuildLeafCompletionByAncestorForRows( _
 
         parentWbs = GetParentWBS(wbsVal)
         Do While parentWbs <> ""
-            If Not parentMap.Exists(parentWbs) Then parentMap(parentWbs) = True
-            If progressVal < 1 Then parentMap(parentWbs) = False
+            If Not useTargets Or targetParents.Exists(parentWbs) Then
+                If Not parentMap.Exists(parentWbs) Then parentMap(parentWbs) = True
+                If progressVal < 1 Then parentMap(parentWbs) = False
+            End If
             parentWbs = GetParentWBS(parentWbs)
         Loop
 

@@ -44,8 +44,9 @@ Public Function NormalizeCalendarType(ByVal rawValue As Variant) As String
             NormalizeCalendarType = CALENDAR_5D
 
         Case Else
-            Err.Raise vbObjectError + 7601, "NormalizeCalendarType", _
-                "Invalid calendar type: " & CStr(rawValue)
+    Err.Raise vbObjectError + 7601, "NormalizeCalendarType", _
+        PlanningMessageText_Format("DIAG.TECH.INVALID_CALENDAR_TYPE", _
+            TextCatalog_Arguments("Value", CStr(rawValue)), TextCatalog_Arguments("Value", CStr(rawValue)))
     End Select
 
 End Function
@@ -296,8 +297,9 @@ Public Function DateDiffWorkingDays( _
         Case CALENDAR_5D
             DateDiffWorkingDays = CountWorkingDaysFast(startSerial, finishSerial, 5)
         Case Else
-            Err.Raise vbObjectError + 7603, "DateDiffWorkingDays", _
-                "Unsupported calendar type: " & calType
+        Err.Raise vbObjectError + 7603, "DateDiffWorkingDays", _
+            PlanningMessageText_Format("DIAG.TECH.UNSUPPORTED_CALENDAR_TYPE", _
+                TextCatalog_Arguments("Value", calType), TextCatalog_Arguments("Value", calType))
     End Select
 
 End Function
@@ -343,7 +345,8 @@ Public Function ApplyLag( _
             anchorDate = NormalizeToWorkingDayForward(baseDate, calType)
         Case Else
             Err.Raise vbObjectError + 7602, "ApplyLag", _
-                "Unsupported link type for calendar lag: " & linkType
+                TextCatalog_Format("CORE.ERROR.UNSUPPORTED_CALENDAR_LAG_TYPE", TEXT_LANGUAGE_EN, _
+                    TextCatalog_Arguments("LinkType", linkType))
     End Select
 
     ApplyLag = ShiftWorkingDays(anchorDate, lagVal, calType)

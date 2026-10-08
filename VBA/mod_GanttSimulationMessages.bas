@@ -26,10 +26,7 @@ Option Explicit
 Public Sub ShowGanttLiveGroupedMessage( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
+    ByVal messageKey As String, _
     ByVal boxStyle As VbMsgBoxStyle, _
     Optional ByVal consoleMessages As Variant)
 
@@ -43,47 +40,15 @@ Public Sub ShowGanttLiveGroupedMessage( _
 
     If GanttLive_HasConsoleCollection(consoleMessages) Then
         CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-            BuildGanttLiveGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction)
+            CalcBridge_BuildGroupedMessage(idsDict, idToWbs, messageKey)
     Else
         Set localMessages = New Collection
         CalcBridge_AddConsoleMessage localMessages, msgType, _
-            BuildGanttLiveGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction)
+            CalcBridge_BuildGroupedMessage(idsDict, idToWbs, messageKey)
         CalcBridge_ShowPlanningConsole localMessages
     End If
 
 End Sub
-
-'------------------------------------------------------------------------------
-' FR: Construit le texte bilingue d'un message groupe avec IDs et WBS limites.
-' EN: Builds bilingual grouped-message text with capped ID and WBS lists.
-'------------------------------------------------------------------------------
-Private Function BuildGanttLiveGroupedMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String) As String
-
-    Dim idsLine As String
-    Dim wbsLine As String
-
-    idsLine = BuildInlineList_GanttLive(idsDict, 20)
-    wbsLine = BuildInlineWBSList_GanttLive(idsDict, idToWbs, 20)
-
-    BuildGanttLiveGroupedMessage = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Formate une liste compacte d'IDs avec limite d'affichage.
@@ -160,34 +125,14 @@ End Function
 
 
 '------------------------------------------------------------------------------
-' FR: Identifie les erreurs Core de cascade heritees afin de garder seulement les causes racines.
-' EN: Identifies inherited Core cascade errors so only root causes are kept.
-'------------------------------------------------------------------------------
-Public Function GanttLive_IsInheritedCoreError(ByVal errMsg As String) As Boolean
-
-    Dim txt As String
-
-    txt = Trim$(CStr(errMsg))
-
-    GanttLive_IsInheritedCoreError = _
-        (InStr(1, txt, "Blocked by predecessor error", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Blocked by predecessor chain", vbTextCompare) > 0)
-
-End Function
-
-'------------------------------------------------------------------------------
 ' FR: Retire des causes racines les erreurs LOE qui ne font que refleter un predecesseur deja en erreur.
 ' EN: Removes LOE errors from root causes when they only reflect an already failing predecessor.
 '------------------------------------------------------------------------------
 Public Sub GanttLive_RemoveDerivedLOERootErrors( _
-    ByRef dataCore As Variant, _
-    ByVal mapCore As Object, _
+    ByVal coreDiagnostics As Object, _
     ByVal errorIds As Object, _
     ByVal rootErrorIds As Object)
 
-    Dim r As Long
-    Dim idVal As String
-    Dim errMsg As String
     Dim removeIds As Object
     Dim oneId As Variant
 
@@ -197,169 +142,17 @@ Public Sub GanttLive_RemoveDerivedLOERootErrors( _
 
     Set removeIds = CreateObject("Scripting.Dictionary")
 
-    For r = 1 To UBound(dataCore, 1)
-        idVal = Trim$(CStr(dataCore(r, mapCore("ID"))))
-        If idVal <> "" Then
-            If rootErrorIds.Exists(idVal) Then
-                errMsg = Trim$(CStr(dataCore(r, mapCore("ErrorMsg"))))
-                If GanttLive_IsDerivedLOEPredecessorError(errMsg, errorIds) Then removeIds(idVal) = True
-            End If
+    For Each oneId In rootErrorIds.Keys
+        If Not CoreDiagnostics_TaskHasClassification(coreDiagnostics, CStr(oneId), "ROOT") Then
+            removeIds(CStr(oneId)) = True
         End If
-    Next r
+    Next oneId
 
     For Each oneId In removeIds.Keys
         If rootErrorIds.Exists(CStr(oneId)) Then rootErrorIds.Remove CStr(oneId)
     Next oneId
 
 End Sub
-
-'------------------------------------------------------------------------------
-' FR: Verifie si une erreur LOE pointe vers un predecesseur deja present dans les erreurs Core.
-' EN: Checks whether an LOE error points to a predecessor already present in Core errors.
-'------------------------------------------------------------------------------
-Private Function GanttLive_IsDerivedLOEPredecessorError(ByVal errMsg As String, ByVal errorIds As Object) As Boolean
-
-    Dim predId As String
-
-    predId = GanttLive_ExtractLOEBlockedPredecessorId(errMsg)
-    If predId = "" Then Exit Function
-
-    GanttLive_IsDerivedLOEPredecessorError = errorIds.Exists(predId)
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Extrait l'ID predecesseur depuis un message Core de blocage LOE.
-' EN: Extracts the predecessor ID from a Core LOE blocking message.
-'------------------------------------------------------------------------------
-Private Function GanttLive_ExtractLOEBlockedPredecessorId(ByVal errMsg As String) As String
-
-    Dim txt As String
-    Dim marker As String
-    Dim pos As Long
-    Dim tail As String
-    Dim i As Long
-    Dim ch As String
-    Dim result As String
-
-    txt = Trim$(CStr(errMsg))
-    If InStr(1, txt, "LOE blocked by SS predecessor error: ID", vbTextCompare) = 0 And _
-       InStr(1, txt, "LOE blocked by FF predecessor error: ID", vbTextCompare) = 0 Then Exit Function
-
-    marker = "error: ID"
-    pos = InStr(1, txt, marker, vbTextCompare)
-    If pos = 0 Then Exit Function
-
-    tail = Trim$(Mid$(txt, pos + Len(marker)))
-    For i = 1 To Len(tail)
-        ch = Mid$(tail, i, 1)
-        If ch >= "0" And ch <= "9" Then
-            result = result & ch
-        ElseIf result <> "" Then
-            Exit For
-        End If
-    Next i
-
-    GanttLive_ExtractLOEBlockedPredecessorId = result
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Publie un message bilingue listant les taches amont/aval en violation.
-' EN: Publishes a bilingual message listing upstream/downstream violation tasks.
-'------------------------------------------------------------------------------
-Private Sub ShowGanttLiveUpstreamViolationMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
-    ByVal boxStyle As VbMsgBoxStyle, _
-    Optional ByVal consoleMessages As Variant)
-
-    Dim itemsLine As String
-    Dim msg As String
-    Dim msgType As String
-    Dim localMessages As Collection
-
-    If idsDict Is Nothing Then Exit Sub
-    If idsDict.Count = 0 Then Exit Sub
-
-    itemsLine = BuildGanttLiveUpstreamViolationItems(idsDict, idToWbs, 20)
-    msgType = GanttLive_MessageTypeFromMsgBoxStyle(boxStyle)
-
-    msg = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "Tâches : " & itemsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "Tasks: " & itemsLine
-
-    If GanttLive_HasConsoleCollection(consoleMessages) Then
-        CalcBridge_AddConsoleMessage consoleMessages, msgType, msg
-    Else
-        Set localMessages = New Collection
-        CalcBridge_AddConsoleMessage localMessages, msgType, msg
-        CalcBridge_ShowPlanningConsole localMessages
-    End If
-
-End Sub
-
-'------------------------------------------------------------------------------
-' FR: Formate une liste compacte ID/WBS pour les messages de violation live.
-' EN: Formats a compact ID/WBS list for live violation messages.
-'------------------------------------------------------------------------------
-Private Function BuildGanttLiveUpstreamViolationItems( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal maxItems As Long) As String
-
-    Dim result As String
-    Dim key As Variant
-    Dim countShown As Long
-    Dim totalCount As Long
-    Dim wbsVal As String
-
-    result = ""
-    countShown = 0
-    totalCount = idsDict.Count
-
-    For Each key In idsDict.Keys
-
-        countShown = countShown + 1
-
-        If countShown <= maxItems Then
-
-            If Not idToWbs Is Nothing Then
-                If idToWbs.Exists(CStr(key)) Then
-                    wbsVal = NormalizeWBS(CStr(idToWbs(CStr(key))))
-                Else
-                    wbsVal = "-"
-                End If
-            Else
-                wbsVal = "-"
-            End If
-
-            If result <> "" Then result = result & " / "
-            result = result & CStr(key) & " (" & wbsVal & ")"
-
-        Else
-            Exit For
-        End If
-
-    Next key
-
-    If totalCount > maxItems Then
-        result = result & " / +" & CStr(totalCount - maxItems)
-    End If
-
-    BuildGanttLiveUpstreamViolationItems = result
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Detecte les erreurs presentes dans tbl_CALC_GANTT_TEST avant un lock.
@@ -462,10 +255,8 @@ Public Sub GanttLive_AddVbaOrStructuredError( _
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", Trim$(CStr(errDescription))
     Else
         GanttLive_AddBiConsoleMessage consoleMessages, "STOP", _
-            "Erreur VBA dans " & functionName & vbCrLf & _
-            "-> " & errDescription, _
-            "VBA error in " & functionName & vbCrLf & _
-            "-> " & errDescription
+            "GANTT.SIMULATION.VBA_ERROR", _
+            TextCatalog_Arguments("Function", functionName, "Details", errDescription)
     End If
 
 End Sub
@@ -477,20 +268,15 @@ End Sub
 Public Sub GanttLive_AddBiConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     Dim msg As String
 
     If consoleMessages Is Nothing Then Exit Sub
 
-    msg = _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText
+    msg = PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, msg
 
 End Sub
-

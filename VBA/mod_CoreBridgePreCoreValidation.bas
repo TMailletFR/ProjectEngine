@@ -111,20 +111,16 @@ Public Function CalcBridge_PreCore_CheckMissingPredecessors( _
 
     If errMissingPred.Count > 0 Then
 
-        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, errMissingPred, "Missing predecessor"
+        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, errMissingPred, _
+            TextCatalog_Get("CORE.ERROR.MISSING_PREDECESSOR", TEXT_LANGUAGE_EN), _
+            "CORE.ERROR.MISSING_PREDECESSOR"
 
         If consoleMessages Is Nothing Then
             CalcBridge_ShowGroupedErrorMessage errMissingPred, idToWbs, _
-                "Prédécesseur introuvable dans tbl_LOGIC_LINKS", _
-                "vérifier la table des liens logiques", _
-                "Missing predecessor in tbl_LOGIC_LINKS", _
-                "check the logical links table"
+                "DIAG.GROUP.DEPENDENCY.MISSING_LINK_PREDECESSOR"
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errMissingPred, idToWbs, _
-                "Prédécesseur introuvable dans tbl_LOGIC_LINKS", _
-                "vérifier la table des liens logiques", _
-                "Missing predecessor in tbl_LOGIC_LINKS", _
-                "check the logical links table"
+                "DIAG.GROUP.DEPENDENCY.MISSING_LINK_PREDECESSOR"
         End If
 
         CalcBridge_PreCore_CheckMissingPredecessors = True
@@ -133,11 +129,7 @@ Public Function CalcBridge_PreCore_CheckMissingPredecessors( _
     Exit Function
 
 FailSafe:
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur pendant le contrôle des prédécesseurs." & vbCrLf & _
-        "-> calcul arrêté avant écriture WBS.", _
-        "Error while checking predecessors." & vbCrLf & _
-        "-> calculation stopped before WBS write."
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.PRECHECK.PREDECESSORS_FAILED"
 
     CalcBridge_PreCore_CheckMissingPredecessors = True
 
@@ -168,20 +160,16 @@ Public Function CalcBridge_PreCore_CheckCycles( _
 
         Set idToWbs = CalcBridge_PreCore_BuildIdToWbsFromCalc(tblCalc, mapCalc)
 
-        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, cycleIds, "Cycle detected"
+        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, cycleIds, _
+            TextCatalog_Get("DIAG.CALC_ENGINE.CYCLE_MARKER", TEXT_LANGUAGE_EN), _
+            "DIAG.CALC_ENGINE.CYCLE_MARKER"
 
         If consoleMessages Is Nothing Then
             CalcBridge_ShowGroupedErrorMessage cycleIds, idToWbs, _
-                "Boucle de dépendance détectée", _
-                "corriger la colonne Predecessors WBS", _
-                "Dependency cycle detected", _
-                "fix the Predecessors WBS column"
+                "DIAG.GROUP.DEPENDENCY.CYCLE"
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, cycleIds, idToWbs, _
-                "Boucle de dépendance détectée", _
-                "corriger la colonne Predecessors WBS", _
-                "Dependency cycle detected", _
-                "fix the Predecessors WBS column"
+                "DIAG.GROUP.DEPENDENCY.CYCLE"
         End If
 
         CalcBridge_PreCore_CheckCycles = True
@@ -190,11 +178,7 @@ Public Function CalcBridge_PreCore_CheckCycles( _
     Exit Function
 
 FailSafe:
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur pendant le contrôle des cycles." & vbCrLf & _
-        "-> calcul arrêté avant écriture WBS.", _
-        "Error while checking dependency cycles." & vbCrLf & _
-        "-> calculation stopped before WBS write."
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.PRECHECK.CYCLES_FAILED"
 
     CalcBridge_PreCore_CheckCycles = True
 
@@ -425,7 +409,8 @@ Private Sub CalcBridge_PreCore_MarkErrorIdsInCalc( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByVal errorIds As Object, _
-    ByVal errMsg As String)
+    ByVal errMsg As String, _
+    ByVal diagnosticCode As String)
 
     Dim arr As Variant
     Dim r As Long
@@ -548,7 +533,9 @@ Public Function CalcBridge_PreCore_CheckLOEAsPredecessor( _
 
     If errIds.Count > 0 Then
 
-        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, errIds, "LOE cannot be used as predecessor"
+        CalcBridge_PreCore_MarkErrorIdsInCalc tblCalc, mapCalc, errIds, _
+            TextCatalog_Get("CORE.ERROR.LOE_AS_PREDECESSOR", TEXT_LANGUAGE_EN), _
+            "CORE.ERROR.LOE_AS_PREDECESSOR"
 
         If consoleMessages Is Nothing Then
             Set localMessages = New Collection
@@ -575,11 +562,7 @@ Public Function CalcBridge_PreCore_CheckLOEAsPredecessor( _
     Exit Function
 
 FailSafe:
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur pendant le controle des LOE utilisees comme predecesseur." & vbCrLf & _
-        "-> calcul arrete avant ecriture WBS.", _
-        "Error while checking LOE used as predecessor." & vbCrLf & _
-        "-> calculation stopped before WBS write."
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.PRECHECK.LOE_FAILED"
 
     CalcBridge_PreCore_CheckLOEAsPredecessor = True
 

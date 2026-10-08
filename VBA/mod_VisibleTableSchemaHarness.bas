@@ -1,6 +1,51 @@
 Attribute VB_Name = "mod_VisibleTableSchemaHarness"
 Option Explicit
 
+Public Function VisibleTableSchemaHarness_ValidateCatalogAuthority() As String
+
+    Dim definitions As Variant
+    Dim definition As Variant
+    Dim checkedCount As Long
+
+    On Error GoTo Failed
+
+    definitions = VisibleTableSchema_TextCatalogDefinitions()
+    For Each definition In definitions
+        If StrComp( _
+                CStr(definition(1)), _
+                TextCatalog_Get(CStr(definition(0)), TEXT_LANGUAGE_EN), _
+                vbBinaryCompare) <> 0 Then
+            Err.Raise vbObjectError + 5584, _
+                "VisibleTableSchemaHarness_ValidateCatalogAuthority", _
+                "English visible-header mismatch for " & CStr(definition(0)) & "."
+        End If
+        If StrComp( _
+                CStr(definition(2)), _
+                TextCatalog_Get(CStr(definition(0)), TEXT_LANGUAGE_FR), _
+                vbBinaryCompare) <> 0 Then
+            Err.Raise vbObjectError + 5585, _
+                "VisibleTableSchemaHarness_ValidateCatalogAuthority", _
+                "French visible-header mismatch for " & CStr(definition(0)) & "."
+        End If
+        checkedCount = checkedCount + 1
+    Next definition
+
+    If checkedCount <> 81 Then
+        Err.Raise vbObjectError + 5586, _
+            "VisibleTableSchemaHarness_ValidateCatalogAuthority", _
+            "Expected 81 visible headers; found " & CStr(checkedCount) & "."
+    End If
+
+    VisibleTableSchemaHarness_ValidateCatalogAuthority = _
+        "PASS|headers=" & CStr(checkedCount)
+    Exit Function
+
+Failed:
+    VisibleTableSchemaHarness_ValidateCatalogAuthority = _
+        "ERROR|" & CStr(Err.Number) & "|" & Err.Source & "|" & Err.Description
+
+End Function
+
 ' Test-only proof harness. It is invoked explicitly on isolated workbook copies.
 
 Public Function VisibleTableSchemaHarness_Run() As String

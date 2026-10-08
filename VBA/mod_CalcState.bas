@@ -70,8 +70,8 @@ SafeExit:
 
     If Err.Number <> 0 Then
         CalcState_AddStopToConsole consoleMessages, _
-            "Erreur dans Ensure_CalcState_Table : " & Err.Description, _
-            "Error in Ensure_CalcState_Table: " & Err.Description
+            "DIAG.CALC_STATE.ENSURE_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description)
     End If
 
 End Sub
@@ -185,8 +185,8 @@ SafeExit:
 
     If Err.Number <> 0 Then
         CalcState_AddStopToConsole consoleMessages, _
-            "Erreur dans Write_CalcState_Snapshot : " & Err.Description, _
-            "Error in Write_CalcState_Snapshot: " & Err.Description
+            "DIAG.CALC_STATE.WRITE_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description)
     End If
 
 End Sub
@@ -199,13 +199,13 @@ End Sub
 
 Private Sub CalcState_AddStopToConsole( _
     ByVal consoleMessages As Collection, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg(frText, enText)
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
 End Sub
 
@@ -375,7 +375,9 @@ Private Sub ValidateCalcStateSourceColumns(ByVal mapCalc As Object)
         If Not mapCalc.Exists(CStr(c)) Then
             Err.Raise vbObjectError + 9101, _
                 "ValidateCalcStateSourceColumns", _
-                "Missing source column in tbl_CALC: " & CStr(c)
+                PlanningMessageText_Format("DIAG.TECH.MISSING_SOURCE_COLUMN", _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)), _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)))
         End If
     Next c
 
@@ -416,7 +418,9 @@ Private Sub ValidateCalcStateTargetColumns(ByVal mapState As Object)
         If Not mapState.Exists(CStr(c)) Then
             Err.Raise vbObjectError + 9102, _
                 "ValidateCalcStateTargetColumns", _
-                "Missing target column in " & CALC_STATE_TABLE_NAME & ": " & CStr(c)
+                PlanningMessageText_Format("DIAG.TECH.MISSING_TARGET_COLUMN", _
+                    TextCatalog_Arguments("Table", CALC_STATE_TABLE_NAME, "Column", CStr(c)), _
+                    TextCatalog_Arguments("Table", CALC_STATE_TABLE_NAME, "Column", CStr(c)))
         End If
     Next c
 
@@ -581,8 +585,10 @@ Public Function CalcState_GetSignatureByIdMap() As Object
     If tbl.DataBodyRange Is Nothing Then GoTo SafeExit
 
     Set mapState = BuildColumnMap_CalcState(tbl)
-    If Not mapState.Exists("ID") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", "Missing required column in tbl_CALC_STATE: ID"
-    If Not mapState.Exists("Row Signature") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", "Missing required column in tbl_CALC_STATE: Row Signature"
+    If Not mapState.Exists("ID") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", _
+        PlanningMessageText_Format("DIAG.TECH.MISSING_REQUIRED_COLUMN", TextCatalog_Arguments("Table", "tbl_CALC_STATE", "Column", "ID"), TextCatalog_Arguments("Table", "tbl_CALC_STATE", "Column", "ID"))
+    If Not mapState.Exists("Row Signature") Then Err.Raise vbObjectError + 9202, "CalcState_GetSignatureByIdMap", _
+        PlanningMessageText_Format("DIAG.TECH.MISSING_REQUIRED_COLUMN", TextCatalog_Arguments("Table", "tbl_CALC_STATE", "Column", "Row Signature"), TextCatalog_Arguments("Table", "tbl_CALC_STATE", "Column", "Row Signature"))
     arrState = tbl.DataBodyRange.value
 
     For r = 1 To UBound(arrState, 1)

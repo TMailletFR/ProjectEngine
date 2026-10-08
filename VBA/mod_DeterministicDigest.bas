@@ -113,7 +113,7 @@ Public Function DeterministicDigest_SHA256Hex(ByVal textValue As String) As Stri
 
     If hashObjectLength <= 0 Or hashLength <> 32 Then
         Err.Raise vbObjectError + 2711, "DeterministicDigest_SHA256Hex", _
-            "Windows CNG returned an invalid SHA-256 contract."
+            PlanningMessageText_Format("DIAG.TECH.INVALID_DIGEST_CONTRACT")
     End If
 
     ReDim hashObject(0 To hashObjectLength - 1)
@@ -158,8 +158,10 @@ Private Sub DeterministicDigest_RequireSuccess( _
     ByVal operationName As String)
 
     If status <> 0 Then
-        Err.Raise vbObjectError + 2712, "DeterministicDigest_SHA256Hex", _
-            operationName & " failed with NTSTATUS " & CStr(status) & "."
+    Err.Raise vbObjectError + 2712, "DeterministicDigest_SHA256Hex", _
+        PlanningMessageText_Format("DIAG.TECH.NATIVE_OPERATION_FAILED", _
+            TextCatalog_Arguments("Operation", operationName, "Status", CStr(status)), _
+            TextCatalog_Arguments("Operation", operationName, "Status", CStr(status)))
     End If
 
 End Sub

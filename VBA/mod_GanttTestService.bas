@@ -115,14 +115,13 @@ Public Sub GanttTestService_RunTestEngine( _
     If Not GanttLive_HasAnyGanttTestInputFast(wsGantt) Then
         If GanttLive_HasActiveSimulationRuntimeState() Then GanttSimulation_ResetToNormal True
         If Not CommitGanttUpdate(GANTT_DATA_SOURCE_NORMAL, GANTT_UPDATE_SCOPE_PARTIAL, GANTT_RENDER_INTENT_SHOW, "Run_Gantt_Test_EngineEmpty") Then
-            Err.Raise 5, "Run_Gantt_Test_Engine", "Gantt TEST empty convergence did not reach READY state."
+            Err.Raise 5, "Run_Gantt_Test_Engine", PlanningMessageText_Format("GANTT.ERROR.TEST_EMPTY_NOT_READY")
         End If
         ganttRebuilt = True
         testSucceeded = True
 
         GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-            "Aucune saisie TEST détectée. L'affichage normal est déjà restauré.", _
-            "No TEST input detected. The normal display is already restored."
+            "GANTT.TEST.NO_INPUT_NORMAL"
 
         If silentMode Then
             If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
@@ -269,14 +268,13 @@ Public Sub GanttTestService_RunTestEngine( _
     If Not hasAnyTestInput Then
         GanttSimulation_ResetToNormal True
         If Not CommitGanttUpdate(GANTT_DATA_SOURCE_NORMAL, GANTT_UPDATE_SCOPE_PARTIAL, GANTT_RENDER_INTENT_SHOW, "Run_Gantt_Test_EngineNoInput") Then
-            Err.Raise 5, "Run_Gantt_Test_Engine", "Gantt TEST no-input convergence did not reach READY state."
+            Err.Raise 5, "Run_Gantt_Test_Engine", PlanningMessageText_Format("GANTT.ERROR.TEST_NO_INPUT_NOT_READY")
         End If
         ganttRebuilt = True
         testSucceeded = True
 
         GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-            "Aucune saisie TEST détectée. L'affichage normal est déjà restauré.", _
-            "No TEST input detected. The normal display is already restored."
+            "GANTT.TEST.NO_INPUT_NORMAL"
 
         If silentMode Then
             If recordSilentMessages Then CalcBridge_RecordPlanningMessages consoleMessages, "Run_Gantt_Test_Engine"
@@ -311,22 +309,17 @@ Public Sub GanttTestService_RunTestEngine( _
     If Not hasAnyTestInput Then
 
         GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-            "Aucune saisie TEST détectée. L’affichage simulation a été réinitialisé.", _
-            "No TEST input detected. Simulation display has been reset."
+            "GANTT.TEST.NO_INPUT_RESET"
 
     ElseIf hasRenderableDelta Then
 
         GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-            "Simulation exécutée.", _
-            "Simulation executed."
+            "GANTT.TEST.EXECUTED"
 
     Else
 
         GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-            "Simulation exécutée, mais aucun changement visible n'a été produit." & vbCrLf & _
-            "-> cause probable : priorité locale (Actual/Forecast) et/ou contrainte réseau inchangée.", _
-            "Simulation executed, but no visible change was produced." & vbCrLf & _
-            "-> probable cause: local priority (Actual/Forecast) and/or unchanged network constraint."
+            "GANTT.TEST.NO_VISIBLE_CHANGE"
 
     End If
 
@@ -417,6 +410,7 @@ Private Function Run_Gantt_Test_Backend( _
     Dim dependencyDiagnostics As Object
     Dim constraintDiagnostics As Object
     Dim cascadeDiagnostics As Object
+    Dim coreDiagnostics As Object
     Dim warningActualIds As Object
     Dim constraintMessages As Collection
     Dim analyticsById As Object
@@ -454,6 +448,7 @@ Private Function Run_Gantt_Test_Backend( _
     Set dependencyDiagnostics = CreateObject("Scripting.Dictionary")
     Set constraintDiagnostics = CreateObject("Scripting.Dictionary")
     Set cascadeDiagnostics = CreateObject("Scripting.Dictionary")
+    Set coreDiagnostics = CreateObject("Scripting.Dictionary")
     Set warningActualIds = CreateObject("Scripting.Dictionary")
 
     If GanttLive_HasConsoleCollection(consoleMessages) Then
@@ -472,7 +467,7 @@ Private Function Run_Gantt_Test_Backend( _
         ThisWorkbook.Worksheets(CALC_SHEET).ListObjects(CALC_TABLE))
     Set executionNetwork = CompileExecutionNetwork(dataCore, mapCore, linksBySuccId)
 
-    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork
+    Run_Calc_Core dataCore, mapCore, linksBySuccId, , dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, executionNetwork, coreDiagnostics
 
     For r = 1 To rowCount
 
@@ -495,7 +490,7 @@ Private Function Run_Gantt_Test_Backend( _
                 outWarnText(r, 1) = errorMsg
             End If
 
-            If Not GanttLive_IsInheritedCoreError(errorMsg) Then
+            If CoreDiagnostics_TaskHasClassification(coreDiagnostics, idVal, "ROOT") Then
                 rootErrorIds(idVal) = True
             End If
 
@@ -506,7 +501,7 @@ Private Function Run_Gantt_Test_Backend( _
 NextRow:
     Next r
 
-    GanttLive_RemoveDerivedLOERootErrors dataCore, mapCore, errorIds, rootErrorIds
+    GanttLive_RemoveDerivedLOERootErrors coreDiagnostics, errorIds, rootErrorIds
 
     GanttLive_ApplyActualImpactWarnings idToRowTest, warningActualIds, outWarnFlag, outWarnText
 
@@ -522,11 +517,10 @@ NextRow:
 
     If errorIds.Count > 0 Then
         If rootErrorIds.Count > 0 Then
-            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "TEST", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics
+            CalcBridge_AppendCoreErrorMessagesFromData consoleMessages, dataCore, mapCore, rootErrorIds, "TEST", dependencyDiagnostics, constraintDiagnostics, cascadeDiagnostics, coreDiagnostics
         Else
             ShowGanttLiveGroupedMessage errorIds, idToWbs, _
-                "Erreur de calcul dans le moteur live", "corriger les valeurs test ou la logique amont", _
-                "Calculation error in live engine", "fix test values or upstream logic", vbCritical, consoleMessages
+                "GANTT.TEST.CALCULATION_ERROR_GROUP", vbCritical, consoleMessages
         End If
 
         GanttTestAnalyticsSnapshot_Clear
@@ -557,7 +551,7 @@ Private Sub GanttLive_ApplyTestRender(ByVal wsGantt As Worksheet)
     SetGanttPreserveTestInputs True
     GanttLive_RequestTestRender
     If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_LOCAL_UPDATE, "GanttLive_ApplyTestRender") Then
-        Err.Raise 5, "GanttLive_ApplyTestRender", "Gantt TEST render did not reach READY state."
+        Err.Raise 5, "GanttLive_ApplyTestRender", PlanningMessageText_Format("GANTT.ERROR.TEST_NOT_READY")
     End If
     GanttLive_SetActiveSimulationMode "TEST"
     SetGanttPreserveTestInputs False
@@ -838,7 +832,7 @@ Private Sub BuildGanttTestCoreDataset( _
             If hasActual Then
                 warningActualIds(idVal) = True
                 outWarnFlag(r, 1) = "WARNING"
-                outWarnText(r, 1) = "TEST INPUT ON ACTUAL TASK - SIMULATION MAY SHOW NO EFFECT AND LOCK MAY NOT MATCH PROD"
+                outWarnText(r, 1) = TextCatalog_Get("GANTT.TEST.ROW.ACTUAL_WARNING", Gantt_CurrentLanguage())
             End If
 
         End If
@@ -1107,7 +1101,7 @@ Private Sub GanttLive_ApplyActualImpactWarnings( _
     If warningActualIds Is Nothing Then Exit Sub
     If warningActualIds.Count = 0 Then Exit Sub
 
-    warnText = "TEST INPUT IMPACTS ACTUAL TASK - LOCK MAY NOT FULLY PERSIST"
+    warnText = TextCatalog_Get("GANTT.TEST.ACTUAL_IMPACT_WARNING", Gantt_CurrentLanguage())
 
     For Each idVal In warningActualIds.Keys
 

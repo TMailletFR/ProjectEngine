@@ -69,8 +69,7 @@ Public Function ConstraintsDiagnosticsHarness_Smoke( _
 
     stopMessage = BuildConstraintValidationMessage( _
         arrConstraints, 1, mapConstraints, _
-        "Contrainte active sur un ID absent de CALC", _
-        "Active constraint references an ID not found in CALC")
+        "CONSTRAINTS.DIAG.ID_NOT_IN_CALC")
     CalcBridge_AddConsoleMessage messages, "STOP", stopMessage
     ConstraintsDiagnosticsHarness_Trace "03 stop produced"
 
@@ -106,10 +105,8 @@ Public Function ConstraintsDiagnosticsHarness_Smoke( _
 
     warningMessage = BuildConstraintValidationMessage( _
         arrConstraints, 2, mapConstraints, _
-        "Contrainte active ignoree sur une tache parent", _
-        "Active constraint ignored on a summary task", _
-        "les contraintes sur taches parent ne sont pas exportees vers CALC", _
-        "constraints on summary tasks are not exported to CALC")
+        "CONSTRAINTS.DIAG.PARENT_IGNORED", _
+        "CONSTRAINTS.DIAG.PARENT_IGNORED.DETAIL")
     AddConstraintWarning messages, warningMessage, True, "CONSTRAINT_PARENT_IGNORED", eventHash
     ConstraintsDiagnosticsHarness_Trace "04 warning produced"
 

@@ -63,8 +63,7 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
             Application.Undo
 
             GanttEvents_AddConsoleMessage consoleMessages, "STOP", _
-                "Saisie autorisée uniquement dans les colonnes test jaunes des tâches leaf.", _
-                "Input is only allowed in yellow test columns for leaf tasks."
+                "GANTT.EVENTS.INPUT_AREA_INVALID"
 
             CalcBridge_ShowPlanningConsole consoleMessages
             GoTo SafeExit
@@ -80,8 +79,7 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
                     Application.Undo
 
                     GanttEvents_AddConsoleMessage consoleMessages, "STOP", _
-                        "Date invalide dans une colonne test.", _
-                        "Invalid date in a test column."
+                        "GANTT.EVENTS.DATE_INVALID"
 
                     CalcBridge_ShowPlanningConsole consoleMessages
                     GoTo SafeExit
@@ -106,8 +104,7 @@ Public Sub Handle_Gantt_Change(ByVal ws As Worksheet, ByVal Target As Range)
                     Application.Undo
 
                     GanttEvents_AddConsoleMessage consoleMessages, "STOP", _
-                        "Valeur invalide dans Test %.", _
-                        "Invalid value in Test %."
+                        "GANTT.EVENTS.PERCENT_INVALID"
 
                     CalcBridge_ShowPlanningConsole consoleMessages
                     GoTo SafeExit
@@ -134,10 +131,7 @@ SafeExit:
         If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
         GanttEvents_AddConsoleMessage consoleMessages, "STOP", _
-            "Erreur VBA dans Handle_Gantt_Change." & vbCrLf & _
-            "-> vérifier le dernier bloc modifié dans mod_GanttEvents.", _
-            "VBA error in Handle_Gantt_Change." & vbCrLf & _
-            "-> check the last edited block in mod_GanttEvents."
+            "GANTT.EVENTS.HANDLE_ERROR"
 
         CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -159,19 +153,14 @@ End Sub
 Private Sub GanttEvents_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String)
 
     If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText
+        PlanningMessageText_Format(messageKey, Nothing, Nothing)
 
 End Sub
-
 
 
 

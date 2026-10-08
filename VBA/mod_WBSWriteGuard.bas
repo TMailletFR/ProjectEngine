@@ -68,7 +68,8 @@ Public Sub CloseAuthorizedWBSWriteScope(ByVal scopeToken As Long)
 
     If gWBSWriteScopes.Count = 0 Then
         Err.Raise vbObjectError + 9620, "CloseAuthorizedWBSWriteScope", _
-            "No active WBS write scope matches token " & CStr(scopeToken) & "."
+            PlanningMessageText_Format("WBS.ERROR.NO_WRITE_SCOPE", _
+                TextCatalog_Arguments("Token", CStr(scopeToken)), TextCatalog_Arguments("Token", CStr(scopeToken)))
     End If
 
     Set scopeFrame = gWBSWriteScopes(gWBSWriteScopes.Count)
@@ -76,8 +77,9 @@ Public Sub CloseAuthorizedWBSWriteScope(ByVal scopeToken As Long)
 
     If activeToken <> scopeToken Then
         Err.Raise vbObjectError + 9621, "CloseAuthorizedWBSWriteScope", _
-            "WBS write scopes must close in LIFO order. Active token=" & _
-            CStr(activeToken) & ", requested token=" & CStr(scopeToken) & "."
+            PlanningMessageText_Format("WBS.ERROR.WRITE_SCOPE_ORDER", _
+                TextCatalog_Arguments("ActiveToken", CStr(activeToken), "RequestedToken", CStr(scopeToken)), _
+                TextCatalog_Arguments("ActiveToken", CStr(activeToken), "RequestedToken", CStr(scopeToken)))
     End If
 
     gWBSWriteScopes.Remove gWBSWriteScopes.Count

@@ -128,10 +128,8 @@ Public Sub Toggle_Analytics()
     Exit Sub
 
 ErrHandler:
-    CalcBridge_ShowSingleConsoleMessage _
-        "STOP", _
-        "Erreur dans Toggle_Analytics : " & Err.Description, _
-        "Error in Toggle_Analytics: " & Err.Description
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "Toggle_Analytics", "Details", Err.Description)
 
 End Sub
 
@@ -189,7 +187,7 @@ Public Sub Refresh_Analytics_Toggle_Visual()
 
     If Not shpLabel Is Nothing Then
         With shpLabel
-            .TextFrame2.TextRange.Text = "Analytics"
+            .TextFrame2.TextRange.Text = TextCatalog_Get("COMMON.LABEL.ANALYTICS", Settings_GetGlobalDisplayLanguage())
             .TextFrame2.TextRange.Font.Size = 9.5
             .TextFrame2.TextRange.Font.Bold = msoTrue
             .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
@@ -254,9 +252,7 @@ Public Sub Run_Analytics_Only( _
 
     If tblCalc.DataBodyRange Is Nothing Then
         CalcBridge_AddConsoleMessage localConsole, "WARNING", _
-            BiMsg( _
-                "Analytics non recalculées : tbl_CALC est vide.", _
-                "Analytics not recalculated: tbl_CALC is empty.")
+            PlanningMessageText_Format("DIAG.ANALYTICS.EMPTY", Nothing, Nothing)
 
         If showLocalConsole Then CalcBridge_ShowPlanningConsole localConsole
         Exit Sub
@@ -287,11 +283,9 @@ ErrHandler:
     If localConsole Is Nothing Then Set localConsole = New Collection
 
     CalcBridge_AddConsoleMessage localConsole, "STOP", _
-        BiMsg( _
-            "Erreur dans Run_Analytics_Only" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Run_Analytics_Only" & vbCrLf & _
-            "-> " & Err.Description)
+        PlanningMessageText_Format("DIAG.ANALYTICS.RUN_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description), _
+            TextCatalog_Arguments("Details", Err.Description))
 
     CalcBridge_ShowPlanningConsole localConsole
 
@@ -367,11 +361,9 @@ ErrHandler:
     If localConsole Is Nothing Then Set localConsole = New Collection
 
     CalcBridge_AddConsoleMessage localConsole, "STOP", _
-        BiMsg( _
-            "Erreur dans Clear_Analytics_Outputs" & vbCrLf & _
-            "-> " & errorDescription, _
-            "Error in Clear_Analytics_Outputs" & vbCrLf & _
-            "-> " & errorDescription)
+        PlanningMessageText_Format("DIAG.ANALYTICS.CLEAR_ERROR", _
+            TextCatalog_Arguments("Details", errorDescription), _
+            TextCatalog_Arguments("Details", errorDescription))
 
     CalcBridge_ShowPlanningConsole localConsole
 
@@ -396,7 +388,7 @@ Private Function AnalyticsOnly_TableHasNegativeFloat( _
     If tblCalc.DataBodyRange Is Nothing Then Exit Function
     If mapCalc Is Nothing Then Exit Function
 
-    columnsToCheck = Array("Total Float", "Free Float", "Total Float REX", "Free Float REX")
+    columnsToCheck = Array("Total Float", "Free Float")
     arr = tblCalc.DataBodyRange.value
 
     For Each colName In columnsToCheck
@@ -423,11 +415,8 @@ End Function
 
 Private Function AnalyticsOnly_NegativeFloatWarningMessage() As String
 
-    AnalyticsOnly_NegativeFloatWarningMessage = BiMsg( _
-        "Float négatif détecté dans le planning actuel" & vbCrLf & _
-        "-> vérifier la logique, les dates, les lags ou les prévisions", _
-        "Negative float detected in the current schedule" & vbCrLf & _
-        "-> check logic, dates, lags or forecasts")
+    AnalyticsOnly_NegativeFloatWarningMessage = _
+        PlanningMessageText_Format("DIAG.ANALYTICS.NEGATIVE_FLOAT", Nothing, Nothing)
 
 End Function
 
@@ -574,7 +563,7 @@ Private Sub Ensure_Analytics_Toggle_Shapes()
         .TextFrame2.MarginRight = 0
         .TextFrame2.MarginTop = 0
         .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = "Analytics"
+        .TextFrame2.TextRange.Text = TextCatalog_Get("COMMON.LABEL.ANALYTICS", Settings_GetGlobalDisplayLanguage())
         .TextFrame2.TextRange.Font.Size = 9.5
         .TextFrame2.TextRange.Font.Bold = msoTrue
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)

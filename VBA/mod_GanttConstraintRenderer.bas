@@ -151,7 +151,9 @@ Private Sub RequireGanttCalcColumn( _
     ByVal functionName As String)
 
     If Not mapCalc.Exists(colName) Then
-        Err.Raise vbObjectError + 760, functionName, "Missing source column in tbl_CALC: " & colName
+        Err.Raise vbObjectError + 760, functionName, PlanningMessageText_Format("GANTT.ERROR.MISSING_SOURCE_COLUMN", _
+            TextCatalog_Arguments("Table", "tbl_CALC", "Column", colName), _
+            TextCatalog_Arguments("Table", "tbl_CALC", "Column", colName))
     End If
 
 End Sub

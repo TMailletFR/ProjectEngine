@@ -703,7 +703,8 @@ Public Sub GanttShapeRegistry_UpsertShapeFromRecord(ByVal ws As Worksheet, ByVal
         If gRenderStyleOnly Then
             Err.Raise vbObjectError + 441, _
                 "GanttShapeRegistry_UpsertShapeFromRecord", _
-                "Style-only render found a missing shape: " & CStr(rec("Name"))
+                PlanningMessageText_Format("GANTT.ERROR.STYLE_SHAPE_MISSING", _
+                    TextCatalog_Arguments("Shape", CStr(rec("Name"))), TextCatalog_Arguments("Shape", CStr(rec("Name"))))
         End If
         GanttShapeRegistry_CreateShapeFromRecord ws, rec
         If gRenderSessionActive Then
@@ -733,7 +734,8 @@ Public Sub GanttShapeRegistry_UpsertShapeFromRecord(ByVal ws As Worksheet, ByVal
         If gRenderStyleOnly Then
             Err.Raise vbObjectError + 442, _
                 "GanttShapeRegistry_UpsertShapeFromRecord", _
-                "Style-only render found an incompatible shape: " & CStr(rec("Name"))
+                PlanningMessageText_Format("GANTT.ERROR.STYLE_SHAPE_INCOMPATIBLE", _
+                    TextCatalog_Arguments("Shape", CStr(rec("Name"))), TextCatalog_Arguments("Shape", CStr(rec("Name"))))
         End If
         shp.Delete
         GanttShapeRegistry_CreateShapeFromRecord ws, rec
@@ -1200,7 +1202,7 @@ End Function
 ' FR: Indique si le Registry possede le lifecycle de cette shape metier.
 ' EN: Returns whether the Registry owns this business shape lifecycle.
 '------------------------------------------------------------------------------
-Private Function GanttShapeRegistry_IsBusinessShapeName(ByVal shapeName As String) As Boolean
+Public Function GanttShapeRegistry_IsBusinessShapeName(ByVal shapeName As String) As Boolean
 
     GanttShapeRegistry_IsBusinessShapeName = _
         (shapeName = "TODAY_LINE") Or _

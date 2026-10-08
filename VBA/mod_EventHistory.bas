@@ -34,6 +34,9 @@ Private Const EVENT_HISTORY_LANG_LABEL As String = "btn_EventHistory_Language_La
 Private Const EVENT_HISTORY_LANG_BG As String = "btn_EventHistory_Language_BG"
 Private Const EVENT_HISTORY_LANG_KNOB As String = "btn_EventHistory_Language_Knob"
 Private Const EVENT_ACK_CLEAR_BUTTON As String = "btn_EventAck_ClearList"
+Private mProjectionPending As Boolean
+Private mProjectionHydrate As Boolean
+Private mProjectionPropagate As Boolean
 Private Const EVENT_HISTORY_CLEAR_BUTTON As String = "btn_EventHistory_ClearHistory"
 
 Private gPlanningEventRunId As String
@@ -279,6 +282,17 @@ Public Sub Refresh_EventHistory_View( _
     Optional ByVal hydratePersistedLanguage As Boolean = True, _
     Optional ByVal propagateErrors As Boolean = False)
 
+    If IsPlanningWorkflowActive() And Not IsPlanningWorkflowFinalDisplay() Then
+        mProjectionPending = True
+        mProjectionHydrate = mProjectionHydrate Or hydratePersistedLanguage
+        mProjectionPropagate = mProjectionPropagate Or propagateErrors
+        Profiler_RecordCounter "EventHistoryDeferredRequests", 1
+        Exit Sub
+    End If
+    hydratePersistedLanguage = hydratePersistedLanguage Or mProjectionHydrate
+    propagateErrors = propagateErrors Or mProjectionPropagate
+    mProjectionPending = False: mProjectionHydrate = False: mProjectionPropagate = False
+
     Dim perfScope As clsPerfScope
 
     Dim wsAlarm As Worksheet
@@ -315,28 +329,44 @@ Public Sub Refresh_EventHistory_View( _
     Set tblAck = wsAck.ListObjects(EVENT_ACK_TABLE)
     Set ackLookup = BuildEventAckLookup(tblAck)
 
-    ClearPlanningEventTableRows tblHistory
-
-    If Not tblAlarm.DataBodyRange Is Nothing Then
-        For r = tblAlarm.ListRows.Count To 1 Step -1
-            severity = UCase$(Trim$(CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Severity").Index).value)))
-            eventType = Trim$(CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Event Type").Index).value))
-            eventHash = Trim$(CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Hash").Index).value))
-            msgText = BuildEventHistoryDisplayMessage( _
-                CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("FR Message").Index).value), _
-                CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("EN Message").Index).value), _
-                CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("FR Details").Index).value), _
-                CStr(tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("EN Details").Index).value))
-
-            Set newRow = tblHistory.ListRows.Add
-            With newRow.Range
-                .Cells(1, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_DATE).Index).value = tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Date").Index).value
-                .Cells(1, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_HOUR).Index).value = tblAlarm.DataBodyRange.Cells(r, tblAlarm.ListColumns("Time").Index).value
-                .Cells(1, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_SEVERITY).Index).value = severity
-                .Cells(1, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_MESSAGE).Index).value = msgText
-                .Cells(1, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_ACKNOWLEDGED).Index).value = IsEventAcknowledged(ackLookup, severity, eventType, eventHash)
-            End With
+    If tblAlarm.DataBodyRange Is Nothing Then
+        ClearPlanningEventTableRows tblHistory
+    Else
+        Dim alarmValues As Variant, historyValues() As Variant, count As Long, dest As Long
+        Dim dateCol As Long, timeCol As Long, severityCol As Long, typeCol As Long, hashCol As Long
+        Dim frCol As Long, enCol As Long, frDetailsCol As Long, enDetailsCol As Long
+        Dim outDate As Long, outHour As Long, outSeverity As Long, outMessage As Long, outAck As Long
+        count = tblAlarm.ListRows.Count
+        alarmValues = tblAlarm.DataBodyRange.Value2
+        dateCol = tblAlarm.ListColumns("Date").Index: timeCol = tblAlarm.ListColumns("Time").Index
+        severityCol = tblAlarm.ListColumns("Severity").Index
+        typeCol = tblAlarm.ListColumns("Event Type").Index: hashCol = tblAlarm.ListColumns("Hash").Index
+        frCol = tblAlarm.ListColumns("FR Message").Index: enCol = tblAlarm.ListColumns("EN Message").Index
+        frDetailsCol = tblAlarm.ListColumns("FR Details").Index: enDetailsCol = tblAlarm.ListColumns("EN Details").Index
+        outDate = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_DATE).Index
+        outHour = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_HOUR).Index
+        outSeverity = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_SEVERITY).Index
+        outMessage = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_MESSAGE).Index
+        outAck = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_ACKNOWLEDGED).Index
+        ReDim historyValues(1 To count, 1 To tblHistory.ListColumns.Count)
+        For r = count To 1 Step -1
+            dest = count - r + 1
+            severity = UCase$(Trim$(CStr(alarmValues(r, severityCol))))
+            eventType = Trim$(CStr(alarmValues(r, typeCol)))
+            eventHash = Trim$(CStr(alarmValues(r, hashCol)))
+            msgText = BuildEventHistoryDisplayMessage(CStr(alarmValues(r, frCol)), CStr(alarmValues(r, enCol)), _
+                CStr(alarmValues(r, frDetailsCol)), CStr(alarmValues(r, enDetailsCol)))
+            historyValues(dest, outDate) = alarmValues(r, dateCol)
+            historyValues(dest, outHour) = alarmValues(r, timeCol)
+            historyValues(dest, outSeverity) = "'" & severity
+            historyValues(dest, outMessage) = "'" & msgText
+            historyValues(dest, outAck) = IsEventAcknowledged(ackLookup, severity, eventType, eventHash)
         Next r
+        ClearPlanningEventTableRows tblHistory
+        tblHistory.Resize tblHistory.HeaderRowRange.Resize(count + 1, tblHistory.ListColumns.Count)
+        tblHistory.HeaderRowRange.Offset(1, 0).Resize(count, tblHistory.ListColumns.Count).Formula = historyValues
+        Profiler_RecordCounter "EventHistoryBulkRows", count
+        Profiler_RecordOperation "EventHistoryBulkWrites", 1, 0#
     End If
 
     ApplyPlanningEventFormats tblAlarm, tblHistory, tblAck
@@ -348,8 +378,10 @@ CleanExit:
         EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     End If
     Application.ScreenUpdating = oldScreenUpdating
-    If errorNumber <> 0 And propagateErrors Then _
+    If errorNumber <> 0 And propagateErrors Then
+        On Error GoTo 0
         Err.Raise errorNumber, errorSource, errorDescription
+    End If
     Exit Sub
 
 CleanFail:
@@ -358,6 +390,10 @@ CleanFail:
     errorDescription = Err.Description
     Resume CleanExit
 
+End Sub
+
+Public Sub EventHistory_FlushPendingProjection()
+    If mProjectionPending Then Refresh_EventHistory_View mProjectionHydrate, mProjectionPropagate
 End Sub
 
 '------------------------------------------------------------------------------
@@ -426,7 +462,7 @@ End Function
 ' EN: Returns the Planning Message Is Acknowledged map without mutating input data.
 '------------------------------------------------------------------------------
 
-Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant) As Boolean
+Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant, Optional ByVal ensureInfrastructure As Boolean = True) As Boolean
 
     Dim msgType As String
     Dim ackTokens As String
@@ -436,12 +472,13 @@ Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant) As Boolean
     On Error GoTo SafeExit
 
     msgType = NormalizeConsoleEventSeverity(CStr(item("Type")))
-    If msgType <> "WARNING" Then Exit Function
+    If Not PlanningMessage_SupportsAcknowledgement(item) Then Exit Function
 
     On Error Resume Next
     Set tblAck = ThisWorkbook.Worksheets(EVENT_ACK_SHEET).ListObjects(EVENT_ACK_TABLE)
     On Error GoTo SafeExit
     If tblAck Is Nothing Then
+        If Not ensureInfrastructure Then Exit Function
         EnsurePlanningEventHistoryInfrastructure
         Set tblAck = ThisWorkbook.Worksheets(EVENT_ACK_SHEET).ListObjects(EVENT_ACK_TABLE)
     End If
@@ -450,7 +487,7 @@ Public Function PlanningMessage_IsAcknowledged(ByVal item As Variant) As Boolean
 
     ackTokens = PlanningMessage_BuildAckTokens(item)
     If Trim$(ackTokens) <> "" Then
-        PlanningMessage_IsAcknowledged = ArePlanningWarningAckTokensAcknowledged(ackLookup, ackTokens)
+        PlanningMessage_IsAcknowledged = ArePlanningWarningAckTokensAcknowledged(ackLookup, ackTokens, msgType)
         Exit Function
     End If
 
@@ -466,10 +503,24 @@ Public Function PlanningMessage_CanAcknowledge(ByVal item As Variant) As Boolean
 
     On Error GoTo SafeExit
 
-    If NormalizeConsoleEventSeverity(CStr(item("Type"))) <> "WARNING" Then Exit Function
+    If Not PlanningMessage_SupportsAcknowledgement(item) Then Exit Function
     PlanningMessage_CanAcknowledge = (Trim$(PlanningMessage_BuildAckTokens(item)) <> "")
 
 SafeExit:
+End Function
+
+Private Function PlanningMessage_SupportsAcknowledgement(ByVal item As Variant) As Boolean
+    Dim severity As String
+    On Error GoTo NotSupported
+    severity = NormalizeConsoleEventSeverity(CStr(item("Type")))
+    If severity = "WARNING" Then
+        PlanningMessage_SupportsAcknowledgement = True
+    ElseIf severity = "INFO" Then
+        If item.Exists("AcknowledgementRequired") Then
+            PlanningMessage_SupportsAcknowledgement = CBool(item("AcknowledgementRequired"))
+        End If
+    End If
+NotSupported:
 End Function
 
 '------------------------------------------------------------------------------
@@ -478,7 +529,8 @@ End Function
 '------------------------------------------------------------------------------
 Public Sub SetPlanningWarningAckState( _
     ByVal item As Variant, _
-    ByVal acknowledged As Boolean)
+    ByVal acknowledged As Boolean, _
+    Optional ByVal propagateErrors As Boolean = False)
 
     Dim ackTokens As String
     Dim tokens() As String
@@ -488,7 +540,9 @@ Public Sub SetPlanningWarningAckState( _
     Dim wsAck As Worksheet
     Dim internalWriteStarted As Boolean
 
-    On Error GoTo SafeExit
+    Dim errorNumber As Long, errorSource As String, errorDescription As String
+
+    On Error GoTo Failed
 
     If Not PlanningMessage_CanAcknowledge(item) Then Exit Sub
 
@@ -503,7 +557,7 @@ Public Sub SetPlanningWarningAckState( _
             If acknowledged Then
                 UpsertPlanningWarningAckToken CStr(oneToken), item
             Else
-                RemovePlanningWarningAckToken CStr(oneToken)
+                RemovePlanningWarningAckToken CStr(oneToken), NormalizeConsoleEventSeverity(CStr(item("Type")))
             End If
         End If
     Next oneToken
@@ -515,6 +569,13 @@ SafeExit:
     If internalWriteStarted Then
         EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     End If
+    If errorNumber <> 0 And propagateErrors Then
+        Err.Raise errorNumber, errorSource, errorDescription
+    End If
+    Exit Sub
+Failed:
+    errorNumber = Err.Number: errorSource = Err.Source: errorDescription = Err.Description
+    Resume SafeExit
 End Sub
 
 '------------------------------------------------------------------------------
@@ -522,6 +583,7 @@ End Sub
 ' EN: Clears or resets Planning Warning Acknowledgements.
 '------------------------------------------------------------------------------
 Public Sub ClearPlanningWarningAcknowledgements()
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
 
     Dim wsAlarm As Worksheet
     Dim wsHistory As Worksheet
@@ -554,6 +616,7 @@ End Sub
 ' EN: Clears or resets Planning Event History.
 '------------------------------------------------------------------------------
 Public Sub ClearPlanningEventHistory()
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Sub
 
     Dim wsAlarm As Worksheet
     Dim wsHistory As Worksheet
@@ -591,37 +654,237 @@ End Sub
 
 Private Function PlanningMessage_BuildAckTokens(ByVal item As Variant) As String
 
-    Dim rawMessage As String
     Dim eventType As String
     Dim eventHash As String
-    Dim frMessage As String
-    Dim enMessage As String
-    Dim frDetails As String
-    Dim enDetails As String
 
     On Error GoTo SafeExit
 
-    If NormalizeConsoleEventSeverity(CStr(item("Type"))) <> "WARNING" Then Exit Function
-
+    If Not PlanningMessage_SupportsAcknowledgement(item) Then Exit Function
     PlanningMessage_BuildAckTokens = PlanningMessage_GetOptionalText(item, "AckTokens")
     If Trim$(PlanningMessage_BuildAckTokens) <> "" Then Exit Function
 
     eventType = PlanningMessage_GetOptionalText(item, "EventType")
     eventHash = PlanningMessage_GetOptionalText(item, "Hash")
 
-    If eventType = "" Or eventHash = "" Then
-        rawMessage = CStr(item("Message"))
-        SplitConsoleMessageForHistory rawMessage, frMessage, enMessage, frDetails, enDetails
-        eventType = "CONSOLE_WARNING"
-        eventHash = BuildPlanningEventHash( _
-            "WARNING", eventType, frMessage, enMessage, frDetails, enDetails, _
-            "MessageEngine")
-    End If
+    'Explicit semantic metadata remains ACK-able even when history was logged by
+    'the producer. Warnings without metadata intentionally have no text fallback.
+    If eventType = "" Or eventHash = "" Then Exit Function
 
     PlanningMessage_BuildAckTokens = BuildPlanningWarningAckToken(eventType, eventHash)
 
 SafeExit:
 End Function
+
+'------------------------------------------------------------------------------
+' FR: Construit une identite evenementielle semantique, versionnee et independante de la langue.
+' EN: Builds a versioned, language-independent semantic event identity.
+'------------------------------------------------------------------------------
+Public Function BuildPlanningEventIdentityV2( _
+    ByVal severity As String, _
+    ByVal eventType As String, _
+    ByVal scopeKind As String, _
+    ByVal subjectId As String, _
+    Optional ByVal semanticArguments As Object = Nothing) As String
+
+    Dim payload As String
+
+    If Trim$(severity) = "" Then Exit Function
+    If Trim$(eventType) = "" Then Exit Function
+    If Trim$(scopeKind) = "" Then Exit Function
+
+    payload = PlanningEventIdentity_Field("Version", "EVI2") & _
+        PlanningEventIdentity_Field("Severity", UCase$(Trim$(severity))) & _
+        PlanningEventIdentity_Field("EventType", UCase$(Trim$(eventType))) & _
+        PlanningEventIdentity_Field("Scope", UCase$(Trim$(scopeKind))) & _
+        PlanningEventIdentity_Field("Subject", Trim$(subjectId)) & _
+        PlanningEventIdentity_CanonicalArguments(semanticArguments)
+
+    BuildPlanningEventIdentityV2 = "EVI2:" & DeterministicDigest_SHA256Hex(payload)
+
+End Function
+
+'------------------------------------------------------------------------------
+' FR: Canonicalise les arguments semantiques par cle triee et valeur typee.
+' EN: Canonicalizes semantic arguments by sorted key and typed value.
+'------------------------------------------------------------------------------
+Private Function PlanningEventIdentity_CanonicalArguments(ByVal arguments As Object) As String
+
+    Dim keys As Variant
+    Dim i As Long
+    Dim key As String
+    Dim objectValue As Object
+    Dim canonicalValue As String
+
+    If arguments Is Nothing Then
+        PlanningEventIdentity_CanonicalArguments = PlanningEventIdentity_Field("Arguments", "")
+        Exit Function
+    End If
+
+    If arguments.Count = 0 Then
+        PlanningEventIdentity_CanonicalArguments = PlanningEventIdentity_Field("Arguments", "")
+        Exit Function
+    End If
+
+    keys = arguments.Keys
+    PlanningEventIdentity_SortStrings keys
+
+    For i = LBound(keys) To UBound(keys)
+        key = CStr(keys(i))
+        If IsObject(arguments(key)) Then
+            Set objectValue = arguments(key)
+            canonicalValue = PlanningEventIdentity_CanonicalObject(objectValue)
+        Else
+            canonicalValue = PlanningEventIdentity_CanonicalValue(arguments(key))
+        End If
+        PlanningEventIdentity_CanonicalArguments = PlanningEventIdentity_CanonicalArguments & _
+            PlanningEventIdentity_Field(UCase$(Trim$(key)), canonicalValue)
+    Next i
+
+End Function
+
+Private Function PlanningEventIdentity_CanonicalValue(ByVal value As Variant) As String
+
+    If IsObject(value) Then
+        PlanningEventIdentity_CanonicalValue = PlanningEventIdentity_CanonicalObject(value)
+    ElseIf IsArray(value) Then
+        PlanningEventIdentity_CanonicalValue = PlanningEventIdentity_CanonicalArray(value)
+    ElseIf IsNull(value) Then
+        PlanningEventIdentity_CanonicalValue = "Z:"
+    ElseIf IsEmpty(value) Then
+        PlanningEventIdentity_CanonicalValue = "E:"
+    ElseIf IsError(value) Then
+        Err.Raise 5, "BuildPlanningEventIdentityV2", _
+            "Error values are not supported in semantic event identity arguments."
+    ElseIf VarType(value) = vbBoolean Then
+        PlanningEventIdentity_CanonicalValue = "B:" & IIf(CBool(value), "1", "0")
+    ElseIf VarType(value) = vbDate Then
+        PlanningEventIdentity_CanonicalValue = "D:" & PlanningEventIdentity_InvariantNumber(CDbl(CDate(value)))
+    ElseIf VarType(value) = vbString Then
+        PlanningEventIdentity_CanonicalValue = "S:" & CStr(value)
+    ElseIf IsNumeric(value) Then
+        PlanningEventIdentity_CanonicalValue = "N:" & PlanningEventIdentity_InvariantNumber(CDbl(value))
+    Else
+        PlanningEventIdentity_CanonicalValue = "S:" & CStr(value)
+    End If
+
+End Function
+
+Private Function PlanningEventIdentity_CanonicalObject(ByVal value As Object) As String
+
+    Dim keys As Variant
+    Dim items() As String
+    Dim i As Long
+    Dim key As String
+    Dim item As Variant
+    Dim objectValue As Object
+    Dim canonicalValue As String
+
+    Select Case TypeName(value)
+        Case "Dictionary", "Scripting.Dictionary"
+            If value.Count = 0 Then
+                PlanningEventIdentity_CanonicalObject = "M:0:"
+                Exit Function
+            End If
+
+            keys = value.Keys
+            PlanningEventIdentity_SortStrings keys
+            For i = LBound(keys) To UBound(keys)
+                key = CStr(keys(i))
+                If IsObject(value(key)) Then
+                    Set objectValue = value(key)
+                    canonicalValue = PlanningEventIdentity_CanonicalObject(objectValue)
+                Else
+                    canonicalValue = PlanningEventIdentity_CanonicalValue(value(key))
+                End If
+                PlanningEventIdentity_CanonicalObject = PlanningEventIdentity_CanonicalObject & _
+                    PlanningEventIdentity_Field(UCase$(Trim$(key)), canonicalValue)
+            Next i
+            PlanningEventIdentity_CanonicalObject = "M:" & CStr(value.Count) & ":" & _
+                PlanningEventIdentity_CanonicalObject
+
+        Case "Collection"
+            If value.Count = 0 Then
+                PlanningEventIdentity_CanonicalObject = "C:0:"
+                Exit Function
+            End If
+
+            ReDim items(0 To value.Count - 1)
+            i = 0
+            For Each item In value
+                If IsObject(item) Then
+                    Set objectValue = item
+                    items(i) = PlanningEventIdentity_CanonicalObject(objectValue)
+                Else
+                    items(i) = PlanningEventIdentity_CanonicalValue(item)
+                End If
+                i = i + 1
+            Next item
+            PlanningEventIdentity_SortStrings items
+            For i = LBound(items) To UBound(items)
+                PlanningEventIdentity_CanonicalObject = PlanningEventIdentity_CanonicalObject & _
+                    PlanningEventIdentity_Field("Item", items(i))
+            Next i
+            PlanningEventIdentity_CanonicalObject = "C:" & CStr(value.Count) & ":" & _
+                PlanningEventIdentity_CanonicalObject
+
+        Case Else
+            Err.Raise 5, "BuildPlanningEventIdentityV2", _
+                "Unsupported semantic event identity object type: " & TypeName(value)
+    End Select
+
+End Function
+
+Private Function PlanningEventIdentity_CanonicalArray(ByVal value As Variant) As String
+
+    Dim i As Long
+    Dim count As Long
+
+    On Error GoTo UnsupportedArray
+    count = UBound(value) - LBound(value) + 1
+    For i = LBound(value) To UBound(value)
+        PlanningEventIdentity_CanonicalArray = PlanningEventIdentity_CanonicalArray & _
+            PlanningEventIdentity_Field("Item", PlanningEventIdentity_CanonicalValue(value(i)))
+    Next i
+    PlanningEventIdentity_CanonicalArray = "A:" & CStr(count) & ":" & _
+        PlanningEventIdentity_CanonicalArray
+    Exit Function
+
+UnsupportedArray:
+    Err.Raise 5, "BuildPlanningEventIdentityV2", _
+        "Only one-dimensional arrays are supported in semantic event identity arguments."
+
+End Function
+
+Private Function PlanningEventIdentity_InvariantNumber(ByVal value As Double) As String
+
+    PlanningEventIdentity_InvariantNumber = Trim$(Str$(value))
+
+End Function
+
+Private Function PlanningEventIdentity_Field(ByVal fieldName As String, ByVal fieldValue As String) As String
+
+    PlanningEventIdentity_Field = CStr(Len(fieldName)) & ":" & fieldName & _
+        CStr(Len(fieldValue)) & ":" & fieldValue
+
+End Function
+
+Private Sub PlanningEventIdentity_SortStrings(ByRef values As Variant)
+
+    Dim i As Long
+    Dim j As Long
+    Dim tmp As Variant
+
+    For i = LBound(values) To UBound(values) - 1
+        For j = i + 1 To UBound(values)
+            If StrComp(CStr(values(i)), CStr(values(j)), vbBinaryCompare) > 0 Then
+                tmp = values(i)
+                values(i) = values(j)
+                values(j) = tmp
+            End If
+        Next j
+    Next i
+
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Verifie ou cree Planning Event History Infrastructure si necessaire.
@@ -673,7 +936,7 @@ End Sub
 ' FR: Journalise Planning Event dans l'historique planning.
 ' EN: Logs Planning Event into the planning history.
 '------------------------------------------------------------------------------
-Public Sub LogPlanningEvent( _
+Public Function LogPlanningEvent( _
     ByVal severity As String, _
     ByVal eventType As String, _
     ByVal eventHash As String, _
@@ -687,7 +950,7 @@ Public Sub LogPlanningEvent( _
     Optional ByVal taskId As String = "", _
     Optional ByVal wbsValue As String = "", _
     Optional ByVal taskName As String = "", _
-    Optional ByVal refreshView As Boolean = True)
+    Optional ByVal refreshView As Boolean = True) As Object
 
     Dim wsAlarm As Worksheet
     Dim wsHistory As Worksheet
@@ -699,10 +962,15 @@ Public Sub LogPlanningEvent( _
     Dim finalHash As String
     Dim normalizedWbs As String
     Dim internalWriteStarted As Boolean
+    Dim eventId As String
+    Dim receipt As Object
+    Dim errorNumber As Long
+    Dim errorSource As String
+    Dim errorDescription As String
 
     On Error GoTo CleanFail
-    If Trim$(severity) = "" Then Exit Sub
-    If Trim$(eventType) = "" Then Exit Sub
+    If Trim$(severity) = "" Then Err.Raise 5, "LogPlanningEvent", "Severity is required."
+    If Trim$(eventType) = "" Then Err.Raise 5, "LogPlanningEvent", "Event type is required."
 
     EnsurePlanningEventRunId sourceProcedure
     frMessage = TrimPlanningMessageLineEdges(frMessage)
@@ -711,8 +979,8 @@ Public Sub LogPlanningEvent( _
     enDetails = TrimPlanningMessageLineEdges(enDetails)
     normalizedWbs = NormalizeWBS(wbsValue)
 
-    BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     internalWriteStarted = True
+    BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     Set tblAlarm = wsAlarm.ListObjects(CALC_ALARM_TABLE)
     Set tblHistory = wsHistory.ListObjects(EVENT_HISTORY_TABLE)
 
@@ -725,8 +993,9 @@ Public Sub LogPlanningEvent( _
     End If
 
     Set alarmRow = tblAlarm.ListRows.Add
+    eventId = BuildPlanningEventId(tblAlarm.ListRows.Count, eventTs)
     With alarmRow.Range
-        .Cells(1, 1).value = BuildPlanningEventId(tblAlarm.ListRows.Count, eventTs)
+        .Cells(1, 1).value = eventId
         .Cells(1, 2).value = gPlanningEventRunId
         .Cells(1, 3).value = eventTs
         .Cells(1, 4).value = dateValue(eventTs)
@@ -749,18 +1018,62 @@ Public Sub LogPlanningEvent( _
     End With
 
     If refreshView Then
-        Refresh_EventHistory_View
+        Refresh_EventHistory_View True, True
     End If
+    Set receipt = CreateObject("Scripting.Dictionary")
+    receipt("EventId") = eventId
+    receipt("Hash") = finalHash
+    receipt("EventType") = Trim$(eventType)
+    receipt("Severity") = UCase$(Trim$(severity))
+    Set LogPlanningEvent = receipt
 
 CleanExit:
     If internalWriteStarted Then
         EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     End If
-    Exit Sub
+    If errorNumber <> 0 Then
+        On Error GoTo 0
+        Err.Raise errorNumber, errorSource, errorDescription
+    End If
+    Exit Function
 
 CleanFail:
+    errorNumber = Err.Number
+    errorSource = Err.Source
+    errorDescription = Err.Description
     Resume CleanExit
 
+End Function
+
+' The migration owns the following workbook save; only its unsaved tail event
+' can be cancelled. Existing ledger rows and ACK records are never rewritten.
+Public Sub PlanningEvents_DiscardUncommittedMigrationReceipt(ByVal receipt As Object)
+    Dim wsAlarm As Worksheet, wsHistory As Worksheet, wsAck As Worksheet
+    Dim tbl As ListObject, last As Range, internalWriteStarted As Boolean
+    Dim number As Long, origin As String, description As String
+    On Error GoTo Failed
+    If receipt Is Nothing Then Err.Raise 5, , "MISSING_PENDING_EVENT_RECEIPT"
+    If Not Migration_IsRunning() Or ThisWorkbook.Saved Then Err.Raise 5, , "EVENT_ALREADY_COMMITTED_OR_NOT_OWNED"
+    BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
+    internalWriteStarted = True
+    Set tbl = wsAlarm.ListObjects(CALC_ALARM_TABLE)
+    If tbl.ListRows.Count = 0 Then Err.Raise 5, , "PENDING_EVENT_NOT_FOUND"
+    Set last = tbl.ListRows(tbl.ListRows.Count).Range
+    If CStr(last.Cells(1, 1).Value2) <> CStr(receipt("EventId")) _
+        Or CStr(last.Cells(1, 8).Value2) <> CStr(receipt("Hash")) _
+        Or CStr(last.Cells(1, 7).Value2) <> "MIGRATION" _
+        Or CStr(last.Cells(1, 19).Value2) <> "Migration_ImportFile" Then
+        Err.Raise 5, , "PENDING_EVENT_IDENTITY_MISMATCH"
+    End If
+    tbl.ListRows(tbl.ListRows.Count).Delete
+    Refresh_EventHistory_View True, True
+Cleanup:
+    If internalWriteStarted Then EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
+    If number <> 0 Then Err.Raise number, origin, description
+    Exit Sub
+Failed:
+    number = Err.Number: origin = Err.Source: description = Err.Description
+    Resume Cleanup
 End Sub
 
 '------------------------------------------------------------------------------
@@ -800,11 +1113,8 @@ CleanExit:
     Exit Function
 
 Fail:
-    errorMessage = BiMsg( _
-        "Erreur pendant l'historisation de la console runtime" & vbCrLf & _
-        "-> " & Err.Description, _
-        "Error while logging the runtime console" & vbCrLf & _
-        "-> " & Err.Description)
+    Debug.Print "EventHistory logging failed: " & CStr(Err.Number) & "|" & Err.Source & "|" & Err.Description
+    errorMessage = PlanningMessageText_Format("DIAG.EVENT_HISTORY.LOG_ERROR")
     PlanningEvents_LogConsoleMessagesSafe = False
     Resume CleanExit
 
@@ -828,66 +1138,80 @@ Private Sub LogPlanningConsoleMessages( _
     Dim enMessage As String
     Dim frDetails As String
     Dim enDetails As String
-    Dim seenInConsole As Object
-    Dim localKey As String
+    Dim historyState As String
+    Dim eventHash As String
+    Dim semanticArguments As Object
+    Dim receipt As Object
     Dim wsAlarm As Worksheet
     Dim wsHistory As Worksheet
     Dim wsAck As Worksheet
     Dim internalWriteStarted As Boolean
+    Dim errorNumber As Long
+    Dim errorSource As String
+    Dim errorDescription As String
 
     Set perfScope = Profiler_BeginScope("LogPlanningConsoleMessages", "Event History")
 
     If consoleMessages Is Nothing Then Exit Sub
     If consoleMessages.Count = 0 Then Exit Sub
 
+    internalWriteStarted = True
     On Error GoTo CleanFail
     BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
-    internalWriteStarted = True
     EnsurePlanningEventRunId sourceProcedure
-    Set seenInConsole = CreateObject("Scripting.Dictionary")
 
     For Each item In consoleMessages
-        If Not ConsoleMessageHistoryHandled(item) Then
+        historyState = PlanningMessage_GetOptionalText(item, "HistoryState")
+        If historyState = "PERSISTED" Then
+            If Not item.Exists("HistoryReceipt") Then Err.Raise 5, "LogPlanningConsoleMessages", "Missing persistence receipt."
+            Set receipt = item("HistoryReceipt")
+            If receipt Is Nothing Then Err.Raise 5, "LogPlanningConsoleMessages", "Missing persistence receipt."
+            If Len(CStr(receipt("EventId"))) = 0 Or Len(CStr(receipt("Hash"))) = 0 Then _
+                Err.Raise 5, "LogPlanningConsoleMessages", "Invalid persistence receipt."
+        ElseIf historyState <> "STORE_UNAVAILABLE" Then
+            If historyState <> "" And historyState <> "NOT_LOGGED" Then _
+                Err.Raise 5, "LogPlanningConsoleMessages", "Unknown message history state."
             severity = NormalizeConsoleEventSeverity(CStr(item("Type")))
             If severity <> "" Then
                 rawMessage = CStr(item("Message"))
                 SplitConsoleMessageForHistory rawMessage, frMessage, enMessage, frDetails, enDetails
                 eventType = PlanningMessage_GetOptionalText(item, "EventType")
                 If eventType = "" Then eventType = "CONSOLE_" & severity
-                localKey = BuildConsoleLocalDedupKey(severity, frMessage, enMessage, frDetails, enDetails)
-
-                If Not seenInConsole.Exists(localKey) Then
-                    seenInConsole(localKey) = True
-
-                    LogPlanningEvent _
-                        severity, _
-                        eventType, _
-                        PlanningMessage_GetOptionalText(item, "Hash"), _
-                        frMessage, _
-                        enMessage, _
-                        frDetails, _
-                        enDetails, _
-                        sourceProcedure, _
-                        vbNullString, _
-                        vbNullString, _
-                        vbNullString, _
-                        vbNullString, _
-                        vbNullString, _
-                        False
+                eventHash = PlanningMessage_GetOptionalText(item, "Hash")
+                If item.Exists("GroupMembers") Then
+                    Set semanticArguments = CreateObject("Scripting.Dictionary")
+                    Set semanticArguments("Members") = item("GroupMembers")
+                    eventHash = BuildPlanningEventIdentityV2(severity, eventType, "GROUP", "", semanticArguments)
                 End If
+                Set receipt = LogPlanningEvent( _
+                    severity, eventType, eventHash, frMessage, enMessage, frDetails, enDetails, _
+                    sourceProcedure, PlanningMessage_GetOptionalText(item, "SourceSheet"), _
+                    PlanningMessage_GetOptionalText(item, "SourceTable"), _
+                    PlanningMessage_GetOptionalText(item, "TaskId"), _
+                    PlanningMessage_GetOptionalText(item, "WBS"), _
+                    vbNullString, False)
+                Set item("HistoryReceipt") = receipt
+                item("HistoryState") = "PERSISTED"
             End If
         End If
     Next item
 
-    Refresh_EventHistory_View
+    Refresh_EventHistory_View True, True
 
 CleanExit:
     If internalWriteStarted Then
         EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     End If
+    If errorNumber <> 0 Then
+        On Error GoTo 0
+        Err.Raise errorNumber, errorSource, errorDescription
+    End If
     Exit Sub
 
 CleanFail:
+    errorNumber = Err.Number
+    errorSource = Err.Source
+    errorDescription = Err.Description
     Resume CleanExit
 
 End Sub
@@ -1062,14 +1386,6 @@ End Function
 ' EN: Returns the Console Message History Handled value without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function ConsoleMessageHistoryHandled(ByVal item As Variant) As Boolean
-
-    On Error Resume Next
-    ConsoleMessageHistoryHandled = CBool(item("HistoryHandled"))
-    On Error GoTo 0
-
-End Function
-
 '------------------------------------------------------------------------------
 ' FR: Normalise Console Event Severity dans un format exploitable.
 ' EN: Normalizes Console Event Severity into a usable format.
@@ -1163,21 +1479,6 @@ End Function
 ' EN: Builds the Console Local Dedup Key value from data supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Function BuildConsoleLocalDedupKey( _
-    ByVal severity As String, _
-    ByVal frMessage As String, _
-    ByVal enMessage As String, _
-    ByVal frDetails As String, _
-    ByVal enDetails As String) As String
-
-    BuildConsoleLocalDedupKey = _
-        UCase$(Trim$(severity)) & "|" & _
-        Trim$(frMessage) & "|" & _
-        Trim$(enMessage) & "|" & _
-        Trim$(frDetails) & "|" & _
-        Trim$(enDetails)
-
-End Function
 '------------------------------------------------------------------------------
 ' FR: Verifie ou cree Planning Event Run Id si necessaire.
 ' EN: Ensures or creates Planning Event Run Id when needed.
@@ -1391,7 +1692,7 @@ Private Function BuildEventAckLookup(ByVal tblAck As ListObject) As Object
         eventType = Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_EVENT_TYPE).Index).value))
         eventHash = Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_HASH).Index).value))
 
-        If severity = "WARNING" And IsTruthy(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_ACKNOWLEDGED).Index).value) Then
+        If (severity = "WARNING" Or severity = "INFO") And IsTruthy(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_ACKNOWLEDGED).Index).value) Then
             If eventType <> "" And eventHash <> "" Then
                 lookup(BuildEventAckKey(severity, eventType, eventHash)) = True
             End If
@@ -1413,7 +1714,7 @@ Private Function IsEventAcknowledged( _
     ByVal eventHash As String) As Boolean
 
     If ackLookup Is Nothing Then Exit Function
-    If UCase$(Trim$(severity)) <> "WARNING" Then Exit Function
+    If UCase$(Trim$(severity)) <> "WARNING" And UCase$(Trim$(severity)) <> "INFO" Then Exit Function
     If Trim$(eventType) = "" Then Exit Function
     If Trim$(eventHash) = "" Then Exit Function
 
@@ -1445,7 +1746,8 @@ End Function
 
 Private Function ArePlanningWarningAckTokensAcknowledged( _
     ByVal ackLookup As Object, _
-    ByVal ackTokens As String) As Boolean
+    ByVal ackTokens As String, _
+    Optional ByVal severity As String = "WARNING") As Boolean
 
     Dim tokens() As String
     Dim oneToken As Variant
@@ -1468,7 +1770,7 @@ Private Function ArePlanningWarningAckTokensAcknowledged( _
             If eventType = "" Or eventHash = "" Then Exit Function
 
             foundToken = True
-            If Not ackLookup.Exists(BuildEventAckKey("WARNING", eventType, eventHash)) Then
+            If Not ackLookup.Exists(BuildEventAckKey(severity, eventType, eventHash)) Then
                 ArePlanningWarningAckTokensAcknowledged = False
                 Exit Function
             End If
@@ -1503,6 +1805,9 @@ Private Sub UpsertPlanningWarningAckToken( _
     Dim enDetails As String
     Dim wbsValue As String
     Dim taskName As String
+    Dim severity As String
+
+    severity = NormalizeConsoleEventSeverity(CStr(item("Type")))
 
     parts = Split(CStr(ackToken), "|")
     If UBound(parts) <> 1 Then Exit Sub
@@ -1523,7 +1828,7 @@ Private Sub UpsertPlanningWarningAckToken( _
 
     If Not tblAck.DataBodyRange Is Nothing Then
         For r = 1 To tblAck.ListRows.Count
-            If UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value))) = "WARNING" And _
+            If UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value))) = severity And _
                UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_EVENT_TYPE).Index).value))) = UCase$(eventType) And _
                Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_HASH).Index).value)) = eventHash Then
 
@@ -1537,7 +1842,7 @@ Private Sub UpsertPlanningWarningAckToken( _
 
     With targetRow.Range
         .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_HASH).Index).value = eventHash
-        .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value = "WARNING"
+        .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value = severity
         .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_EVENT_TYPE).Index).value = eventType
         .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_ACKNOWLEDGED).Index).value = True
         .Cells(1, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_ACKNOWLEDGED_AT).Index).value = Now
@@ -1614,7 +1919,7 @@ End Function
 ' FR: Supprime Planning Warning Ack Token du contexte event history and acknowledgements.
 ' EN: Removes Planning Warning Ack Token from the event history and acknowledgements context.
 '------------------------------------------------------------------------------
-Private Sub RemovePlanningWarningAckToken(ByVal ackToken As String)
+Private Sub RemovePlanningWarningAckToken(ByVal ackToken As String, Optional ByVal severity As String = "WARNING")
 
     Dim tblAck As ListObject
     Dim parts() As String
@@ -1633,7 +1938,7 @@ Private Sub RemovePlanningWarningAckToken(ByVal ackToken As String)
     If tblAck.DataBodyRange Is Nothing Then Exit Sub
 
     For r = tblAck.ListRows.Count To 1 Step -1
-        If UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value))) = "WARNING" And _
+        If UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_SEVERITY).Index).value))) = severity And _
            UCase$(Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_EVENT_TYPE).Index).value))) = UCase$(eventType) And _
            Trim$(CStr(tblAck.DataBodyRange.Cells(r, SchemaListColumn(tblAck, VTS_TABLE_EVENT_ACK, VTS_COL_HASH).Index).value)) = eventHash Then
 
@@ -1719,6 +2024,9 @@ Private Sub ApplyPlanningEventFormats( _
     Dim sev As String
     Dim dateFormat As String
     Dim dateTimeFormat As String
+    Dim severityValues As Variant
+    Dim rowCount As Long, groupStart As Long, groupColor As Long, nextColor As Long
+    Dim severityIndex As Long, formatRange As Range
 
     On Error Resume Next
 
@@ -1764,18 +2072,32 @@ Private Sub ApplyPlanningEventFormats( _
         SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_HOUR).DataBodyRange.NumberFormat = "hh:mm:ss"
         SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_MESSAGE).DataBodyRange.WrapText = True
 
-        For r = 1 To tblHistory.ListRows.Count
-            sev = UCase$(Trim$(CStr(tblHistory.DataBodyRange.Cells(r, SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_SEVERITY).Index).value)))
+        rowCount = tblHistory.ListRows.Count
+        severityIndex = SchemaListColumn(tblHistory, VTS_TABLE_EVENT_HISTORY, VTS_COL_SEVERITY).Index
+        severityValues = tblHistory.DataBodyRange.Value2
+        groupStart = 1
+        For r = 1 To rowCount + 1
+            nextColor = -1
+            If r <= rowCount Then sev = UCase$(Trim$(CStr(severityValues(r, severityIndex)))) Else sev = ""
             Select Case sev
                 Case "ERROR", "STOP"
-                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(255, 235, 238)
+                    nextColor = RGB(255, 235, 238)
                 Case "WARNING"
-                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(255, 248, 225)
+                    nextColor = RGB(255, 248, 225)
                 Case "INFO"
-                    tblHistory.DataBodyRange.rows(r).Interior.Color = RGB(235, 242, 250)
-                Case Else
-                    tblHistory.DataBodyRange.rows(r).Interior.Pattern = xlNone
+                    nextColor = RGB(235, 242, 250)
             End Select
+            If r = 1 Then groupColor = nextColor
+            If nextColor <> groupColor Or r > rowCount Then
+                Set formatRange = tblHistory.DataBodyRange.Rows(groupStart).Resize(r - groupStart, tblHistory.ListColumns.Count)
+                If groupColor = -1 Then
+                    formatRange.Interior.Pattern = xlNone
+                Else
+                    formatRange.Interior.Color = groupColor
+                End If
+                Profiler_RecordCounter "EventHistoryStyleBatches", 1
+                groupStart = r: groupColor = nextColor
+            End If
         Next r
     End If
 
@@ -1822,13 +2144,13 @@ Private Sub EnsureEventHistoryCommandButtons( _
 
     AddEventHistoryCommandButton _
         wsHistory, EVENT_HISTORY_CLEAR_BUTTON, _
-        "Nettoyer historique / Clear History", _
+        TextCatalog_Get("EVENT_HISTORY.COMMAND.CLEAR_HISTORY", EventHistory_CurrentLanguage()), _
         wsHistory.Range("A2").Left, wsHistory.Range("A2").Top + 2, _
         wsHistory.Range("A2:C2").Width, 18, "ClearPlanningEventHistory"
 
     AddEventHistoryCommandButton _
         wsAck, EVENT_ACK_CLEAR_BUTTON, _
-        "Nettoyer cache / Clear list", _
+        TextCatalog_Get("EVENT_HISTORY.COMMAND.CLEAR_ACK", EventHistory_CurrentLanguage()), _
         wsAck.Range("A1").Left + 4, wsAck.Range("A1").Top + 2, _
         154, 18, "ClearPlanningWarningAcknowledgements"
 

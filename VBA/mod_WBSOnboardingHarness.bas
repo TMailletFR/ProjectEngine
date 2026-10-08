@@ -28,6 +28,58 @@ Failed:
         "ERROR|" & CStr(Err.Number) & "|" & Err.Source & "|" & Err.Description
 End Function
 
+Public Function WBSOnboardingHarness_ValidateTutorialCatalog() As String
+
+    Dim sourceMap As Object
+    Dim columnKey As Variant
+    Dim localizedPair As Variant
+    Dim checkedCount As Long
+
+    On Error GoTo Failed
+
+    Set sourceMap = TextCatalogWBS_TutorialSourceMap()
+    If sourceMap.Count <> 37 Then
+        Err.Raise vbObjectError + 5580, _
+            "WBSOnboardingHarness_ValidateTutorialCatalog", _
+            "Expected 37 WBS tutorials; found " & CStr(sourceMap.Count) & "."
+    End If
+    If sourceMap.Exists(VTS_COL_CAL) Then
+        Err.Raise vbObjectError + 5581, _
+            "WBSOnboardingHarness_ValidateTutorialCatalog", _
+            "Cal must remain the only WBS column without a tutorial."
+    End If
+
+    For Each columnKey In sourceMap.Keys
+        localizedPair = sourceMap(CStr(columnKey))
+        If StrComp( _
+                CStr(localizedPair(0)), _
+                TextCatalogWBS_TutorialText(CStr(columnKey), TEXT_LANGUAGE_FR), _
+                vbBinaryCompare) <> 0 Then
+            Err.Raise vbObjectError + 5582, _
+                "WBSOnboardingHarness_ValidateTutorialCatalog", _
+                "French tutorial mismatch for " & CStr(columnKey) & "."
+        End If
+        If StrComp( _
+                CStr(localizedPair(1)), _
+                TextCatalogWBS_TutorialText(CStr(columnKey), TEXT_LANGUAGE_EN), _
+                vbBinaryCompare) <> 0 Then
+            Err.Raise vbObjectError + 5583, _
+                "WBSOnboardingHarness_ValidateTutorialCatalog", _
+                "English tutorial mismatch for " & CStr(columnKey) & "."
+        End If
+        checkedCount = checkedCount + 1
+    Next columnKey
+
+    WBSOnboardingHarness_ValidateTutorialCatalog = _
+        "PASS|tutorials=" & CStr(checkedCount) & "|cal=none"
+    Exit Function
+
+Failed:
+    WBSOnboardingHarness_ValidateTutorialCatalog = _
+        "ERROR|" & CStr(Err.Number) & "|" & Err.Source & "|" & Err.Description
+
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Renomme temporairement Task Name et retourne le diagnostic produit par le contrat WBS.
 ' EN: Temporarily renames Task Name and returns the diagnostic produced by the WBS contract.

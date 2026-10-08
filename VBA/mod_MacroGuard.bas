@@ -13,7 +13,7 @@ Option Explicit
 ' Protects macros from concurrent execution and carries abort requests.
 ' Must not bypass public contracts owned by other domains.
 '
-' CONTRATS / CONTRACTS : BeginMacroRun, EndMacroRun, RequestMacroAbort, IsMacroRunActive, IsMacroAbortRequested, AbortIfRequested, ShowAbortMessageOnce
+' CONTRATS / CONTRACTS : BeginMacroRun, EndMacroRun, RequestMacroAbortKey, IsMacroRunActive, IsMacroAbortRequested, AbortIfRequested, ShowAbortMessageOnce
 ' CALLBACKS EXTERNES / EXTERNAL CALLBACKS : Aucun / None
 '===============================================================================
 
@@ -59,7 +59,7 @@ End Sub
 ' EN: Records or applies the Request Macro Abort value in the current MacroGuard context.
 '------------------------------------------------------------------------------
 
-Public Sub RequestMacroAbort( _
+Private Sub MacroGuard_RequestResolvedAbort( _
     ByVal sourceName As String, _
     ByVal frText As String, _
     ByVal enText As String)
@@ -72,6 +72,21 @@ Public Sub RequestMacroAbort( _
     On Error Resume Next
     Application.EnableEvents = False
     On Error GoTo 0
+End Sub
+
+Public Sub RequestMacroAbortKey( _
+    ByVal sourceName As String, _
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Variant)
+
+    Dim resolvedArguments As Object
+
+    If IsObject(namedArguments) Then Set resolvedArguments = namedArguments
+
+    MacroGuard_RequestResolvedAbort sourceName, _
+        TextCatalog_Format(messageKey, TEXT_LANGUAGE_FR, resolvedArguments), _
+        TextCatalog_Format(messageKey, TEXT_LANGUAGE_EN, resolvedArguments)
+
 End Sub
 
 '------------------------------------------------------------------------------
@@ -101,10 +116,10 @@ Public Sub AbortIfRequested(Optional ByVal sourceName As String = "")
 
     If Trim$(sourceName) <> "" Then
         Err.Raise vbObjectError + 2901, sourceName, _
-            gMacroAbortMessageFR & vbCrLf & gMacroAbortMessageEN
+            BiMsg(gMacroAbortMessageFR, gMacroAbortMessageEN)
     Else
         Err.Raise vbObjectError + 2901, "MacroAbort", _
-            gMacroAbortMessageFR & vbCrLf & gMacroAbortMessageEN
+            BiMsg(gMacroAbortMessageFR, gMacroAbortMessageEN)
     End If
 
 End Sub
@@ -125,10 +140,7 @@ Public Sub ShowAbortMessageOnce()
     Set consoleMessages = New Collection
 
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        "FR:" & vbCrLf & _
-        gMacroAbortMessageFR & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        gMacroAbortMessageEN
+        BiMsg(gMacroAbortMessageFR, gMacroAbortMessageEN)
 
     CalcBridge_ShowPlanningConsole consoleMessages
 

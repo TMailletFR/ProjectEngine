@@ -25,18 +25,15 @@ Option Explicit
 Public Sub SCurve_AddConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String, _
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing, _
     Optional ByVal eventType As String = "", _
     Optional ByVal eventHash As String = "")
 
     If consoleMessages Is Nothing Then Exit Sub
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText, _
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments), _
         False, _
         eventType, _
         eventHash
@@ -52,21 +49,17 @@ Public Sub SCurve_AddGroupedMessage( _
     ByVal msgType As String, _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
+    ByVal messageKey As String, _
     Optional ByVal historyHandled As Boolean = False, _
-    Optional ByVal ackTokens As String = "")
+    Optional ByVal ackTokens As String = "", _
+    Optional ByVal memberReceipts As Object = Nothing)
 
     If consoleMessages Is Nothing Then Exit Sub
     If idsDict Is Nothing Then Exit Sub
     If idsDict.Count = 0 Then Exit Sub
 
-    CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        SCurveDiagnostics_BuildGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction), _
-        historyHandled, _
-        ackTokens:=ackTokens
+    CalcBridge_AddGroupedConsoleMessage consoleMessages, msgType, idsDict, idToWbs, _
+        messageKey, ackTokens, memberReceipts
 
 End Sub
 
@@ -78,18 +71,26 @@ Public Function SCurve_LogGroupedWarningEvents( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
     ByVal eventType As String, _
-    ByVal frMessage As String, _
-    ByVal enMessage As String, _
-    ByVal frDetails As String, _
-    ByVal enDetails As String) As String
+    ByVal messageKey As String, _
+    ByVal detailsKey As String, _
+    Optional ByVal receiptsById As Object = Nothing) As String
 
     Dim key As Variant
     Dim idVal As String
     Dim wbsVal As String
     Dim eventHash As String
     Dim tokens As String
+    Dim frMessage As String
+    Dim enMessage As String
+    Dim frDetails As String
+    Dim enDetails As String
+    Dim receipt As Object
 
     If idsDict Is Nothing Then Exit Function
+    frMessage = TextCatalog_Get(messageKey, TEXT_LANGUAGE_FR)
+    enMessage = TextCatalog_Get(messageKey, TEXT_LANGUAGE_EN)
+    frDetails = TextCatalog_Get(detailsKey, TEXT_LANGUAGE_FR)
+    enDetails = TextCatalog_Get(detailsKey, TEXT_LANGUAGE_EN)
 
     For Each key In idsDict.Keys
         idVal = Trim$(CStr(key))
@@ -99,16 +100,10 @@ Public Function SCurve_LogGroupedWarningEvents( _
                 If idToWbs.Exists(idVal) Then wbsVal = CStr(idToWbs(idVal))
             End If
 
-            eventHash = BuildPlanningEventHash( _
-                "WARNING", eventType, frMessage, enMessage, frDetails, enDetails, _
-                "Run_SCurve_Engine", _
-                "SCURVE", _
-                "tbl_SCURVE", _
-                idVal, _
-                wbsVal, _
-                vbNullString)
+            eventHash = BuildPlanningEventIdentityV2( _
+                "WARNING", eventType, "TASK", idVal)
 
-            LogPlanningEvent _
+            Set receipt = LogPlanningEvent( _
                 "WARNING", _
                 eventType, _
                 eventHash, _
@@ -122,7 +117,8 @@ Public Function SCurve_LogGroupedWarningEvents( _
                 idVal, _
                 wbsVal, _
                 vbNullString, _
-                False
+                False)
+            If Not receiptsById Is Nothing Then Set receiptsById(idVal) = receipt
 
             If tokens <> "" Then tokens = tokens & ";"
             tokens = tokens & BuildPlanningWarningAckToken(eventType, eventHash)
@@ -130,39 +126,6 @@ Public Function SCurve_LogGroupedWarningEvents( _
     Next key
 
     SCurve_LogGroupedWarningEvents = tokens
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Construit la map S Curve Diagnostics Build Grouped Message a partir des donnees fournies par l'appelant.
-' EN: Builds the S Curve Diagnostics Build Grouped Message map from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function SCurveDiagnostics_BuildGroupedMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String) As String
-
-    Dim idsLine As String
-    Dim wbsLine As String
-
-    idsLine = SCurveDiagnostics_BuildInlineList(idsDict, 20)
-    wbsLine = SCurveDiagnostics_BuildInlineWBSList(idsDict, idToWbs, 20)
-
-    SCurveDiagnostics_BuildGroupedMessage = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
 
 End Function
 

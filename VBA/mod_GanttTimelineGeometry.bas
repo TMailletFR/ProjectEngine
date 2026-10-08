@@ -89,7 +89,9 @@ End Function
 '------------------------------------------------------------------------------
 Private Function Gantt_FormatWeekLabel(ByVal anyDate As Date) As String
 
-    Gantt_FormatWeekLabel = IIf(Gantt_CurrentLanguage() = "FR", "S", "W") & Format$(WorksheetFunction.IsoWeekNum(anyDate), "00")
+    Gantt_FormatWeekLabel = _
+        TextCatalog_Get("GANTT.TIMELINE.WEEK_PREFIX", Gantt_CurrentLanguage()) & _
+        Format$(WorksheetFunction.IsoWeekNum(anyDate), "00")
 
 End Function
 
@@ -99,42 +101,20 @@ End Function
 '------------------------------------------------------------------------------
 Public Function Gantt_FormatMonthShort(ByVal anyDate As Date) As String
 
-    Static frMonths(1 To 12) As String
-    Static enMonths(1 To 12) As String
-
-    If frMonths(1) = "" Then
-        frMonths(1) = "jan"
-        frMonths(2) = "fév"
-        frMonths(3) = "mar"
-        frMonths(4) = "avr"
-        frMonths(5) = "mai"
-        frMonths(6) = "juin"
-        frMonths(7) = "juil"
-        frMonths(8) = "août"
-        frMonths(9) = "sep"
-        frMonths(10) = "oct"
-        frMonths(11) = "nov"
-        frMonths(12) = "déc"
-
-        enMonths(1) = "Jan"
-        enMonths(2) = "Feb"
-        enMonths(3) = "Mar"
-        enMonths(4) = "Apr"
-        enMonths(5) = "May"
-        enMonths(6) = "Jun"
-        enMonths(7) = "Jul"
-        enMonths(8) = "Aug"
-        enMonths(9) = "Sep"
-        enMonths(10) = "Oct"
-        enMonths(11) = "Nov"
-        enMonths(12) = "Dec"
-    End If
-
-    If Gantt_CurrentLanguage() = "FR" Then
-        Gantt_FormatMonthShort = frMonths(Month(anyDate))
-    Else
-        Gantt_FormatMonthShort = enMonths(Month(anyDate))
-    End If
+    Select Case Month(anyDate)
+        Case 1: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M01", Gantt_CurrentLanguage())
+        Case 2: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M02", Gantt_CurrentLanguage())
+        Case 3: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M03", Gantt_CurrentLanguage())
+        Case 4: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M04", Gantt_CurrentLanguage())
+        Case 5: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M05", Gantt_CurrentLanguage())
+        Case 6: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M06", Gantt_CurrentLanguage())
+        Case 7: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M07", Gantt_CurrentLanguage())
+        Case 8: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M08", Gantt_CurrentLanguage())
+        Case 9: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M09", Gantt_CurrentLanguage())
+        Case 10: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M10", Gantt_CurrentLanguage())
+        Case 11: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M11", Gantt_CurrentLanguage())
+        Case 12: Gantt_FormatMonthShort = TextCatalog_Get("GANTT.TIMELINE.MONTH.M12", Gantt_CurrentLanguage())
+    End Select
 
 End Function
 

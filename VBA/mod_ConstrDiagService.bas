@@ -26,40 +26,48 @@ Public Function BuildConstraintValidationMessage( _
     ByRef arrConstraints As Variant, _
     ByVal rowIdx As Long, _
     ByVal mapConstraints As Object, _
-    ByVal frPrefix As String, _
-    ByVal enPrefix As String, _
-    Optional ByVal frExplanation As String = "", _
-    Optional ByVal enExplanation As String = "") As String
+    ByVal messageKey As String, _
+    Optional ByVal explanationKey As String = "") As String
 
     Dim idVal As String
     Dim wbsVal As String
     Dim taskName As String
     Dim frText As String
     Dim enText As String
+    Dim frPrefix As String
+    Dim enPrefix As String
+    Dim frExplanation As String
+    Dim enExplanation As String
 
     idVal = Trim$(CStr(arrConstraints(rowIdx, mapConstraints(VTS_COL_ID))))
     wbsVal = Trim$(CStr(arrConstraints(rowIdx, mapConstraints(VTS_COL_WBS))))
     taskName = Trim$(CStr(arrConstraints(rowIdx, mapConstraints(VTS_COL_TASK_NAME))))
+    frPrefix = TextCatalog_Get(messageKey, TEXT_LANGUAGE_FR)
+    enPrefix = TextCatalog_Get(messageKey, TEXT_LANGUAGE_EN)
+    If Trim$(explanationKey) <> "" Then
+        frExplanation = TextCatalog_Get(explanationKey, TEXT_LANGUAGE_FR)
+        enExplanation = TextCatalog_Get(explanationKey, TEXT_LANGUAGE_EN)
+    End If
 
-    frText = "FR:" & vbCrLf & frPrefix
+    frText = frPrefix
     If Trim$(frExplanation) <> "" Then
         frText = frText & vbCrLf & vbCrLf & "-> " & frExplanation
     End If
-    frText = frText & vbCrLf & vbCrLf & _
-        "ID : " & idVal & vbCrLf & _
-        "WBS : " & wbsVal & vbCrLf & _
-        "Task : " & taskName
+    frText = frText & vbCrLf & vbCrLf & TextCatalog_Format( _
+        "DIAG.COMMON.CONTEXT", _
+        TEXT_LANGUAGE_FR, _
+        TextCatalog_Arguments("Id", idVal, "Wbs", wbsVal, "Task", taskName))
 
-    enText = "EN:" & vbCrLf & enPrefix
+    enText = enPrefix
     If Trim$(enExplanation) <> "" Then
         enText = enText & vbCrLf & vbCrLf & "-> " & enExplanation
     End If
-    enText = enText & vbCrLf & vbCrLf & _
-        "ID: " & idVal & vbCrLf & _
-        "WBS: " & wbsVal & vbCrLf & _
-        "Task: " & taskName
+    enText = enText & vbCrLf & vbCrLf & TextCatalog_Format( _
+        "DIAG.COMMON.CONTEXT", _
+        TEXT_LANGUAGE_EN, _
+        TextCatalog_Arguments("Id", idVal, "Wbs", wbsVal, "Task", taskName))
 
-    BuildConstraintValidationMessage = frText & vbCrLf & vbCrLf & enText
+    BuildConstraintValidationMessage = BiMsg(frText, enText)
 
 End Function
 
@@ -72,11 +80,13 @@ Public Sub AddConstraintWarning( _
     ByVal messageText As String, _
     Optional ByVal historyHandled As Boolean = False, _
     Optional ByVal eventType As String = "", _
-    Optional ByVal eventHash As String = "")
+    Optional ByVal eventHash As String = "", _
+    Optional ByVal historyReceipt As Object = Nothing)
 
     If consoleMessages Is Nothing Then Exit Sub
 
-    CalcBridge_AddConsoleMessage consoleMessages, "WARNING", messageText, historyHandled, eventType, eventHash
+    CalcBridge_AddConsoleMessage consoleMessages, "WARNING", messageText, historyHandled, eventType, eventHash, _
+        historyReceipt:=historyReceipt
 
 End Sub
 

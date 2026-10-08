@@ -88,8 +88,9 @@ Public Sub VisibleHeaders_ValidateTable( _
     detectedLanguage = VisibleHeaders_DetectTableLanguage(tableObject, tableKey)
     If detectedLanguage <> VisibleHeaders_NormalizeLanguage(expectedLanguage) Then
         Err.Raise VHL_ERROR_BASE + 1, "VisibleHeaders_ValidateTable", _
-            "Table '" & tableKey & "' is physically '" & detectedLanguage & _
-            "' but expected '" & VisibleHeaders_NormalizeLanguage(expectedLanguage) & "'."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LANGUAGE_MISMATCH", _
+                TextCatalog_Arguments("Table", tableKey, "Actual", detectedLanguage, "Expected", VisibleHeaders_NormalizeLanguage(expectedLanguage)), _
+                TextCatalog_Arguments("Table", tableKey, "Actual", detectedLanguage, "Expected", VisibleHeaders_NormalizeLanguage(expectedLanguage)))
     End If
 End Sub
 
@@ -136,17 +137,18 @@ Private Sub VisibleHeaders_PreflightTables( _
         Set tableObject = VisibleHeaders_FindTable(CStr(tableKey))
         If tableObject.Parent.ProtectContents Then
             Err.Raise VHL_ERROR_BASE + 15, "VisibleHeaders_PreflightTables", _
-                "Worksheet '" & tableObject.Parent.Name & "' is protected; table '" & _
-                CStr(tableKey) & "' headers cannot be renamed."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.PROTECTED_SHEET", _
+                    TextCatalog_Arguments("Sheet", tableObject.Parent.Name, "Table", CStr(tableKey)), _
+                    TextCatalog_Arguments("Sheet", tableObject.Parent.Name, "Table", CStr(tableKey)))
         End If
         detectedLanguage = VisibleHeaders_DetectTableLanguage(tableObject, CStr(tableKey))
         If requirePersistedMatch Then
             persistedLanguage = SchemaPhysicalHeaderLanguageForTable(CStr(tableKey))
             If detectedLanguage <> persistedLanguage Then
                 Err.Raise VHL_ERROR_BASE + 2, "VisibleHeaders_PreflightTables", _
-                    "Physical header language mismatch for table '" & CStr(tableKey) & _
-                    "'. Persisted owner language is '" & persistedLanguage & _
-                    "' but headers are '" & detectedLanguage & "'."
+                    PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.PERSISTED_LANGUAGE_MISMATCH", _
+                        TextCatalog_Arguments("Table", CStr(tableKey), "Persisted", persistedLanguage, "Actual", detectedLanguage), _
+                        TextCatalog_Arguments("Table", CStr(tableKey), "Persisted", persistedLanguage, "Actual", detectedLanguage))
             End If
         End If
     Next tableKey
@@ -253,8 +255,9 @@ Private Function VisibleHeaders_CaptureTablesSnapshot(ByVal tables As Variant) A
         keys = SchemaColumnKeys(CStr(tableKey))
         If tableObject.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
             Err.Raise VHL_ERROR_BASE + 3, "VisibleHeaders_CaptureTablesSnapshot", _
-                "Table '" & CStr(tableKey) & "' has " & CStr(tableObject.ListColumns.Count) & _
-                " columns; expected " & CStr(UBound(keys) - LBound(keys) + 1) & "."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.COLUMN_COUNT", _
+                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
+                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
         End If
 
         Set tableSnapshot = CreateObject("Scripting.Dictionary")
@@ -291,8 +294,9 @@ Private Function VisibleHeaders_DetectTableLanguage( _
     keys = SchemaColumnKeys(tableKey)
     If tableObject.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
         Err.Raise VHL_ERROR_BASE + 4, "VisibleHeaders_DetectTableLanguage", _
-            "Table '" & tableKey & "' has " & CStr(tableObject.ListColumns.Count) & _
-            " columns; expected " & CStr(UBound(keys) - LBound(keys) + 1) & "."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.COLUMN_COUNT", _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
     End If
 
     Set seenTitles = CreateObject("Scripting.Dictionary")
@@ -304,7 +308,9 @@ Private Function VisibleHeaders_DetectTableLanguage( _
         physicalTitle = tableObject.ListColumns(i + 1).Name
         If seenTitles.Exists(physicalTitle) Then
             Err.Raise VHL_ERROR_BASE + 5, "VisibleHeaders_DetectTableLanguage", _
-                "Duplicate physical header '" & physicalTitle & "' in table '" & tableKey & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.DUPLICATE_PHYSICAL_HEADER", _
+                    TextCatalog_Arguments("Header", physicalTitle, "Table", tableKey), _
+                    TextCatalog_Arguments("Header", physicalTitle, "Table", tableKey))
         End If
         seenTitles.Add physicalTitle, True
 
@@ -319,13 +325,15 @@ Private Function VisibleHeaders_DetectTableLanguage( _
             enTitle = VisibleHeaders_ExpectedTitleList(tableKey, VTS_LANG_EN)
             frTitle = VisibleHeaders_ExpectedTitleList(tableKey, VTS_LANG_FR)
             Err.Raise VHL_ERROR_BASE + 6, "VisibleHeaders_DetectTableLanguage", _
-                "Unknown physical header in table '" & tableKey & "' at column " & _
-                CStr(i + 1) & ". Observed '" & physicalTitle & "'. Expected one of EN {" & _
-                enTitle & "} or FR {" & frTitle & "}."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNKNOWN_PHYSICAL_HEADER", _
+                    TextCatalog_Arguments("Table", tableKey, "Column", CStr(i + 1), "Observed", physicalTitle, "English", enTitle, "French", frTitle), _
+                    TextCatalog_Arguments("Table", tableKey, "Column", CStr(i + 1), "Observed", physicalTitle, "English", enTitle, "French", frTitle))
         End If
         If seenKeys.Exists(matchedKey) Then
             Err.Raise VHL_ERROR_BASE + 12, "VisibleHeaders_DetectTableLanguage", _
-                "Duplicate schema column key '" & matchedKey & "' in table '" & tableKey & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.DUPLICATE_SCHEMA_KEY", _
+                    TextCatalog_Arguments("Key", matchedKey, "Table", tableKey), _
+                    TextCatalog_Arguments("Key", matchedKey, "Table", tableKey))
         End If
         seenKeys.Add matchedKey, True
 
@@ -343,7 +351,9 @@ Private Function VisibleHeaders_DetectTableLanguage( _
     For i = LBound(keys) To UBound(keys)
         If Not seenKeys.Exists(CStr(keys(i))) Then
             Err.Raise VHL_ERROR_BASE + 13, "VisibleHeaders_DetectTableLanguage", _
-                "Missing schema column key '" & CStr(keys(i)) & "' in table '" & tableKey & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.MISSING_SCHEMA_KEY", _
+                    TextCatalog_Arguments("Key", CStr(keys(i)), "Table", tableKey), _
+                    TextCatalog_Arguments("Key", CStr(keys(i)), "Table", tableKey))
         End If
     Next i
 
@@ -353,7 +363,8 @@ Private Function VisibleHeaders_DetectTableLanguage( _
 
 MixedState:
     Err.Raise VHL_ERROR_BASE + 7, "VisibleHeaders_DetectTableLanguage", _
-        "Mixed EN/FR physical headers in table '" & tableKey & "'."
+        PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.MIXED_LANGUAGE", _
+            TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
 End Function
 
 Private Function VisibleHeaders_PhysicalColumnKeys( _
@@ -383,8 +394,9 @@ Private Function VisibleHeaders_PhysicalColumnKeys( _
         End If
         If (matchedLanguage <> languageCode And matchedLanguage <> "BOTH") Or Len(physicalKeys(i)) = 0 Then
             Err.Raise VHL_ERROR_BASE + 14, "VisibleHeaders_PhysicalColumnKeys", _
-                "Unable to map physical header '" & physicalTitle & _
-                "' in table '" & tableKey & "' to language '" & languageCode & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNMAPPED_HEADER", _
+                    TextCatalog_Arguments("Header", physicalTitle, "Table", tableKey, "Language", languageCode), _
+                    TextCatalog_Arguments("Header", physicalTitle, "Table", tableKey, "Language", languageCode))
         End If
     Next i
     VisibleHeaders_PhysicalColumnKeys = physicalKeys
@@ -477,7 +489,8 @@ Private Function VisibleHeaders_FindTable(ByVal tableKey As String) As ListObjec
     Next worksheetObject
 
     Err.Raise VHL_ERROR_BASE + 8, "VisibleHeaders_FindTable", _
-        "Visible table '" & tableKey & "' was not found."
+        PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.TABLE_NOT_FOUND", _
+            TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
 End Function
 
 Private Function VisibleHeaders_TablesForOwner(ByVal ownerKey As String) As Variant
@@ -494,7 +507,8 @@ Private Function VisibleHeaders_TablesForOwner(ByVal ownerKey As String) As Vari
             VisibleHeaders_TablesForOwner = Array()
         Case Else
             Err.Raise VHL_ERROR_BASE + 9, "VisibleHeaders_TablesForOwner", _
-                "Unknown language owner '" & ownerKey & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNKNOWN_OWNER", _
+                    TextCatalog_Arguments("Owner", ownerKey), TextCatalog_Arguments("Owner", ownerKey))
     End Select
 End Function
 
@@ -512,7 +526,8 @@ Private Function VisibleHeaders_NormalizeLanguage(ByVal languageCode As String) 
             VisibleHeaders_NormalizeLanguage = VTS_LANG_EN
         Case Else
             Err.Raise VHL_ERROR_BASE + 10, "VisibleHeaders_NormalizeLanguage", _
-                "Unsupported target language '" & languageCode & "'. Expected EN or FR."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNSUPPORTED_LANGUAGE", _
+                    TextCatalog_Arguments("Language", languageCode), TextCatalog_Arguments("Language", languageCode))
     End Select
 End Function
 
@@ -536,8 +551,9 @@ Private Sub VisibleHeaders_AssertNoTemporaryResiduals()
                 For Each columnObject In tableObject.ListColumns
                     If Left$(columnObject.Name, Len(TMP_PREFIX)) = TMP_PREFIX Then
                         Err.Raise VHL_ERROR_BASE + 11, "VisibleHeaders_AssertNoTemporaryResiduals", _
-                            "Temporary header residual '" & columnObject.Name & _
-                            "' remains in table '" & tableObject.Name & "'."
+                            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.TEMPORARY_RESIDUAL", _
+                                TextCatalog_Arguments("Header", columnObject.Name, "Table", tableObject.Name), _
+                                TextCatalog_Arguments("Header", columnObject.Name, "Table", tableObject.Name))
                     End If
                 Next columnObject
             End If
@@ -616,29 +632,32 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
     If tbl.HeaderRowRange.Row = migratedHeaderRow Then Exit Sub
     If tbl.HeaderRowRange.Row <> legacyHeaderRow Then
         Err.Raise VHL_ERROR_BASE + 20, "VisibleHeaders_PreflightLegacyRow", _
-            "Unexpected physical header row for table '" & tableKey & "'. Found " & _
-            CStr(tbl.HeaderRowRange.Row) & ", expected " & CStr(legacyHeaderRow) & _
-            " before migration or " & CStr(migratedHeaderRow) & " after migration."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNEXPECTED_HEADER_ROW", _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.Row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)), _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.Row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)))
     End If
     If legacyRow <> tbl.HeaderRowRange.Row - 1 Then
         Err.Raise VHL_ERROR_BASE + 21, "VisibleHeaders_PreflightLegacyRow", _
-            "The candidate legacy row is not immediately above table '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_ROW_POSITION", _
+                TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
     keys = SchemaColumnKeys(tableKey)
     If tbl.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
         Err.Raise VHL_ERROR_BASE + 22, "VisibleHeaders_PreflightLegacyRow", _
-            "Unexpected column count in table '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_COLUMN_COUNT", _
+                TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
 
     Set candidate = ws.Cells(legacyRow, tbl.Range.Column).Resize(1, tbl.ListColumns.Count)
     If CBool(candidate.MergeCells) Then
         Err.Raise VHL_ERROR_BASE + 23, "VisibleHeaders_PreflightLegacyRow", _
-            "Merged cells exist in the candidate legacy row for table '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_MERGED_CELLS", _
+                TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
     If Application.WorksheetFunction.CountA(candidate) <> tbl.ListColumns.Count Then
         Err.Raise VHL_ERROR_BASE + 24, "VisibleHeaders_PreflightLegacyRow", _
-            "The candidate legacy row for table '" & tableKey & _
-            "' does not contain exactly one label per visible column."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_LABEL_COUNT", _
+                TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
 
     usedLastColumn = ws.UsedRange.Column + ws.UsedRange.Columns.Count - 1
@@ -646,7 +665,9 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
         If Application.WorksheetFunction.CountA( _
                 ws.Cells(legacyRow, 1).Resize(1, tbl.Range.Column - 1)) > 0 Then
             Err.Raise VHL_ERROR_BASE + 25, "VisibleHeaders_PreflightLegacyRow", _
-                "Unexpected data exists before the legacy labels on sheet '" & worksheetName & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_OUTSIDE_DATA", _
+                    TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.BEFORE", TEXT_LANGUAGE_EN), "Sheet", worksheetName), _
+                    TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.BEFORE", TEXT_LANGUAGE_FR), "Sheet", worksheetName))
         End If
     End If
     If usedLastColumn > tbl.Range.Column + tbl.ListColumns.Count - 1 Then
@@ -654,7 +675,9 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
                 tbl.Range.Column + tbl.ListColumns.Count).Resize(1, _
                 usedLastColumn - tbl.Range.Column - tbl.ListColumns.Count + 1)) > 0 Then
             Err.Raise VHL_ERROR_BASE + 26, "VisibleHeaders_PreflightLegacyRow", _
-                "Unexpected data exists after the legacy labels on sheet '" & worksheetName & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_OUTSIDE_DATA", _
+                    TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.AFTER", TEXT_LANGUAGE_EN), "Sheet", worksheetName), _
+                    TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.AFTER", TEXT_LANGUAGE_FR), "Sheet", worksheetName))
         End If
     End If
 
@@ -662,8 +685,9 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
         cellText = Trim$(CStr(candidate.Cells(1, i).Value2))
         If Not VisibleHeaders_IsKnownLocalizedTitle(tableKey, cellText) Then
             Err.Raise VHL_ERROR_BASE + 27, "VisibleHeaders_PreflightLegacyRow", _
-                "Unknown content '" & cellText & "' in the candidate legacy row for table '" & _
-                tableKey & "' at column " & CStr(i) & "."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_UNKNOWN_CONTENT", _
+                    TextCatalog_Arguments("Content", cellText, "Table", tableKey, "Column", CStr(i)), _
+                    TextCatalog_Arguments("Content", cellText, "Table", tableKey, "Column", CStr(i)))
         End If
     Next i
 
@@ -671,8 +695,9 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
         If shapeObject.TopLeftCell.Row <= legacyRow And _
            shapeObject.BottomRightCell.Row >= legacyRow Then
             Err.Raise VHL_ERROR_BASE + 28, "VisibleHeaders_PreflightLegacyRow", _
-                "Shape '" & shapeObject.Name & "' intersects the candidate legacy row on sheet '" & _
-                worksheetName & "'."
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_SHAPE_INTERSECTION", _
+                    TextCatalog_Arguments("Shape", shapeObject.Name, "Sheet", worksheetName), _
+                    TextCatalog_Arguments("Shape", shapeObject.Name, "Sheet", worksheetName))
         End If
     Next shapeObject
 End Sub
@@ -705,7 +730,8 @@ Private Sub VisibleHeaders_DeleteLegacyRowIfPresent( _
        tbl.ListRows.Count <> rowCount Or _
        VisibleHeaders_HeaderText(tbl) <> headerText Then
         Err.Raise VHL_ERROR_BASE + 29, "VisibleHeaders_DeleteLegacyRowIfPresent", _
-            "Post-delete structure validation failed for table '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.POST_DELETE_VALIDATION", _
+                TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
 End Sub
 

@@ -52,7 +52,7 @@ Public Function IsCriticalPathMultiNetworkEnabled() As Boolean
     v = UCase$(Trim$(CStr(ws.Range(CP_MODE_STATE_CELL).value)))
     v = Replace$(v, "-", " ")
     v = Replace$(v, "_", " ")
-    v = Replace$(v, "É", "E")
+    v = Replace$(v, "Ã‰", "E")
 
     Do While InStr(1, v, "  ", vbBinaryCompare) > 0
         v = Replace$(v, "  ", " ")
@@ -139,9 +139,9 @@ Public Sub SetCriticalPathModeVisualState(ByVal multiNetworkEnabled As Boolean)
     Set ws = ThisWorkbook.Worksheets(CP_MODE_WS)
 
     'AD/AE restent le backend/fallback.
-    'Le texte cellule est masqué pour éviter les doublons derrière les shapes.
+    'Le texte cellule est masquÃ© pour Ã©viter les doublons derriÃ¨re les shapes.
     With ws.Range(CP_MODE_LABEL_CELL)
-        .value = "Multi Critical Path"
+        .value = TextCatalog_Get("GANTT.CONTROL.MULTI_CRITICAL_PATH", Gantt_CurrentLanguage())
         .NumberFormat = "@"
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
@@ -200,7 +200,7 @@ Public Sub Refresh_CriticalPathMode_Toggle_Visual()
 
     If Not shpLabel Is Nothing Then
         With shpLabel
-            .TextFrame2.TextRange.Text = "Multi Critical Path"
+            .TextFrame2.TextRange.Text = TextCatalog_Get("GANTT.CONTROL.MULTI_CRITICAL_PATH", Gantt_CurrentLanguage())
             .TextFrame2.TextRange.Font.Size = 9.5
             .TextFrame2.TextRange.Font.Bold = msoTrue
             .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
@@ -312,7 +312,7 @@ Private Sub Ensure_CriticalPathMode_Shapes()
         .TextFrame2.MarginRight = 0
         .TextFrame2.MarginTop = 0
         .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = "Multi Critical Path"
+        .TextFrame2.TextRange.Text = TextCatalog_Get("GANTT.CONTROL.MULTI_CRITICAL_PATH", Gantt_CurrentLanguage())
         .TextFrame2.TextRange.Font.Size = 9.5
         .TextFrame2.TextRange.Font.Bold = msoTrue
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
@@ -366,7 +366,7 @@ End Sub
 
 Private Sub ForceFullRecalcAfterCriticalPathModeChange()
 
-    'On invalide le snapshot incrémental.
+    'On invalide le snapshot incrÃ©mental.
     'Get_Changed_TaskIds verra Run Status <> OK et forcera un full recalcul.
 
     SetCalcStateRunStatusDirty
@@ -534,7 +534,7 @@ Private Sub Toggle_CriticalPathMode_Core(ByVal refreshGanttAfterCalc As Boolean)
 
     If refreshGanttAfterCalc Then
         If Not CommitGanttUpdate(GANTT_DATA_SOURCE_NORMAL, GANTT_UPDATE_SCOPE_INCREMENTAL, GANTT_RENDER_INTENT_SHOW, "Toggle_CriticalPathMode") Then
-            Err.Raise 5, "Toggle_CriticalPathMode_Core", "Gantt render did not reach READY state after Critical Path mode change."
+            Err.Raise 5, "Toggle_CriticalPathMode_Core", PlanningMessageText_Format("GANTT.ERROR.CRITICAL_PATH_NOT_READY")
         End If
     End If
 
@@ -547,10 +547,8 @@ ErrHandler:
     Application.EnableEvents = oldEvents
     Application.ScreenUpdating = oldScreenUpdating
 
-    CalcBridge_ShowSingleConsoleMessage _
-        "STOP", _
-        "Erreur dans Toggle_CriticalPathMode : " & Err.Description, _
-        "Error in Toggle_CriticalPathMode: " & Err.Description
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "Toggle_CriticalPathMode", "Details", Err.Description)
 
 End Sub
 
@@ -572,7 +570,7 @@ Public Sub Cleanup_CriticalPathMode_Gantt_Legacy_Shapes()
 
     'Ne supprime pas les 3 shapes actuelles :
     'CP_GANTT_LABEL_SHAPE / CP_GANTT_BG_SHAPE / CP_GANTT_KNOB_SHAPE.
-    'Elles sont maintenant repositionnées proprement par BuildFixedHeaderToggles.
+    'Elles sont maintenant repositionnÃ©es proprement par BuildFixedHeaderToggles.
 
 SafeExit:
 End Sub

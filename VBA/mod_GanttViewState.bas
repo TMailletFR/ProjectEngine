@@ -285,7 +285,7 @@ End Function
 '------------------------------------------------------------------------------
 Public Function GetGanttViewMode() As String
 
-    EnsureGanttViewInitialized
+    If Not gGanttUiStateBootstrapped Or Len(gGanttViewMode) = 0 Then EnsureGanttViewInitialized
     GetGanttViewMode = gGanttViewMode
 
 End Function
@@ -295,7 +295,7 @@ End Function
 ' EN: Returns a state value or reference used by GANTT rendering.
 '------------------------------------------------------------------------------
 Public Function GetGanttShowCriticalPath() As Boolean
-    EnsureGanttViewInitialized
+    If Not gGanttUiStateBootstrapped Or Len(gAnalyticsPathMode) = 0 Then EnsureGanttViewInitialized
     GetGanttShowCriticalPath = (gAnalyticsPathMode = GANTT_ANALYTICS_PATH_CP)
 End Function
 
@@ -316,7 +316,7 @@ End Sub
 '------------------------------------------------------------------------------
 Public Function GetGanttTimelineScaleMode() As String
 
-    EnsureGanttViewInitialized
+    If Not gGanttUiStateBootstrapped Or Len(gTimelineScaleMode) = 0 Then EnsureGanttViewInitialized
     GetGanttTimelineScaleMode = gTimelineScaleMode
 
 End Function
@@ -356,7 +356,7 @@ End Sub
 '------------------------------------------------------------------------------
 
 Public Function GetGanttShowConstraints() As Boolean
-    EnsureGanttViewInitialized
+    If Not gGanttUiStateBootstrapped Or Not gShowConstraintsInitialized Then EnsureGanttViewInitialized
     GetGanttShowConstraints = gShowConstraints
 End Function
 
@@ -366,7 +366,7 @@ End Function
 '------------------------------------------------------------------------------
 
 Public Function GetGanttAnalyticsPathMode() As String
-    EnsureGanttViewInitialized
+    If Not gGanttUiStateBootstrapped Or Len(gAnalyticsPathMode) = 0 Then EnsureGanttViewInitialized
     GetGanttAnalyticsPathMode = gAnalyticsPathMode
 End Function
 
@@ -445,7 +445,7 @@ Public Sub Toggle_Gantt_Constraints()
             GANTT_UPDATE_SCOPE_INCREMENTAL, _
             GANTT_RENDER_INTENT_OFFSCREEN, _
             "Toggle_Gantt_ConstraintsGeometryInvalidation") Then
-            Err.Raise 5, "Toggle_Gantt_Constraints", "Gantt geometry reconciliation failed."
+            Err.Raise 5, "Toggle_Gantt_Constraints", PlanningMessageText_Format("GANTT.ERROR.GEOMETRY_RECONCILIATION")
         End If
         GanttUiControls_RefreshConstraintVisual ws
         Exit Sub
@@ -454,7 +454,7 @@ Public Sub Toggle_Gantt_Constraints()
     GanttUiControls_RefreshConstraintVisual ws
     If gShowConstraints Then
         If Not GanttConstraint_RefreshCurrentOverlay(ws) Then
-            Err.Raise 5, "Toggle_Gantt_Constraints", "Constraint overlay refresh failed."
+            Err.Raise 5, "Toggle_Gantt_Constraints", PlanningMessageText_Format("GANTT.ERROR.CONSTRAINT_OVERLAY")
         End If
     Else
         GanttConstraint_ClearCurrentOverlay ws
@@ -536,7 +536,12 @@ Private Sub SetShapeVisibilityIfExists( _
     If Not shapeIndex.Exists(shapeName) Then Exit Sub
 
     Set shp = shapeIndex(shapeName)
-    shp.Visible = IIf(isVisible, msoTrue, msoFalse)
+    If shp.Visible <> IIf(isVisible, msoTrue, msoFalse) Then
+        shp.Visible = IIf(isVisible, msoTrue, msoFalse)
+        Profiler_RecordCounter "GanttVisibilityWrites", 1
+    Else
+        Profiler_RecordCounter "GanttVisibilityWritesSkipped", 1
+    End If
 
 End Sub
 
@@ -619,6 +624,9 @@ Private Sub ApplyCurrentGanttView( _
     Dim shp As Shape
     Dim oldScreenUpdating As Boolean
     Dim shapeIndex As Object
+    Dim summaryFlags As Variant
+    Dim summaryColumn As Long
+    Dim tblWBS As ListObject
 
     Set perfScope = Profiler_BeginScope("ApplyCurrentGanttView", "Gantt UI")
 
@@ -663,9 +671,17 @@ Private Sub ApplyCurrentGanttView( _
         GoTo SafeExit
     End If
 
+    Set tblWBS = ThisWorkbook.Worksheets(WBS_SHEET).ListObjects(WBS_TABLE)
+    If tblWBS.DataBodyRange Is Nothing Then GoTo SafeExit
+    summaryColumn = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_S).Index
+    summaryFlags = tblWBS.ListColumns(summaryColumn).DataBodyRange.Value2
     Set shapeIndex = BuildGanttShapeIndex(ws)
     For r = FIRST_TASK_ROW To lastRow
-        showRow = ShouldShowGanttRow(ws, r)
+        If IsArray(summaryFlags) Then
+            showRow = (UCase$(Trim$(CStr(summaryFlags(r - FIRST_TASK_ROW + 1, 1)))) = "Y")
+        Else
+            showRow = (UCase$(Trim$(CStr(summaryFlags))) = "Y")
+        End If
         ws.rows(r).Hidden = Not showRow
     Next r
 
@@ -740,30 +756,6 @@ End Sub
 ' FR: Retourne une decision de rendu ou d'etat utilisee par le workflow GANTT.
 ' EN: Returns a rendering or state decision used by the GANTT workflow.
 '------------------------------------------------------------------------------
-Private Function ShouldShowGanttRow(ByVal ws As Worksheet, ByVal rowNum As Long) As Boolean
-
-    Dim tblWBS As ListObject
-    Dim dataRow As Long
-    Dim summaryDisplayVal As String
-
-
-    dataRow = rowNum - FIRST_TASK_ROW + 1
-    If dataRow < 1 Then Exit Function
-
-    On Error GoTo SafeExit
-
-    Set tblWBS = ThisWorkbook.Worksheets(WBS_SHEET).ListObjects(WBS_TABLE)
-    If tblWBS.DataBodyRange Is Nothing Then Exit Function
-    If dataRow > tblWBS.ListRows.Count Then Exit Function
-
-    summaryDisplayVal = UCase$(Trim$(CStr(tblWBS.DataBodyRange.cells(dataRow, SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_S).Index).value)))
-    ShouldShowGanttRow = (summaryDisplayVal = "Y")
-
-SafeExit:
-
-End Function
-
-
 '------------------------------------------------------------------------------
 ' FR: Actualise Apply Gantt Ui State sans modifier les regles metier qui produisent les donnees.
 ' EN: Refreshes Apply Gantt Ui State without changing the business rules that produce the data.
@@ -785,6 +777,43 @@ Public Sub ApplyGanttUiState( _
     If rebuildHeaderControls Then ApplyCurrentGanttView ws, freshFullRender
 
 End Sub
+
+Public Function GanttViewState_IsSummaryProjectionCurrent(ByVal ws As Worksheet) As Boolean
+    Dim tblWBS As ListObject
+    Dim summaryFlags As Variant
+    Dim summaryColumn As Long
+    Dim shapeIndex As Object
+    Dim shapeName As Variant
+    Dim suffix As String
+    Dim r As Long
+    Dim expectedVisible As Boolean
+
+    On Error GoTo Failed
+    If ws Is Nothing Then Exit Function
+    Set tblWBS = ThisWorkbook.Worksheets(WBS_SHEET).ListObjects(WBS_TABLE)
+    If tblWBS.DataBodyRange Is Nothing Then Exit Function
+    summaryColumn = SchemaListColumn(tblWBS, VTS_TABLE_WBS, VTS_COL_S).Index
+    summaryFlags = tblWBS.ListColumns(summaryColumn).DataBodyRange.Value2
+    Set shapeIndex = BuildGanttShapeIndex(ws)
+    For r = 1 To tblWBS.ListRows.Count
+        If IsArray(summaryFlags) Then
+            expectedVisible = (UCase$(Trim$(CStr(summaryFlags(r, 1)))) = "Y")
+        Else
+            expectedVisible = (UCase$(Trim$(CStr(summaryFlags))) = "Y")
+        End If
+        If CBool(ws.Rows(FIRST_TASK_ROW + r - 1).Hidden) = expectedVisible Then Exit Function
+        suffix = CStr(r)
+        For Each shapeName In Array("TASK_" & suffix, "TASK_" & suffix & "_P", _
+            "MS_" & suffix, "SUM_" & suffix & "_H", "SUM_" & suffix & "_L", _
+            "SUM_" & suffix & "_R", "SUM_" & suffix & "_TXT")
+            If shapeIndex.Exists(CStr(shapeName)) Then
+                If CBool(shapeIndex(CStr(shapeName)).Visible = msoTrue) <> expectedVisible Then Exit Function
+            End If
+        Next shapeName
+    Next r
+    GanttViewState_IsSummaryProjectionCurrent = True
+Failed:
+End Function
 '------------------------------------------------------------------------------
 ' FR: Met en forme ou met a jour un element UI/shape du GANTT.
 ' EN: Formats or updates a GANTT UI/shape element.

@@ -750,6 +750,17 @@ Private Sub GanttDrag_WatchTick()
         Exit Sub
     End If
 
+    ' A resized left panel moves selected shapes without a task drag.
+    If GanttDrag_LayoutStateChanged(ws) Then
+        gLastDebugStatus = "LAYOUT_RECONCILED"
+        If gMetricsEnabled Then
+            gMetricDeltaTicks = gMetricDeltaTicks + 1
+            gMetricLayoutReconciles = gMetricLayoutReconciles + 1
+        End If
+        GanttDrag_RebuildWatchMaps
+        Exit Sub
+    End If
+
     If gMetricsEnabled Then
         gMetricDeltaTicks = gMetricDeltaTicks + 1
         gMetricActionTicks = gMetricActionTicks + 1
@@ -1617,24 +1628,21 @@ Private Sub GanttDrag_AddUnsupportedModeMessage( _
     ByVal dragInfo As Object, _
     ByVal simulationMode As String)
 
-    Dim taskLabel As String
+    Dim taskLabelFr As String
+    Dim taskLabelEn As String
     Dim modeLabel As String
 
     If consoleMessages Is Nothing Then Exit Sub
 
-    taskLabel = GanttDrag_InfoTaskLabel(dragInfo)
+    taskLabelFr = GanttDrag_InfoTaskLabel(dragInfo, TEXT_LANGUAGE_FR)
+    taskLabelEn = GanttDrag_InfoTaskLabel(dragInfo, TEXT_LANGUAGE_EN)
     modeLabel = Trim$(simulationMode)
     If modeLabel = "" Then modeLabel = "NONE"
 
-    CalcBridge_AddConsoleMessage consoleMessages, "WARNING", BiMsg( _
-        "Drag ignoré : aucun moteur de simulation actif compatible n'a été trouvé." & vbCrLf & _
-        "Tâche : " & taskLabel & vbCrLf & _
-        "Mode actif : " & modeLabel & vbCrLf & _
-        "Activez TEST ou SCENARIO avant de déplacer une tâche.", _
-        "Drag ignored: no compatible active simulation engine was found." & vbCrLf & _
-        "Task: " & taskLabel & vbCrLf & _
-        "Active mode: " & modeLabel & vbCrLf & _
-        "Activate TEST or SCENARIO before moving a task.")
+    CalcBridge_AddConsoleMessage consoleMessages, "WARNING", _
+        PlanningMessageText_Format("GANTT.DRAG.NO_ENGINE", _
+            TextCatalog_Arguments("Task", taskLabelFr, "Mode", modeLabel), _
+            TextCatalog_Arguments("Task", taskLabelEn, "Mode", modeLabel))
 
 End Sub
 
@@ -1675,16 +1683,19 @@ Private Function GanttDrag_BuildDragMessage( _
     ByVal dragInfo As Object, _
     ByVal success As Boolean) As String
 
-    Dim taskLabel As String
+    Dim taskLabelFr As String
+    Dim taskLabelEn As String
     Dim changesFr As String
     Dim changesEn As String
-    Dim frText As String
-    Dim enText As String
     Dim simulationMode As String
+    Dim messageKey As String
+    Dim frArguments As Object
+    Dim enArguments As Object
 
-    taskLabel = GanttDrag_InfoTaskLabel(dragInfo)
-    changesFr = GanttDrag_InfoChangesText(dragInfo, True)
-    changesEn = GanttDrag_InfoChangesText(dragInfo, False)
+    taskLabelFr = GanttDrag_InfoTaskLabel(dragInfo, TEXT_LANGUAGE_FR)
+    taskLabelEn = GanttDrag_InfoTaskLabel(dragInfo, TEXT_LANGUAGE_EN)
+    changesFr = GanttDrag_InfoChangesText(dragInfo, "FR")
+    changesEn = GanttDrag_InfoChangesText(dragInfo, "EN")
     If Not dragInfo Is Nothing Then
         If dragInfo.Exists("EngineMode") Then
             simulationMode = UCase$(Trim$(CStr(dragInfo("EngineMode"))))
@@ -1692,41 +1703,23 @@ Private Function GanttDrag_BuildDragMessage( _
     End If
 
     If success Then
-        frText = "Modification " & GanttDrag_InfoEngineLabel(dragInfo, "Drag") & " appliquée." & vbCrLf & _
-            "Tâche : " & taskLabel & vbCrLf & _
-            "Modification demandée : " & changesFr & vbCrLf & _
-            "Le planning a été recalculé. Les conséquences éventuelles sur les autres tâches proviennent du moteur planning." & vbCrLf & vbCrLf & _
-            "Pour abandonner cette simulation et revenir au dernier planning calculé, cliquez sur Réinitialiser."
-
-        enText = GanttDrag_InfoEngineLabel(dragInfo, "Drag") & " modification applied." & vbCrLf & _
-            "Task: " & taskLabel & vbCrLf & _
-            "Requested modification: " & changesEn & vbCrLf & _
-            "The schedule has been recalculated. Any consequences on other tasks come from the planning engine." & vbCrLf & vbCrLf & _
-            "To abandon this simulation and return to the last calculated schedule, click Reset."
-
+        messageKey = "GANTT.DRAG.SUCCESS"
         Select Case simulationMode
-            Case "TEST"
-                frText = frText & vbCrLf & _
-                    "Pour retirer uniquement une hypothèse, videz la cellule TEST jaune correspondante puis relancez TEST."
-                enText = enText & vbCrLf & _
-                    "To remove only one assumption, clear the corresponding yellow TEST cell and run TEST again."
-            Case "SCENARIO"
-                frText = frText & vbCrLf & _
-                    "Pour retirer uniquement une hypothèse, videz la cellule jaune correspondante puis cliquez sur Scénario."
-                enText = enText & vbCrLf & _
-                    "To remove only one assumption, clear the corresponding yellow cell and click Scenario."
+            Case "TEST": messageKey = "GANTT.DRAG.SUCCESS.TEST"
+            Case "SCENARIO": messageKey = "GANTT.DRAG.SUCCESS.SCENARIO"
         End Select
     Else
-        frText = "La modification demandée par Drag n'a pas pu être appliquée." & vbCrLf & _
-            "Tâche : " & taskLabel & vbCrLf & _
-            "Modification demandée : " & changesFr
-
-        enText = "The modification requested by Drag could not be applied." & vbCrLf & _
-            "Task: " & taskLabel & vbCrLf & _
-            "Requested modification: " & changesEn
+        messageKey = "GANTT.DRAG.FAILURE"
     End If
 
-    GanttDrag_BuildDragMessage = BiMsg(frText, enText)
+    Set frArguments = TextCatalog_Arguments( _
+        "Engine", GanttDrag_InfoEngineLabel(dragInfo, TEXT_LANGUAGE_FR), _
+        "Task", taskLabelFr, "Changes", changesFr)
+    Set enArguments = TextCatalog_Arguments( _
+        "Engine", GanttDrag_InfoEngineLabel(dragInfo, TEXT_LANGUAGE_EN), _
+        "Task", taskLabelEn, "Changes", changesEn)
+    GanttDrag_BuildDragMessage = PlanningMessageText_Format( _
+        messageKey, frArguments, enArguments)
 
 End Function
 
@@ -1737,12 +1730,12 @@ End Function
 
 Private Function GanttDrag_InfoEngineLabel( _
     ByVal dragInfo As Object, _
-    ByVal defaultLabel As String) As String
+    ByVal languageKey As String) As String
 
     Dim modeLabel As String
 
     If dragInfo Is Nothing Then
-        GanttDrag_InfoEngineLabel = defaultLabel
+        GanttDrag_InfoEngineLabel = TextCatalog_Get("GANTT.DRAG.ENGINE.DRAG", languageKey)
         Exit Function
     End If
 
@@ -1750,11 +1743,11 @@ Private Function GanttDrag_InfoEngineLabel( _
 
     Select Case modeLabel
         Case "TEST"
-            GanttDrag_InfoEngineLabel = "Drag/Test"
+            GanttDrag_InfoEngineLabel = TextCatalog_Get("GANTT.DRAG.ENGINE.TEST", languageKey)
         Case "SCENARIO"
-            GanttDrag_InfoEngineLabel = "Drag/Scenario"
+            GanttDrag_InfoEngineLabel = TextCatalog_Get("GANTT.DRAG.ENGINE.SCENARIO", languageKey)
         Case Else
-            GanttDrag_InfoEngineLabel = defaultLabel
+            GanttDrag_InfoEngineLabel = TextCatalog_Get("GANTT.DRAG.ENGINE.DRAG", languageKey)
     End Select
 
 End Function
@@ -1764,13 +1757,15 @@ End Function
 ' EN: Returns the Info Task Label map without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function GanttDrag_InfoTaskLabel(ByVal dragInfo As Object) As String
+Private Function GanttDrag_InfoTaskLabel( _
+    ByVal dragInfo As Object, _
+    ByVal languageKey As String) As String
 
     Dim taskName As String
     Dim wbsVal As String
 
     If dragInfo Is Nothing Then
-        GanttDrag_InfoTaskLabel = "(unknown task)"
+        GanttDrag_InfoTaskLabel = TextCatalog_Get("GANTT.DRAG.TASK.UNKNOWN", languageKey)
         Exit Function
     End If
 
@@ -1784,7 +1779,7 @@ Private Function GanttDrag_InfoTaskLabel(ByVal dragInfo As Object) As String
     ElseIf wbsVal <> "" Then
         GanttDrag_InfoTaskLabel = wbsVal
     Else
-        GanttDrag_InfoTaskLabel = "(unknown task)"
+        GanttDrag_InfoTaskLabel = TextCatalog_Get("GANTT.DRAG.TASK.UNKNOWN", languageKey)
     End If
 
 End Function
@@ -1796,7 +1791,7 @@ End Function
 
 Private Function GanttDrag_InfoChangesText( _
     ByVal dragInfo As Object, _
-    ByVal french As Boolean) As String
+    ByVal languageKey As String) As String
 
     Dim changedStart As Boolean
     Dim changedFinish As Boolean
@@ -1804,11 +1799,8 @@ Private Function GanttDrag_InfoChangesText( _
     Dim finishText As String
 
     If dragInfo Is Nothing Then
-        If french Then
-            GanttDrag_InfoChangesText = "modification non identifiée"
-        Else
-            GanttDrag_InfoChangesText = "unidentified modification"
-        End If
+        GanttDrag_InfoChangesText = TextCatalog_Get( _
+            "GANTT.DRAG.CHANGES.UNKNOWN", languageKey)
         Exit Function
     End If
 
@@ -1819,32 +1811,25 @@ Private Function GanttDrag_InfoChangesText( _
 
     If changedStart And changedFinish Then
         If startText = finishText Then
-            If french Then
-                GanttDrag_InfoChangesText = "début et fin = " & startText
-            Else
-                GanttDrag_InfoChangesText = "start and finish = " & startText
-            End If
-        ElseIf french Then
-            GanttDrag_InfoChangesText = "début = " & startText & ", fin = " & finishText
+            GanttDrag_InfoChangesText = TextCatalog_Format( _
+                "GANTT.DRAG.CHANGES.SAME", languageKey, _
+                TextCatalog_Arguments("Start", startText))
         Else
-            GanttDrag_InfoChangesText = "start = " & startText & ", finish = " & finishText
+            GanttDrag_InfoChangesText = TextCatalog_Format( _
+                "GANTT.DRAG.CHANGES.BOTH", languageKey, _
+                TextCatalog_Arguments("Start", startText, "Finish", finishText))
         End If
     ElseIf changedStart Then
-        If french Then
-            GanttDrag_InfoChangesText = "début = " & startText
-        Else
-            GanttDrag_InfoChangesText = "start = " & startText
-        End If
+        GanttDrag_InfoChangesText = TextCatalog_Format( _
+            "GANTT.DRAG.CHANGES.START", languageKey, _
+            TextCatalog_Arguments("Start", startText))
     ElseIf changedFinish Then
-        If french Then
-            GanttDrag_InfoChangesText = "fin = " & finishText
-        Else
-            GanttDrag_InfoChangesText = "finish = " & finishText
-        End If
-    ElseIf french Then
-        GanttDrag_InfoChangesText = "aucune date modifiée"
+        GanttDrag_InfoChangesText = TextCatalog_Format( _
+            "GANTT.DRAG.CHANGES.FINISH", languageKey, _
+            TextCatalog_Arguments("Finish", finishText))
     Else
-        GanttDrag_InfoChangesText = "no date changed"
+        GanttDrag_InfoChangesText = TextCatalog_Get( _
+            "GANTT.DRAG.CHANGES.NONE", languageKey)
     End If
 
 End Function

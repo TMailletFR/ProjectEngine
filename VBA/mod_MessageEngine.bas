@@ -96,6 +96,8 @@ Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) A
     Dim stopBlock As String
     Dim stopInserted As Boolean
     Dim severity As String
+    Dim groupMembers As Collection
+    Dim receipt As Object
 
     Set result = New Collection
 
@@ -107,6 +109,12 @@ Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) A
     For Each item In messages
         If MessageEngine_NormalizeSeverity(CStr(item("Type"))) = "STOP" Then
             stopCount = stopCount + 1
+            If item.Exists("HistoryState") Then
+                If CStr(item("HistoryState")) = "STORE_UNAVAILABLE" Then
+                    Set MessageEngine_GroupDisplayStops = messages
+                    Exit Function
+                End If
+            End If
         End If
     Next item
 
@@ -115,10 +123,13 @@ Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) A
         Exit Function
     End If
 
+    Set groupMembers = New Collection
     For Each item In messages
         severity = MessageEngine_NormalizeSeverity(CStr(item("Type")))
 
         If severity = "STOP" Then
+            Set receipt = item("HistoryReceipt")
+            groupMembers.Add CStr(receipt("Hash"))
             If stopBlock <> "" Then
                 stopBlock = stopBlock & vbCrLf & vbCrLf & String$(36, "-") & vbCrLf & vbCrLf
             End If
@@ -128,7 +139,9 @@ Private Function MessageEngine_GroupDisplayStops(ByVal messages As Collection) A
                 Set consolidatedStop = CreateObject("Scripting.Dictionary")
                 consolidatedStop("Type") = "STOP"
                 consolidatedStop("Message") = ""
-                consolidatedStop("HistoryHandled") = True
+                consolidatedStop("HistoryState") = "NOT_LOGGED"
+                consolidatedStop("EventType") = "CONSOLE_STOP_GROUP"
+                Set consolidatedStop("GroupMembers") = groupMembers
                 consolidatedStop("Acknowledged") = False
                 result.Add consolidatedStop
                 stopInserted = True
@@ -218,7 +231,8 @@ End Function
 Public Function MessageEngine_BuildCategoryProgressCaption( _
     ByVal messages As Collection, _
     ByVal currentIndex As Long, _
-    ByVal currentType As String) As String
+    ByVal currentType As String, _
+    ByVal languageKey As String) As String
 
     Dim stopTotal As Long
     Dim warnTotal As Long
@@ -233,7 +247,7 @@ Public Function MessageEngine_BuildCategoryProgressCaption( _
     Dim normalizedCurrent As String
 
     If messages Is Nothing Then
-        MessageEngine_BuildCategoryProgressCaption = "STOP 0/0 | WARNING 0/0 | INFO 0/0"
+        MessageEngine_BuildCategoryProgressCaption = TextCatalog_Get("CONSOLE.EMPTY.COUNTER", languageKey)
         Exit Function
     End If
 
@@ -261,15 +275,23 @@ Public Function MessageEngine_BuildCategoryProgressCaption( _
     If normalizedCurrent <> "INFO" Then infoIndex = 0
 
     If ShouldShowInfoOnlyPlanningConsole() Then
-        infoCaption = "INFO " & CStr(infoIndex) & "/" & CStr(infoTotal)
+        infoCaption = TextCatalog_Format( _
+            "CONSOLE.COUNTER.INFO_ACTIVE", _
+            languageKey, _
+            TextCatalog_Arguments("Index", CStr(infoIndex), "Total", CStr(infoTotal)))
     Else
-        infoCaption = "INFO Muted"
+        infoCaption = TextCatalog_Get("CONSOLE.COUNTER.INFO_MUTED", languageKey)
     End If
 
-    MessageEngine_BuildCategoryProgressCaption = _
-        "STOP " & CStr(stopIndex) & "/" & CStr(stopTotal) & _
-        " | WARNING " & CStr(warnIndex) & "/" & CStr(warnTotal) & _
-        " | " & infoCaption
+    MessageEngine_BuildCategoryProgressCaption = TextCatalog_Format( _
+        "CONSOLE.COUNTER.ALL", _
+        languageKey, _
+        TextCatalog_Arguments( _
+            "StopIndex", CStr(stopIndex), _
+            "StopTotal", CStr(stopTotal), _
+            "WarningIndex", CStr(warnIndex), _
+            "WarningTotal", CStr(warnTotal), _
+            "InfoCaption", infoCaption))
 
 End Function
 

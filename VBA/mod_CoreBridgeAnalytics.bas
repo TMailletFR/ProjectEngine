@@ -36,6 +36,7 @@ Public Sub CalcBridge_ComputeDeadlineAnalytics( _
     Dim exceededIds As Object
     Dim idToWbs As Object
     Dim ackTokensById As Object
+    Dim receiptsById As Object
     Dim ackTokens As String
     Dim r As Long
     Dim rowCount As Long
@@ -47,7 +48,7 @@ Public Sub CalcBridge_ComputeDeadlineAnalytics( _
     Dim deadlineFloatVal As Double
     Dim eventHashVal As String
 
-    On Error GoTo SafeExit
+    On Error GoTo Failed
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -67,6 +68,7 @@ Public Sub CalcBridge_ComputeDeadlineAnalytics( _
     Set exceededIds = CreateObject("Scripting.Dictionary")
     Set idToWbs = CreateObject("Scripting.Dictionary")
     Set ackTokensById = CreateObject("Scripting.Dictionary")
+    Set receiptsById = CreateObject("Scripting.Dictionary")
 
     For r = 1 To rowCount
 
@@ -88,36 +90,25 @@ Public Sub CalcBridge_ComputeDeadlineAnalytics( _
                     If idVal <> "" Then
                         exceededIds(idVal) = True
 
-                        eventHashVal = BuildPlanningEventHash( _
+                        eventHashVal = BuildPlanningEventIdentityV2( _
+                            "WARNING", "DEADLINE_EXCEEDED", "TASK", idVal)
+
+                        ackTokensById(idVal) = BuildPlanningWarningAckToken("DEADLINE_EXCEEDED", eventHashVal)
+
+                        Set receiptsById(idVal) = LogPlanningEvent( _
                             "WARNING", _
                             "DEADLINE_EXCEEDED", _
-                            "Deadline depassee", _
-                            "Deadline exceeded", _
-                            "la date calculee finit apres la deadline", _
-                            "calculated finish is after the deadline", _
+                            eventHashVal, _
+                            TextCatalog_Get("EVENT.DEADLINE_EXCEEDED.MESSAGE", TEXT_LANGUAGE_FR), _
+                            TextCatalog_Get("EVENT.DEADLINE_EXCEEDED.MESSAGE", TEXT_LANGUAGE_EN), _
+                            TextCatalog_Get("EVENT.DEADLINE_EXCEEDED.DETAIL", TEXT_LANGUAGE_FR), _
+                            TextCatalog_Get("EVENT.DEADLINE_EXCEEDED.DETAIL", TEXT_LANGUAGE_EN), _
                             "CalcBridge_ComputeDeadlineAnalytics", _
                             "CALC", _
                             "tbl_CALC", _
                             idVal, _
                             wbsVal, _
                             taskNameVal)
-
-                        ackTokensById(idVal) = BuildPlanningWarningAckToken("DEADLINE_EXCEEDED", eventHashVal)
-
-                        LogPlanningEvent _
-                            "WARNING", _
-                            "DEADLINE_EXCEEDED", _
-                            eventHashVal, _
-                            "Deadline depassee", _
-                            "Deadline exceeded", _
-                            "la date calculee finit apres la deadline", _
-                            "calculated finish is after the deadline", _
-                            "CalcBridge_ComputeDeadlineAnalytics", _
-                            "CALC", _
-                            "tbl_CALC", _
-                            idVal, _
-                            wbsVal, _
-                            taskNameVal
                     End If
                 End If
             End If
@@ -134,26 +125,25 @@ Public Sub CalcBridge_ComputeDeadlineAnalytics( _
             Set consoleMessages = New Collection
 
             CalcBridge_AddGroupedWarningToCollection consoleMessages, exceededIds, idToWbs, _
-                "Deadline depassee", _
-                "la date calculee finit apres la deadline", _
-                "Deadline exceeded", _
-                "calculated finish is after the deadline", _
+                "DIAG.GROUP.DEADLINE.EXCEEDED", _
                 True, _
-                ackTokens
+                ackTokens, _
+                receiptsById
 
             CalcBridge_ShowPlanningConsole consoleMessages
         Else
             CalcBridge_AddGroupedWarningToCollection consoleMessages, exceededIds, idToWbs, _
-                "Deadline depassee", _
-                "la date calculee finit apres la deadline", _
-                "Deadline exceeded", _
-                "calculated finish is after the deadline", _
+                "DIAG.GROUP.DEADLINE.EXCEEDED", _
                 True, _
-                ackTokens
+                ackTokens, _
+                receiptsById
         End If
     End If
 
 SafeExit:
+    Exit Sub
+Failed:
+    Err.Raise Err.Number, "CalcBridge_ComputeDeadlineAnalytics", Err.Description
 End Sub
 
 '------------------------------------------------------------------------------
@@ -172,6 +162,7 @@ Public Sub CalcBridge_ShowParentDateWarnings( _
     Dim warnParentDates As Object
     Dim idToWbs As Object
     Dim ackTokensById As Object
+    Dim receiptsById As Object
     Dim ackTokens As String
     Dim eventHashVal As String
 
@@ -181,7 +172,7 @@ Public Sub CalcBridge_ShowParentDateWarnings( _
     Dim wbsVal As String
     Dim taskNameVal As String
 
-    On Error GoTo SafeExit
+    On Error GoTo Failed
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
@@ -203,6 +194,7 @@ Public Sub CalcBridge_ShowParentDateWarnings( _
     Set warnParentDates = CreateObject("Scripting.Dictionary")
     Set idToWbs = CreateObject("Scripting.Dictionary")
     Set ackTokensById = CreateObject("Scripting.Dictionary")
+    Set receiptsById = CreateObject("Scripting.Dictionary")
 
     For Each key In rowById.Keys
 
@@ -235,38 +227,24 @@ Public Sub CalcBridge_ShowParentDateWarnings( _
                     taskNameVal = vbNullString
                 End If
 
-                eventHashVal = BuildPlanningEventHash( _
+                eventHashVal = BuildPlanningEventIdentityV2( _
+                    "WARNING", "PARENT_DATES_IGNORED", "TASK", idVal)
+                ackTokensById(idVal) = BuildPlanningWarningAckToken("PARENT_DATES_IGNORED", eventHashVal)
+
+                Set receiptsById(idVal) = LogPlanningEvent( _
                     "WARNING", _
                     "PARENT_DATES_IGNORED", _
-                    "Dates saisies sur tache parent", _
-                    "Dates entered on summary task", _
-                    "les valeurs sont ignorees, calcul par les taches enfants", _
-                    "values are ignored and calculated from child tasks", _
+                    eventHashVal, _
+                    TextCatalog_Get("EVENT.PARENT_DATES_IGNORED.MESSAGE", TEXT_LANGUAGE_FR), _
+                    TextCatalog_Get("EVENT.PARENT_DATES_IGNORED.MESSAGE", TEXT_LANGUAGE_EN), _
+                    TextCatalog_Get("EVENT.PARENT_DATES_IGNORED.DETAIL", TEXT_LANGUAGE_FR), _
+                    TextCatalog_Get("EVENT.PARENT_DATES_IGNORED.DETAIL", TEXT_LANGUAGE_EN), _
                     "CalcBridge_ShowParentDateWarnings", _
                     "CALC", _
                     "tbl_CALC", _
                     idVal, _
                     wbsVal, _
                     taskNameVal)
-                ackTokensById(idVal) = BuildPlanningWarningAckToken("PARENT_DATES_IGNORED", eventHashVal)
-
-                On Error Resume Next
-
-                LogPlanningEvent _
-                    "WARNING", _
-                    "PARENT_DATES_IGNORED", _
-                    eventHashVal, _
-                    "Dates saisies sur tache parent", _
-                    "Dates entered on summary task", _
-                    "les valeurs sont ignorees, calcul par les taches enfants", _
-                    "values are ignored and calculated from child tasks", _
-                    "CalcBridge_ShowParentDateWarnings", _
-                    "CALC", _
-                    "tbl_CALC", _
-                    idVal, _
-                    wbsVal, _
-                    taskNameVal
-                On Error GoTo SafeExit
 
             End If
 
@@ -282,27 +260,26 @@ Public Sub CalcBridge_ShowParentDateWarnings( _
             Set consoleMessages = New Collection
 
             CalcBridge_AddGroupedWarningToCollection consoleMessages, warnParentDates, idToWbs, _
-                "Dates saisies sur tâche parent", _
-                "les valeurs sont ignorées, calcul par les tâches enfants", _
-                "Dates entered on summary task", _
-                "values are ignored and calculated from child tasks", _
+                "DIAG.GROUP.SUMMARY.IGNORED_DATES", _
                 True, _
-                ackTokens
+                ackTokens, _
+                receiptsById
 
             CalcBridge_ShowPlanningConsole consoleMessages
         Else
             CalcBridge_AddGroupedWarningToCollection consoleMessages, warnParentDates, idToWbs, _
-                "Dates saisies sur tâche parent", _
-                "les valeurs sont ignorées, calcul par les tâches enfants", _
-                "Dates entered on summary task", _
-                "values are ignored and calculated from child tasks", _
+                "DIAG.GROUP.SUMMARY.IGNORED_DATES", _
                 True, _
-                ackTokens
+                ackTokens, _
+                receiptsById
         End If
 
     End If
 
 SafeExit:
+    Exit Sub
+Failed:
+    Err.Raise Err.Number, "CalcBridge_ShowParentDateWarnings", Err.Description
 End Sub
 
 
@@ -439,41 +416,26 @@ NextRow:
 
     If warnIgnoredCal.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnIgnoredCal, idToWbs, _
-            "Calendrier ignoré sur tâche Summary / LOE / Milestone", _
-            "le calendrier n'est utilisé que pour les tâches normales", _
-            "Calendar ignored on Summary / LOE / Milestone task", _
-            "calendars apply only to normal tasks"
+            "DIAG.GROUP.TASK_TYPE.IGNORED_CALENDAR"
     End If
     If warnLOEProgress.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnLOEProgress, idToWbs, _
-            "% Progress renseigné sur LOE", _
-            "le progress LOE est calculé automatiquement par date du jour ; la saisie manuelle est ignorée dans le Gantt", _
-            "% Progress entered on LOE", _
-            "LOE progress is automatically calculated from today's date; manual input is ignored in the Gantt"
+            "DIAG.GROUP.LOE.IGNORED_PROGRESS"
     End If
 
     If warnLOEBaseline.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnLOEBaseline, idToWbs, _
-            "Baseline renseignée sur LOE", _
-            "une LOE doit être pilotée par ses liens SS/FF ; vérifier que la baseline saisie ne crée pas de confusion", _
-            "Baseline entered on LOE", _
-            "a LOE must be driven by its SS/FF links; check that entered baseline values are not misleading"
+            "DIAG.GROUP.LOE.BASELINE"
     End If
 
     If warnMilestoneProgress.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnMilestoneProgress, idToWbs, _
-            "% Progress partiel renseigné sur Milestone", _
-            "une milestone doit être à 0% ou 100% ; toute valeur intermédiaire doit être corrigée", _
-            "Partial % Progress entered on Milestone", _
-            "a milestone must be either 0% or 100%; any intermediate value should be corrected"
+            "DIAG.GROUP.MILESTONE.PARTIAL_PROGRESS"
     End If
 
     If warnMilestoneDuration.Count > 0 Then
         CalcBridge_AddGroupedWarningToCollection warningMessages, warnMilestoneDuration, idToWbs, _
-            "Durée supérieure à 1 jour sur Milestone", _
-            "la tâche sera rendue comme milestone mais la durée saisie peut induire en erreur", _
-            "Duration greater than 1 day on Milestone", _
-            "the task will be rendered as a milestone but the entered duration may be misleading"
+            "DIAG.GROUP.MILESTONE.DURATION"
     End If
 
 SafeExit:
@@ -684,6 +646,8 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
     Dim rexDataArr As Variant
     Dim rexSemanticViews As Object
     Dim outLongestPathRex As Variant
+    Dim rexLongestPathWritten As Boolean
+    Dim rexColumnName As Variant
 
     Set perfScope = Profiler_BeginScope("CalcBridge_RunAnalyticsAndPush", "Analytics")
 
@@ -782,10 +746,22 @@ Public Sub CalcBridge_RunAnalyticsAndPush( _
                 "Baseline Start", "Baseline Finish", "Longest Path REX", False
             If IsArray(outLongestPathRex) Then
                 tblCalc.ListColumns("Longest Path REX").DataBodyRange.value = outLongestPathRex
+                rexLongestPathWritten = True
                 Profiler_RecordOperation "GanttLongestPathRexWritebacks", 1, 0#
             End If
         End If
 RexLongestPathComplete:
+    End If
+
+    If errMissingBaselineForREX.Count > 0 Then
+        ' Incomplete Baseline invalidates every REX output from a previous run.
+        For Each rexColumnName In Array("Total Float REX", "Free Float REX", "Critical Path REX", "Longest Path REX")
+            If mapCalc.Exists(CStr(rexColumnName)) Then
+                tblCalc.ListColumns(CStr(rexColumnName)).DataBodyRange.ClearContents
+            End If
+        Next rexColumnName
+    ElseIf Not rexLongestPathWritten And mapCalc.Exists("Longest Path REX") Then
+        tblCalc.ListColumns("Longest Path REX").DataBodyRange.ClearContents
     End If
 
     If errMissingBaselineForREX.Count > 0 Then
@@ -1122,11 +1098,7 @@ End Function
 '------------------------------------------------------------------------------
 Public Sub CalcBridge_AddAnalyticsTopologyWarning(ByVal consoleMessages As Collection)
 
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, "WARNING", _
-        "Analytics non calculées : ordre topologique incomplet." & vbCrLf & _
-        "-> vérifier les cycles ou la reconstruction tbl_LOGIC_LINKS.", _
-        "Analytics not calculated: incomplete topological order." & vbCrLf & _
-        "-> check cycles or tbl_LOGIC_LINKS rebuild."
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "WARNING", "DIAG.ANALYTICS.TOPOLOGY_INCOMPLETE"
 
 End Sub
 

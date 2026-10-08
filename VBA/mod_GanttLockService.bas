@@ -107,8 +107,7 @@ Public Sub GanttLockService_RunLockChanges()
 
     If appliedChanges.Count = 0 Then
         GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-            "Aucune modification test à verrouiller.", _
-            "No test changes to lock."
+            "GANTT.LOCK.NO_CHANGES"
 
         GanttLockTrace_Log "No changes: before CalcBridge_ShowPlanningConsole"
         GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -125,10 +124,7 @@ Public Sub GanttLockService_RunLockChanges()
     If GanttSimulation_HasErrors() Then
         GanttLockTrace_Log "GanttLive_CalcGanttTestHasErrors returned True"
         GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-            "Lock annulé : la simulation TEST préalable contient des erreurs." & vbCrLf & _
-            "-> corriger les valeurs test ou la logique amont avant de verrouiller.", _
-            "Lock cancelled: the preliminary TEST simulation contains errors." & vbCrLf & _
-            "-> fix test values or upstream logic before locking."
+            "GANTT.LOCK.PRELIMINARY_ERRORS"
 
         GanttLockTrace_Log "TEST errors: before CalcBridge_ShowPlanningConsole"
         GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -143,8 +139,7 @@ Public Sub GanttLockService_RunLockChanges()
 
     If appliedChanges.Count = 0 Then
         GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-            "Aucune modification test à verrouiller.", _
-            "No test changes to lock."
+            "GANTT.LOCK.NO_CHANGES"
 
         GanttLockTrace_Log "No changes post-test: before CalcBridge_ShowPlanningConsole"
         GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -158,8 +153,7 @@ Public Sub GanttLockService_RunLockChanges()
 
     If simulatedById.Count = 0 Then
         GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-            "Lock annulé : aucun résultat simulé exploitable n'a été trouvé après le refresh TEST.", _
-            "Lock cancelled: no usable simulated result was found after TEST refresh."
+            "GANTT.LOCK.NO_SIMULATED_RESULT"
 
         GanttLockTrace_Log "No simulated results: before CalcBridge_ShowPlanningConsole"
         GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -203,12 +197,10 @@ Public Sub GanttLockService_RunLockChanges()
 
         If hasCalcErrors Then
             GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-                "Lock annulé : le calcul a détecté des erreurs. Les valeurs WBS d'origine ont été restaurées et les colonnes test ont été conservées.", _
-                "Lock cancelled: calculation found errors. Original WBS values were restored and test inputs were preserved."
+                "GANTT.LOCK.CALCULATION_ERRORS"
         Else
             GanttLive_AddBiConsoleMessage consoleMessages, "WARNING", _
-                "Lock annulé : le recalcul réel ne correspond pas au résultat simulé retenu. Les valeurs WBS d'origine ont été restaurées et les colonnes test ont été conservées.", _
-                "Lock cancelled: the real recalculation does not match the retained simulated result. Original WBS values were restored and test inputs were preserved."
+                "GANTT.LOCK.RESULT_MISMATCH"
         End If
 
         GanttLockTrace_Log "Rollback branch: before CalcBridge_ShowPlanningConsole"
@@ -222,8 +214,7 @@ Public Sub GanttLockService_RunLockChanges()
     GanttLockTrace_Log "Finalize returned"
 
     GanttLive_AddBiConsoleMessage consoleMessages, "INFO", _
-        "Lock appliqué avec succès.", _
-        "Lock successfully applied."
+        "GANTT.LOCK.SUCCESS"
 
     GanttLockTrace_Log "Success branch: before CalcBridge_ShowPlanningConsole"
     GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -244,10 +235,7 @@ SafeExit:
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
     GanttLive_AddBiConsoleMessage consoleMessages, "STOP", _
-        "Erreur VBA dans Run_Gantt_Lock_Changes" & vbCrLf & _
-        "-> vérifier le dernier bloc modifié dans mod_GanttLive", _
-        "VBA error in Run_Gantt_Lock_Changes" & vbCrLf & _
-        "-> check the last edited block in mod_GanttLive"
+        "GANTT.LOCK.RUN_ERROR"
 
     GanttLockTrace_Log "SafeExit: before CalcBridge_ShowPlanningConsole"
     GanttLockTrace_ShowConsole consoleMessages, "LOCK"
@@ -286,13 +274,17 @@ Private Sub ValidateLockSourceColumns(ByVal mapWBS As Object, ByVal mapCalc As O
 
     For Each c In reqWBS
         If Not mapWBS.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 980, , "Missing column in tbl_WBS: " & CStr(c)
+            Err.Raise vbObjectError + 980, , PlanningMessageText_Format("GANTT.ERROR.MISSING_SOURCE_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)))
         End If
     Next c
 
     For Each c In reqCalc
         If Not mapCalc.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 981, , "Missing column in tbl_CALC: " & CStr(c)
+            Err.Raise vbObjectError + 981, , PlanningMessageText_Format("GANTT.ERROR.MISSING_SOURCE_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)))
         End If
     Next c
 
@@ -752,7 +744,7 @@ Private Sub GanttLive_FinalizeSuccessfulLock( _
     GanttRefresh_MarkRenderSignatureDirty "LockFinalizedTestState"
     GanttLockTrace_Log "Finalize helper: Ensure LOCAL_UPDATE start"
     If Not EnsureGanttForCurrentPlanning(GANTT_ENSURE_LOCAL_UPDATE, "GanttLock_FinalizeAppliedChanges") Then
-        Err.Raise 5, "GanttLock_FinalizeAppliedChanges", "Gantt LOCK render did not reach READY state."
+        Err.Raise 5, "GanttLock_FinalizeAppliedChanges", PlanningMessageText_Format("GANTT.ERROR.LOCK_NOT_READY")
     End If
     GanttLockTrace_Log "Finalize helper: Ensure LOCAL_UPDATE returned"
 
@@ -873,4 +865,3 @@ Private Function LockResultsMatchSimulatedResult( _
     LockResultsMatchSimulatedResult = True
 
 End Function
-

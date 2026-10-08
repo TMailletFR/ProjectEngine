@@ -27,6 +27,7 @@ Private Sub Workbook_Open()
     Dim sheetBefore As String
     Dim startedAt As Double
 
+    If Not WorkbookSchema_OpenAllowed() Then Exit Sub
     GanttOpenLifecycle_BeginTrace "Workbook_Open"
     sheetBefore = ThisWorkbook_ActiveSheetName()
 
@@ -36,6 +37,7 @@ Private Sub Workbook_Open()
 
     startedAt = Timer
     Settings_HydrateRuntimeState
+    Settings_RemoveLegacyMigrationCommand
     GanttOpenLifecycle_Record "Workbook_Open.Settings_HydrateRuntimeState", "", ThisWorkbook_ActiveSheetName(), ThisWorkbook_ActiveSheetName(), ThisWorkbook_MsSince(startedAt)
 
     startedAt = Timer
@@ -51,6 +53,8 @@ Private Sub Workbook_Open()
 
     StartGanttDragWatchIfActive
     GanttOpenLifecycle_Record "Workbook_Open.Complete", "", sheetBefore, ThisWorkbook_ActiveSheetName(), 0#
+    Ribbon_WorkbookOpened
+    ProjectWelcome_ShowIfNeeded
 End Sub
 
 '------------------------------------------------------------------------------
@@ -58,8 +62,14 @@ End Sub
 ' EN: Reconnects application events and restarts the Gantt watcher when needed.
 '------------------------------------------------------------------------------
 Private Sub Workbook_Activate()
+    If Not WorkbookSchema_WritesAllowed() Then
+        Ribbon_WorkbookActivated
+        Exit Sub
+    End If
     Init_AppEvents
+    Settings_RemoveLegacyMigrationCommand
     StartGanttDragWatchIfActive
+    Ribbon_WorkbookActivated
 End Sub
 
 '------------------------------------------------------------------------------
@@ -67,6 +77,10 @@ End Sub
 ' EN: Handles sheet activation and starts the drag watcher on GANTT.
 '------------------------------------------------------------------------------
 Private Sub Workbook_SheetActivate(ByVal Sh As Object)
+    If Not WorkbookSchema_WritesAllowed() Then
+        Ribbon_WorksheetActivated
+        Exit Sub
+    End If
     Init_AppEvents
     If Not Sh Is Nothing Then
         If CStr(Sh.Name) = "GANTT" Then
@@ -77,6 +91,7 @@ Private Sub Workbook_SheetActivate(ByVal Sh As Object)
             GanttDrag_EnsureArmed
         End If
     End If
+    Ribbon_WorksheetActivated
 End Sub
 
 '------------------------------------------------------------------------------

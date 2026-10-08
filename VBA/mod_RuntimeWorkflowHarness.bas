@@ -92,7 +92,7 @@ Public Function RuntimeWorkflowHarness_Smoke() As String
 
     BeginMacroRun "RuntimeWorkflowHarness"
     RuntimeWorkflowHarness_Assert IsMacroRunActive(), "macro guard active after begin"
-    RequestMacroAbort "RuntimeWorkflowHarness", "Arret test", "Test abort"
+    RequestMacroAbortKey "RuntimeWorkflowHarness", "DIAG.HARNESS.RUNTIME_ABORT"
     RuntimeWorkflowHarness_Assert IsMacroAbortRequested(), "macro abort requested"
     On Error Resume Next
     AbortIfRequested "RuntimeWorkflowHarness.AbortIfRequested"

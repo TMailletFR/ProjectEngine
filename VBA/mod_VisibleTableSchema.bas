@@ -148,8 +148,9 @@ Public Sub Schema_SetPhysicalHeaderLanguageOverride( _
             normalizedLanguage = VTS_LANG_EN
         Case Else
             Err.Raise VTS_ERROR_BASE + 20, "Schema_SetPhysicalHeaderLanguageOverride", _
-                "Unsupported transient schema language '" & languageCode & _
-                "' for table '" & tableKey & "'. Expected EN or FR."
+                PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.UNSUPPORTED_OVERRIDE_LANGUAGE", _
+                    TextCatalog_Arguments("Language", languageCode, "Table", tableKey), _
+                    TextCatalog_Arguments("Language", languageCode, "Table", tableKey))
     End Select
 
     Call SchemaOwnerForTable(tableKey)
@@ -187,28 +188,83 @@ Public Function SchemaColumnTitle( _
     Dim useFrench As Boolean
     useFrench = SchemaUseFrench(languageCode, tableKey, columnKey)
 
+    SchemaColumnTitle = TextCatalog_Get( _
+        SchemaHeaderTextKey(tableKey, columnKey), _
+        IIf(useFrench, VTS_LANG_FR, VTS_LANG_EN))
+
+End Function
+
+Public Function VisibleTableSchema_TextCatalogDefinitions() As Variant
+
+    Dim definitions(0 To 80) As Variant
+    Dim tableKeys As Variant
+    Dim tableKey As Variant
+    Dim columnKeys As Variant
+    Dim columnKey As Variant
+    Dim definitionIndex As Long
+
+    tableKeys = Array( _
+        VTS_TABLE_WBS, _
+        VTS_TABLE_SCURVE, _
+        VTS_TABLE_CONSTRAINTS, _
+        VTS_TABLE_EVENT_HISTORY, _
+        VTS_TABLE_EVENT_ACK)
+
+    For Each tableKey In tableKeys
+        columnKeys = SchemaColumnKeys(CStr(tableKey))
+        For Each columnKey In columnKeys
+            definitions(definitionIndex) = Array( _
+                SchemaHeaderTextKey(CStr(tableKey), CStr(columnKey)), _
+                SchemaSourceColumnTitle(CStr(tableKey), CStr(columnKey), False), _
+                SchemaSourceColumnTitle(CStr(tableKey), CStr(columnKey), True))
+            definitionIndex = definitionIndex + 1
+        Next columnKey
+    Next tableKey
+
+    VisibleTableSchema_TextCatalogDefinitions = definitions
+
+End Function
+
+Private Function SchemaHeaderTextKey( _
+    ByVal tableKey As String, _
+    ByVal columnKey As String) As String
+
+    SchemaHeaderTextKey = "VISIBLE_HEADER." & _
+        UCase$(Trim$(tableKey)) & "." & _
+        UCase$(Trim$(columnKey))
+
+End Function
+
+Private Function SchemaSourceColumnTitle( _
+    ByVal tableKey As String, _
+    ByVal columnKey As String, _
+    ByVal useFrench As Boolean) As String
+
     Select Case tableKey
         Case VTS_TABLE_WBS
-            SchemaColumnTitle = SchemaWBSColumnTitle(columnKey, useFrench)
+            SchemaSourceColumnTitle = SchemaWBSColumnTitle(columnKey, useFrench)
         Case VTS_TABLE_SCURVE
-            SchemaColumnTitle = SchemaSCurveColumnTitle(columnKey, useFrench)
+            SchemaSourceColumnTitle = SchemaSCurveColumnTitle(columnKey, useFrench)
         Case VTS_TABLE_CONSTRAINTS
-            SchemaColumnTitle = SchemaConstraintsColumnTitle(columnKey, useFrench)
+            SchemaSourceColumnTitle = SchemaConstraintsColumnTitle(columnKey, useFrench)
         Case VTS_TABLE_EVENT_HISTORY
-            SchemaColumnTitle = SchemaEventHistoryColumnTitle(columnKey, useFrench)
+            SchemaSourceColumnTitle = SchemaEventHistoryColumnTitle(columnKey, useFrench)
         Case VTS_TABLE_EVENT_ACK
-            SchemaColumnTitle = SchemaEventAckColumnTitle(columnKey, useFrench)
+            SchemaSourceColumnTitle = SchemaEventAckColumnTitle(columnKey, useFrench)
         Case Else
-            Err.Raise VTS_ERROR_BASE, "SchemaColumnTitle", _
-                "Unknown visible-table key '" & tableKey & "' for column key '" & _
-                columnKey & "' and language '" & languageCode & "'."
+            Err.Raise VTS_ERROR_BASE, "SchemaSourceColumnTitle", _
+                PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.UNKNOWN_TABLE_COLUMN", _
+                    TextCatalog_Arguments("Table", tableKey, "Column", columnKey), _
+                    TextCatalog_Arguments("Table", tableKey, "Column", columnKey))
     End Select
 
-    If Len(SchemaColumnTitle) = 0 Then
-        Err.Raise VTS_ERROR_BASE + 2, "SchemaColumnTitle", _
-            "Unknown visible-table column key '" & columnKey & _
-            "' for table '" & tableKey & "' and language '" & languageCode & "'."
+    If Len(SchemaSourceColumnTitle) = 0 Then
+        Err.Raise VTS_ERROR_BASE + 2, "SchemaSourceColumnTitle", _
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.UNKNOWN_COLUMN", _
+                TextCatalog_Arguments("Column", columnKey, "Table", tableKey), _
+                TextCatalog_Arguments("Column", columnKey, "Table", tableKey))
     End If
+
 End Function
 
 Public Function SchemaListColumn( _
@@ -220,13 +276,16 @@ Public Function SchemaListColumn( _
 
     If tableObject Is Nothing Then
         Err.Raise VTS_ERROR_BASE + 3, "SchemaListColumn", _
-            "The ListObject is Nothing for table key '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_NOTHING", _
+                TextCatalog_Arguments("Table", tableKey), _
+                TextCatalog_Arguments("Table", tableKey))
     End If
 
     If StrComp(tableObject.Name, tableKey, vbBinaryCompare) <> 0 Then
         Err.Raise VTS_ERROR_BASE + 4, "SchemaListColumn", _
-            "ListObject mismatch. Expected '" & tableKey & "' but received '" & _
-            tableObject.Name & "'."
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_MISMATCH", _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name), _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name))
     End If
 
     expectedTitle = SchemaCurrentColumnTitle(tableKey, columnKey)
@@ -237,8 +296,9 @@ Public Function SchemaListColumn( _
 
     If SchemaListColumn Is Nothing Then
         Err.Raise VTS_ERROR_BASE + 5, "SchemaListColumn", _
-            "The column key '" & columnKey & "' could not be resolved in table '" & _
-            tableKey & "'. Expected physical header: '" & expectedTitle & "'."
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.COLUMN_NOT_RESOLVED", _
+                TextCatalog_Arguments("Column", columnKey, "Table", tableKey, "Header", expectedTitle), _
+                TextCatalog_Arguments("Column", columnKey, "Table", tableKey, "Header", expectedTitle))
     End If
 End Function
 
@@ -271,12 +331,15 @@ Public Function SchemaBuildColumnKeyMap( _
 
     If tableObject Is Nothing Then
         Err.Raise VTS_ERROR_BASE + 6, "SchemaBuildColumnKeyMap", _
-            "The ListObject is Nothing for table key '" & tableKey & "'."
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_NOTHING", _
+                TextCatalog_Arguments("Table", tableKey), _
+                TextCatalog_Arguments("Table", tableKey))
     End If
     If StrComp(tableObject.Name, tableKey, vbBinaryCompare) <> 0 Then
         Err.Raise VTS_ERROR_BASE + 7, "SchemaBuildColumnKeyMap", _
-            "ListObject mismatch. Expected '" & tableKey & "' but received '" & _
-            tableObject.Name & "'."
+            PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_MISMATCH", _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name), _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name))
     End If
 
     columnKeys = SchemaColumnKeys(tableKey)
@@ -356,15 +419,17 @@ Private Function SchemaUseFrench( _
             SchemaUseFrench = True
         Case Else
             Err.Raise VTS_ERROR_BASE + 1, "SchemaColumnTitle", _
-                "Unsupported schema language '" & languageCode & _
-                "' for table '" & tableKey & "' and column key '" & columnKey & _
-                "'. Expected EN or FR."
+                PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.UNSUPPORTED_LANGUAGE", _
+                    TextCatalog_Arguments("Language", languageCode, "Table", tableKey, "Column", columnKey), _
+                    TextCatalog_Arguments("Language", languageCode, "Table", tableKey, "Column", columnKey))
     End Select
 End Function
 
 Private Sub SchemaRaiseUnknownTable(ByVal sourceName As String, ByVal tableKey As String)
     Err.Raise VTS_ERROR_BASE, sourceName, _
-        "Unknown visible-table key '" & tableKey & "'."
+        PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.UNKNOWN_TABLE", _
+            TextCatalog_Arguments("Table", tableKey), _
+            TextCatalog_Arguments("Table", tableKey))
 End Sub
 
 Private Function SchemaWBSColumnTitle(ByVal columnKey As String, ByVal useFrench As Boolean) As String

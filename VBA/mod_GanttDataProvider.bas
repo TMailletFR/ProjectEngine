@@ -177,7 +177,9 @@ Public Sub ValidateGanttSourceColumns(ByVal mapWBS As Object)
 
     For Each c In requiredCols
         If Not mapWBS.Exists(CStr(c)) Then
-            Err.Raise vbObjectError + 700, , "Missing source column in tbl_WBS: " & CStr(c)
+            Err.Raise vbObjectError + 700, , PlanningMessageText_Format("GANTT.ERROR.MISSING_SOURCE_COLUMN", _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)), _
+                TextCatalog_Arguments("Table", "tbl_WBS", "Column", CStr(c)))
         End If
     Next c
 

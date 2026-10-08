@@ -1,6 +1,6 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmPlanningMessages 
-   Caption         =   "Planning warnings"
+   Caption         =   ""
    ClientHeight    =   7800
    ClientLeft      =   930
    ClientTop       =   3705
@@ -42,10 +42,14 @@ Private mLoadingMessage As Boolean
 
 Public Sub LoadMessages( _
     ByVal messages As Collection, _
-    Optional ByVal windowTitle As String = "Planning console")
+    Optional ByVal windowTitle As String = vbNullString)
 
     Set mItems = MessageEngine_PrepareDisplayMessages(messages)
-    mTitle = windowTitle
+    If Len(windowTitle) = 0 Then
+        mTitle = TextCatalog_Get("CONSOLE.WINDOW.TITLE", EventHistory_CurrentLanguage())
+    Else
+        mTitle = windowTitle
+    End If
     mIndex = 1
 
     ApplyFormLayout
@@ -103,8 +107,15 @@ End Sub
 '------------------------------------------------------------------------------
 Private Sub cmdClose_Click()
 
-    Unload Me
+    Me.Hide
 
+End Sub
+
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    If CloseMode = vbFormControlMenu Then
+        Cancel = True
+        Me.Hide
+    End If
 End Sub
 
 '------------------------------------------------------------------------------
@@ -120,8 +131,8 @@ Private Sub RenderCurrentMessage()
     If mItems Is Nothing Then Exit Sub
 
     If mItems.Count = 0 Then
-        lblTitle.caption = "Messages"
-        lblCounter.caption = "STOP 0/0 | WARNING 0/0 | INFO 0/0"
+        lblTitle.caption = TextCatalog_Get("CONSOLE.SECTION.MESSAGES", EventHistory_CurrentLanguage())
+        lblCounter.caption = TextCatalog_Get("CONSOLE.EMPTY.COUNTER", EventHistory_CurrentLanguage())
         lblMessageType.caption = ""
         txtMessage.Text = ""
         cmdPrevious.enabled = False
@@ -137,7 +148,7 @@ Private Sub RenderCurrentMessage()
     msgType = UCase$(Trim$(CStr(item("Type"))))
     If MessageIsWarning(msgType) Then item("Acknowledged") = PlanningMessage_IsAcknowledged(item)
 
-    lblTitle.caption = "Messages"
+    lblTitle.caption = TextCatalog_Get("CONSOLE.SECTION.MESSAGES", EventHistory_CurrentLanguage())
     lblCounter.caption = BuildCategoryProgressCaption(msgType)
 
     mLoadingMessage = True
@@ -162,23 +173,23 @@ Private Sub ApplyMessageTypeVisual(ByVal msgType As String)
     Select Case UCase$(Trim$(msgType))
 
         Case "STOP", "ERROR"
-            lblMessageType.caption = "STOP"
+            lblMessageType.caption = TextCatalog_Get("CONSOLE.SEVERITY.STOP", EventHistory_CurrentLanguage())
             lblMessageType.ForeColor = RGB(156, 0, 6)
             lblMessageType.BackColor = RGB(255, 235, 238)
 
         Case "WARNING"
             If CurrentMessageAcknowledged() Then
-                lblMessageType.caption = "WARNING"
+                lblMessageType.caption = TextCatalog_Get("CONSOLE.SEVERITY.WARNING", EventHistory_CurrentLanguage())
                 lblMessageType.ForeColor = RGB(92, 74, 0)
                 lblMessageType.BackColor = RGB(236, 232, 214)
             Else
-                lblMessageType.caption = "WARNING"
+                lblMessageType.caption = TextCatalog_Get("CONSOLE.SEVERITY.WARNING", EventHistory_CurrentLanguage())
                 lblMessageType.ForeColor = RGB(156, 101, 0)
                 lblMessageType.BackColor = RGB(255, 248, 225)
             End If
 
         Case "INFO"
-            lblMessageType.caption = "INFO"
+            lblMessageType.caption = TextCatalog_Get("CONSOLE.SEVERITY.INFO", EventHistory_CurrentLanguage())
             lblMessageType.ForeColor = RGB(0, 97, 0)
             lblMessageType.BackColor = RGB(232, 245, 233)
 
@@ -240,7 +251,7 @@ Private Sub ApplyAckControlVisual( _
 
     chkWarningAck.Visible = PlanningMessage_CanAcknowledge(item)
     chkWarningAck.value = PlanningMessage_IsAcknowledged(item)
-    chkWarningAck.caption = "Cacher / Hide"
+    chkWarningAck.caption = TextCatalog_Get("CONSOLE.COMMAND.HIDE_WARNING", EventHistory_CurrentLanguage())
 
 End Sub
 
@@ -299,7 +310,11 @@ End Sub
 
 Private Function BuildCategoryProgressCaption(ByVal currentType As String) As String
 
-    BuildCategoryProgressCaption = MessageEngine_BuildCategoryProgressCaption(mItems, mIndex, currentType)
+    BuildCategoryProgressCaption = MessageEngine_BuildCategoryProgressCaption( _
+        mItems, _
+        mIndex, _
+        currentType, _
+        EventHistory_CurrentLanguage())
 
 End Function
 '------------------------------------------------------------------------------
@@ -343,7 +358,7 @@ Private Sub ApplyFormLayout()
     lblTitle.Top = headerTop
     lblTitle.Width = 130
     lblTitle.Height = 18
-    lblTitle.caption = "Messages"
+    lblTitle.caption = TextCatalog_Get("CONSOLE.SECTION.MESSAGES", EventHistory_CurrentLanguage())
     lblTitle.Font.Name = "Segoe UI"
     lblTitle.Font.Size = 10
     lblTitle.Font.Bold = True
@@ -400,7 +415,7 @@ Private Sub ApplyFormLayout()
     cmdPrevious.Top = buttonTop
     cmdPrevious.Width = buttonW
     cmdPrevious.Height = buttonH
-    cmdPrevious.caption = "Précédent / Previous"
+    cmdPrevious.caption = TextCatalog_Get("CONSOLE.COMMAND.PREVIOUS", EventHistory_CurrentLanguage())
     cmdPrevious.Font.Name = "Segoe UI"
     cmdPrevious.Font.Size = 9
 
@@ -408,7 +423,7 @@ Private Sub ApplyFormLayout()
     cmdNext.Top = buttonTop
     cmdNext.Width = buttonW
     cmdNext.Height = buttonH
-    cmdNext.caption = "Suivant / Next"
+    cmdNext.caption = TextCatalog_Get("CONSOLE.COMMAND.NEXT", EventHistory_CurrentLanguage())
     cmdNext.Font.Name = "Segoe UI"
     cmdNext.Font.Size = 9
 
@@ -416,7 +431,7 @@ Private Sub ApplyFormLayout()
     cmdClose.Top = buttonTop
     cmdClose.Width = buttonW
     cmdClose.Height = buttonH
-    cmdClose.caption = "Fermer / Close"
+    cmdClose.caption = TextCatalog_Get("CONSOLE.COMMAND.CLOSE", EventHistory_CurrentLanguage())
     cmdClose.Font.Name = "Segoe UI"
     cmdClose.Font.Size = 9
 
@@ -424,7 +439,7 @@ Private Sub ApplyFormLayout()
     chkWarningAck.Top = lblMessageType.Top + 1
     chkWarningAck.Width = 92
     chkWarningAck.Height = 18
-    chkWarningAck.caption = "Cacher / Hide"
+    chkWarningAck.caption = TextCatalog_Get("CONSOLE.COMMAND.HIDE_WARNING", EventHistory_CurrentLanguage())
     chkWarningAck.Font.Name = "Segoe UI"
     chkWarningAck.Font.Size = 9
     chkWarningAck.BackStyle = fmBackStyleTransparent

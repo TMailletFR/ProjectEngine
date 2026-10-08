@@ -36,6 +36,8 @@ Private gConstraintsLanguage As String
 Public Sub Constraints_ApplyLanguage(Optional ByVal languageCode As String = "")
 
     Dim stepName As String
+    Dim ws As Worksheet
+    Dim tbl As ListObject
 
     On Error GoTo ErrHandler
 
@@ -45,6 +47,11 @@ Public Sub Constraints_ApplyLanguage(Optional ByVal languageCode As String = "")
     Else
         Constraints_SetLanguage Settings_GetOwnerLanguage("CONSTRAINTS")
     End If
+
+    stepName = "refresh localized validations"
+    Set ws = ThisWorkbook.Worksheets(CONSTRAINTS_SHEET_NAME)
+    Set tbl = ws.ListObjects(CONSTRAINTS_TABLE_NAME)
+    ApplyConstraintsValidation tbl
 
     Exit Sub
 
@@ -78,13 +85,6 @@ Public Function Constraints_CurrentLanguage() As String
     Constraints_CurrentLanguage = gConstraintsLanguage
 End Function
 
-Private Function Constraints_L(ByVal frText As String, ByVal enText As String) As String
-    If Constraints_CurrentLanguage() = "FR" Then
-        Constraints_L = frText
-    Else
-        Constraints_L = enText
-    End If
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Traite un changement ou evenement pour Constraints Change.
@@ -114,11 +114,7 @@ Public Sub Handle_Constraints_Change(ByVal ws As Worksheet, ByVal Target As Rang
                 Application.EnableEvents = False
                 Application.Undo
 
-                CalcBridge_ShowSingleConsoleMessage "STOP", _
-                    "Deadline invalide." & vbCrLf & _
-                    "-> saisir une date valide ou laisser vide.", _
-                    "Invalid deadline." & vbCrLf & _
-                    "-> enter a valid date or leave blank."
+                CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.INVALID_DEADLINE"
                 GoTo SafeExit
             End If
         End If
@@ -157,13 +153,11 @@ Public Sub Import_WBS_To_Constraints()
     Dim targetRows As Long
     Dim outRow As Long
     Dim r As Long
-    Dim consoleMessages As Collection
+    Dim errorNumber As Long, errorSource As String, errorDescription As String
 
     Set perfScope = Profiler_BeginScope("Import_WBS_To_Constraints", "Excel Table Sync")
 
     On Error GoTo ErrHandler
-
-    Set consoleMessages = New Collection
 
     Set wsWBS = ThisWorkbook.Worksheets(WBS_SHEET_NAME)
     Set tblWBS = wsWBS.ListObjects(WBS_TABLE_NAME)
@@ -221,20 +215,12 @@ Public Sub Import_WBS_To_Constraints()
     ApplyConstraintsFormats tblConstraints
 
 SafeExit:
-    If Not consoleMessages Is Nothing Then
-        If consoleMessages.Count > 0 Then CalcBridge_ShowPlanningConsole consoleMessages
-    End If
     Exit Sub
 
 ErrHandler:
-    If consoleMessages Is Nothing Then Set consoleMessages = New Collection
-    CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Erreur dans Import_WBS_To_Constraints" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Import_WBS_To_Constraints" & vbCrLf & _
-            "-> " & Err.Description)
-    Resume SafeExit
+    ' The workflow owns presentation; capture before any formatter or cleanup.
+    errorNumber = Err.Number: errorSource = Err.Source: errorDescription = Err.Description
+    Err.Raise errorNumber, errorSource, errorDescription
 
 End Sub
 
@@ -314,7 +300,9 @@ Private Function Sync_Constraints_To_CALC_Impl( _
 
     If tblConstraints Is Nothing Then
         Err.Raise vbObjectError + 8610, "Sync_Constraints_To_CALC", _
-            "Missing table " & CONSTRAINTS_TABLE_NAME & ". Run Import_WBS_To_Constraints first."
+            PlanningMessageText_Format("CONSTRAINTS.ERROR.MISSING_TABLE", _
+                TextCatalog_Arguments("Table", CONSTRAINTS_TABLE_NAME), _
+                TextCatalog_Arguments("Table", CONSTRAINTS_TABLE_NAME))
     End If
 
     Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
@@ -338,7 +326,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
         If Not tblConstraints.DataBodyRange Is Nothing Then
             If HasActiveConstraints(tblConstraints, mapConstraints) Then
                 Err.Raise vbObjectError + 8611, "Sync_Constraints_To_CALC", _
-                    "Active constraints exist but tbl_CALC is empty."
+                    PlanningMessageText_Format("CONSTRAINTS.ERROR.CALC_EMPTY")
             End If
         End If
         GoTo SafeExit
@@ -361,7 +349,8 @@ Private Function Sync_Constraints_To_CALC_Impl( _
             If HasValue(arrConstraints(r, mapConstraints(VTS_COL_DEADLINE))) And _
                 Not HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_DEADLINE))) Then
                 Err.Raise vbObjectError + 8614, "Sync_Constraints_To_CALC", _
-                    "Invalid deadline in tbl_CONSTRAINTS for ID: " & idVal
+                    PlanningMessageText_Format("CONSTRAINTS.ERROR.INVALID_DEADLINE_ID", _
+                        TextCatalog_Arguments("Id", idVal), TextCatalog_Arguments("Id", idVal))
             End If
 
             If idVal <> "" Then
@@ -376,7 +365,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
             If activeVal = "YES" Then
                 If idVal = "" Then
                     Err.Raise vbObjectError + 8612, "Sync_Constraints_To_CALC", _
-                        "Active constraint row has an empty ID."
+                        PlanningMessageText_Format("CONSTRAINTS.ERROR.ACTIVE_EMPTY_ID")
                 End If
 
                 If IsConstraintSummaryRow(arrConstraints(r, mapConstraints(VTS_COL_IS_SUMMARY))) Then GoTo NextConstraintRow
@@ -384,7 +373,8 @@ Private Function Sync_Constraints_To_CALC_Impl( _
 
                 If Not calcRowById.Exists(idVal) Then
                     Err.Raise vbObjectError + 8613, "Sync_Constraints_To_CALC", _
-                        "Active constraint references ID not found in tbl_CALC: " & idVal
+                        PlanningMessageText_Format("CONSTRAINTS.ERROR.ID_NOT_IN_CALC", _
+                            TextCatalog_Arguments("Id", idVal), TextCatalog_Arguments("Id", idVal))
                 End If
 
                 If IsActiveConstraintEmpty(arrConstraints, r, mapConstraints) Then GoTo NextConstraintRow
@@ -424,11 +414,9 @@ ErrHandler:
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", Err.Description
     Else
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-            BiMsg( _
-                "Erreur dans Sync_Constraints_To_CALC" & vbCrLf & _
-                "-> " & Err.Description, _
-                "Error in Sync_Constraints_To_CALC" & vbCrLf & _
-                "-> " & Err.Description)
+            PlanningMessageText_Format("CONSTRAINTS.SYNC.ERROR", _
+                TextCatalog_Arguments("Details", Err.Description), _
+                TextCatalog_Arguments("Details", Err.Description))
     End If
 
     Resume SafeExit
@@ -558,7 +546,9 @@ Private Sub RequireColumns_Constraints( _
     For Each c In requiredCols
         If Not mapCol.Exists(CStr(c)) Then
             Err.Raise vbObjectError + 8601, "RequireColumns_Constraints", _
-                "Missing required column in " & tableName & ": " & CStr(c)
+                PlanningMessageText_Format("CONSTRAINTS.ERROR.MISSING_REQUIRED_COLUMN", _
+                    TextCatalog_Arguments("Table", tableName, "Column", CStr(c)), _
+                    TextCatalog_Arguments("Table", tableName, "Column", CStr(c)))
         End If
     Next c
 
@@ -599,6 +589,7 @@ Private Sub ValidateActiveConstraints( _
     Dim startType As String
     Dim finishType As String
     Dim eventHashVal As String
+    Dim eventReceipt As Object
 
     For r = 1 To UBound(arrConstraints, 1)
         If NormalizeActiveValue(arrConstraints(r, mapConstraints(VTS_COL_ACTIVE))) <> "YES" Then GoTo NextRow
@@ -609,17 +600,22 @@ Private Sub ValidateActiveConstraints( _
 
         If idVal = "" Then
             Err.Raise vbObjectError + 8620, "ValidateActiveConstraints", _
-                "Active constraint row has an empty ID."
+                PlanningMessageText_Format("CONSTRAINTS.ERROR.ACTIVE_EMPTY_ID")
         End If
 
         If IsConstraintSummaryRow(arrConstraints(r, mapConstraints(VTS_COL_IS_SUMMARY))) Then
-            eventHashVal = BuildPlanningEventHash( _
+            eventHashVal = BuildPlanningEventIdentityV2( _
+                "WARNING", "CONSTRAINT_PARENT_IGNORED", "TASK", _
+                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_ID)))))
+
+            Set eventReceipt = LogPlanningEvent( _
                 "WARNING", _
                 "CONSTRAINT_PARENT_IGNORED", _
-                "Contrainte active ignoree sur une tache parent", _
-                "Active constraint ignored on a summary task", _
-                "les contraintes sur taches parent ne sont pas exportees vers CALC", _
-                "constraints on summary tasks are not exported to CALC", _
+                eventHashVal, _
+                TextCatalog_Get("CONSTRAINTS.DIAG.PARENT_IGNORED", TEXT_LANGUAGE_FR), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.PARENT_IGNORED", TEXT_LANGUAGE_EN), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.PARENT_IGNORED.DETAIL", TEXT_LANGUAGE_FR), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.PARENT_IGNORED.DETAIL", TEXT_LANGUAGE_EN), _
                 "ValidateActiveConstraints", _
                 "CONSTRAINTS", _
                 "tbl_CONSTRAINTS", _
@@ -627,42 +623,31 @@ Private Sub ValidateActiveConstraints( _
                 Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_WBS)))), _
                 Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_TASK_NAME)))))
 
-            LogPlanningEvent _
-                "WARNING", _
-                "CONSTRAINT_PARENT_IGNORED", _
-                eventHashVal, _
-                "Contrainte active ignoree sur une tache parent", _
-                "Active constraint ignored on a summary task", _
-                "les contraintes sur taches parent ne sont pas exportees vers CALC", _
-                "constraints on summary tasks are not exported to CALC", _
-                "ValidateActiveConstraints", _
-                "CONSTRAINTS", _
-                "tbl_CONSTRAINTS", _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_ID)))), _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_WBS)))), _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_TASK_NAME))))
-
             AddConstraintWarning consoleMessages, _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Contrainte active ignoree sur une tache parent", _
-                    "Active constraint ignored on a summary task", _
-                    "les contraintes sur taches parent ne sont pas exportees vers CALC", _
-                    "constraints on summary tasks are not exported to CALC"), _
+                    "CONSTRAINTS.DIAG.PARENT_IGNORED", _
+                    "CONSTRAINTS.DIAG.PARENT_IGNORED.DETAIL"), _
                 True, _
                 "CONSTRAINT_PARENT_IGNORED", _
-                eventHashVal
+                eventHashVal, _
+                eventReceipt
             GoTo NextRow
         End If
 
         If IsConstraintLevelOfEffort(arrConstraints(r, mapConstraints(VTS_COL_TASK_TYPE))) Then
-            eventHashVal = BuildPlanningEventHash( _
+            eventHashVal = BuildPlanningEventIdentityV2( _
+                "WARNING", "CONSTRAINT_LOE_IGNORED", "TASK", _
+                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_ID)))))
+
+            Set eventReceipt = LogPlanningEvent( _
                 "WARNING", _
                 "CONSTRAINT_LOE_IGNORED", _
-                "Contrainte active ignoree sur une tache Level of Effort", _
-                "Active constraint ignored on a Level of Effort task", _
-                "les contraintes sur LOE ne sont pas exportees vers CALC", _
-                "constraints on LOE tasks are not exported to CALC", _
+                eventHashVal, _
+                TextCatalog_Get("CONSTRAINTS.DIAG.LOE_IGNORED", TEXT_LANGUAGE_FR), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.LOE_IGNORED", TEXT_LANGUAGE_EN), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.LOE_IGNORED.DETAIL", TEXT_LANGUAGE_FR), _
+                TextCatalog_Get("CONSTRAINTS.DIAG.LOE_IGNORED.DETAIL", TEXT_LANGUAGE_EN), _
                 "ValidateActiveConstraints", _
                 "CONSTRAINTS", _
                 "tbl_CONSTRAINTS", _
@@ -670,31 +655,15 @@ Private Sub ValidateActiveConstraints( _
                 Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_WBS)))), _
                 Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_TASK_NAME)))))
 
-            LogPlanningEvent _
-                "WARNING", _
-                "CONSTRAINT_LOE_IGNORED", _
-                eventHashVal, _
-                "Contrainte active ignoree sur une tache Level of Effort", _
-                "Active constraint ignored on a Level of Effort task", _
-                "les contraintes sur LOE ne sont pas exportees vers CALC", _
-                "constraints on LOE tasks are not exported to CALC", _
-                "ValidateActiveConstraints", _
-                "CONSTRAINTS", _
-                "tbl_CONSTRAINTS", _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_ID)))), _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_WBS)))), _
-                Trim$(CStr(arrConstraints(r, mapConstraints(VTS_COL_TASK_NAME))))
-
             AddConstraintWarning consoleMessages, _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Contrainte active ignoree sur une tache Level of Effort", _
-                    "Active constraint ignored on a Level of Effort task", _
-                    "les contraintes sur LOE ne sont pas exportees vers CALC", _
-                    "constraints on LOE tasks are not exported to CALC"), _
+                    "CONSTRAINTS.DIAG.LOE_IGNORED", _
+                    "CONSTRAINTS.DIAG.LOE_IGNORED.DETAIL"), _
                 True, _
                 "CONSTRAINT_LOE_IGNORED", _
-                eventHashVal
+                eventHashVal, _
+                eventReceipt
             GoTo NextRow
         End If
 
@@ -703,15 +672,13 @@ Private Sub ValidateActiveConstraints( _
             Err.Raise vbObjectError + 8630, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Deadline renseignee invalide", _
-                    "Invalid deadline")
+                    "CONSTRAINTS.DIAG.INVALID_DEADLINE")
         End If
         If Not calcRowById.Exists(idVal) Then
             Err.Raise vbObjectError + 8621, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Contrainte active sur un ID absent de CALC", _
-                    "Active constraint references an ID not found in CALC")
+                    "CONSTRAINTS.DIAG.ID_NOT_IN_CALC")
         End If
 
         If startType <> "" And _
@@ -721,8 +688,7 @@ Private Sub ValidateActiveConstraints( _
             Err.Raise vbObjectError + 8624, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Type de contrainte debut non reconnu", _
-                    "Unknown start constraint type")
+                    "CONSTRAINTS.DIAG.UNKNOWN_START_TYPE")
         End If
 
         If finishType <> "" And _
@@ -732,50 +698,43 @@ Private Sub ValidateActiveConstraints( _
             Err.Raise vbObjectError + 8625, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Type de contrainte fin non reconnu", _
-                    "Unknown finish constraint type")
+                    "CONSTRAINTS.DIAG.UNKNOWN_FINISH_TYPE")
         End If
 
         If startType <> "" And Not HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_START_CONSTRAINT_DATE))) Then
             Err.Raise vbObjectError + 8626, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Type de contrainte debut renseigne sans date", _
-                    "Start constraint type defined without constraint date")
+                    "CONSTRAINTS.DIAG.START_TYPE_WITHOUT_DATE")
         End If
 
         If HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_START_CONSTRAINT_DATE))) And startType = "" Then
             Err.Raise vbObjectError + 8627, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Date de contrainte debut renseignee sans type", _
-                    "Start constraint date defined without constraint type")
+                    "CONSTRAINTS.DIAG.START_DATE_WITHOUT_TYPE")
         End If
 
         If finishType <> "" And Not HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_FINISH_CONSTRAINT_DATE))) Then
             Err.Raise vbObjectError + 8628, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Type de contrainte fin renseigne sans date", _
-                    "Finish constraint type defined without constraint date")
+                    "CONSTRAINTS.DIAG.FINISH_TYPE_WITHOUT_DATE")
         End If
 
         If HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_FINISH_CONSTRAINT_DATE))) And finishType = "" Then
             Err.Raise vbObjectError + 8629, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Date de contrainte fin renseignee sans type", _
-                    "Finish constraint date defined without constraint type")
+                    "CONSTRAINTS.DIAG.FINISH_DATE_WITHOUT_TYPE")
         End If
 
         If IsActiveConstraintEmpty(arrConstraints, r, mapConstraints) Then
             AddConstraintWarning consoleMessages, _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
-                    "Contrainte active vide ignoree", _
-                    "Active empty constraint ignored", _
-                    "aucune contrainte debut/fin n'est definie ; la ligne n'est pas exportee vers CALC", _
-                    "no start/finish constraint is defined ; the row is not exported to CALC")
+                    "CONSTRAINTS.DIAG.EMPTY_IGNORED", _
+                    "CONSTRAINTS.DIAG.EMPTY_IGNORED.DETAIL")
         End If
 
 NextRow:
@@ -1302,17 +1261,13 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
              Operator:=xlBetween, _
-             Formula1:="Start No Earlier Than,Start No Later Than,Must Start On"
+             Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = Constraints_L("Type de contrainte de debut", "Start Constraint Type")
-        .InputMessage = Constraints_L( _
-            "Choisir vide, Start No Earlier Than, Start No Later Than ou Must Start On.", _
-            "Choose blank, Start No Earlier Than, Start No Later Than, or Must Start On.")
-        .ErrorTitle = Constraints_L("Type de contrainte de debut inconnu", "Unknown Start Constraint Type")
-        .errorMessage = Constraints_L( _
-            "Utiliser Start No Earlier Than, Start No Later Than ou Must Start On.", _
-            "Use Start No Earlier Than, Start No Later Than, or Must Start On.")
+        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT", Constraints_CurrentLanguage())
+        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = True
     End With
@@ -1322,17 +1277,13 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
              Operator:=xlBetween, _
-             Formula1:="Finish No Earlier Than,Finish No Later Than,Must Finish On"
+             Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = Constraints_L("Type de contrainte de fin", "Finish Constraint Type")
-        .InputMessage = Constraints_L( _
-            "Choisir vide, Finish No Earlier Than, Finish No Later Than ou Must Finish On.", _
-            "Choose blank, Finish No Earlier Than, Finish No Later Than, or Must Finish On.")
-        .ErrorTitle = Constraints_L("Type de contrainte de fin inconnu", "Unknown Finish Constraint Type")
-        .errorMessage = Constraints_L( _
-            "Utiliser Finish No Earlier Than, Finish No Later Than ou Must Finish On.", _
-            "Use Finish No Earlier Than, Finish No Later Than, or Must Finish On.")
+        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT", Constraints_CurrentLanguage())
+        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = True
     End With
@@ -1342,13 +1293,13 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
              Operator:=xlBetween, _
-             Formula1:="Yes,No"
+             Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = Constraints_L("Actif", "Active")
-        .InputMessage = Constraints_L("Choisir Yes ou No.", "Choose Yes or No.")
-        .ErrorTitle = Constraints_L("Valeur Active inconnue", "Unknown Active value")
-        .errorMessage = Constraints_L("Valeurs recommandees : Yes ou No.", "Recommended values: Yes or No.")
+        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT", Constraints_CurrentLanguage())
+        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = True
     End With

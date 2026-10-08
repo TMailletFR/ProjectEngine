@@ -1,3 +1,4 @@
+Attribute VB_Name = "mod_GanttRefreshPipeline"
 Option Explicit
 
 '===============================================================================
@@ -57,6 +58,7 @@ Private Const GANTT_SCALE_MONTH As String = "MONTH"
 
 Private gLastRenderSignature As String
 Private gLastTimelineSignature As String
+Private gLastRenderContext As String
 Private gLastWorksheetShapeCount As Long
 Private gLastRefreshSucceeded As Boolean
 Private gLastRefreshEffectiveScope As String
@@ -78,6 +80,32 @@ Public Function GanttRefresh_LastErrorDescription() As String
 
     GanttRefresh_LastErrorDescription = gLastRefreshErrorDescription
 
+End Function
+
+Public Function GanttRefresh_GetRenderedExtent(ByRef slotCount As Long, ByRef rowCount As Long) As Boolean
+    Dim parts As Variant
+    Dim rendered As Range
+    slotCount = 0
+    rowCount = 0
+    If Len(gLastTimelineSignature) = 0 Then
+        ' Persisted output geometry, not a discovery scan or a new render cache.
+        On Error GoTo MissingExtent
+        Set rendered = ThisWorkbook.Names("_PE_GANTT_RENDERED_EXTENT").RefersToRange
+        If Not rendered.Parent Is ThisWorkbook.Worksheets("GANTT") Then Exit Function
+        If rendered.Areas.Count <> 1 Or rendered.Row <> 5 Or rendered.Column <> 11 Then Exit Function
+        slotCount = rendered.Columns.Count
+        rowCount = rendered.Rows.Count
+        GanttRefresh_GetRenderedExtent = slotCount > 0 And rowCount > 0
+        Exit Function
+    End If
+    parts = Split(gLastTimelineSignature, "|")
+    If UBound(parts) <> 4 Then Exit Function
+    If CStr(parts(0)) <> GetGanttTimelineScaleMode() Then Exit Function
+    ' These are the dimensions committed by this pipeline, not worksheet discovery.
+    slotCount = CLng(parts(3))
+    rowCount = CLng(parts(4))
+    GanttRefresh_GetRenderedExtent = slotCount > 0 And rowCount > 0
+MissingExtent:
 End Function
 
 
@@ -171,6 +199,9 @@ Public Sub RunGanttRefreshCore( _
     Dim incidentDirtyCount As Long
     Dim incidentDirtyMarked As Boolean
     Dim topologyChanged As Boolean
+    Dim renderContext As String
+    Dim contextSlotCount As Long
+    Dim committedTimelineParts As Variant
 
     Set perfScope = Profiler_BeginScope("RunGanttRefreshCore", "Gantt")
     gLastRefreshSucceeded = False
@@ -208,16 +239,6 @@ Public Sub RunGanttRefreshCore( _
     '- Otherwise FreezeGanttAfterFinish is never called after deleting/recreating GANTT.
     Set wsGantt = EnsureGanttSheet(wasGanttSheetCreated)
     If wasGanttSheetCreated Then isNewSheet = True
-    If displayOnly And Not wasGanttSheetCreated Then
-        If Not GanttLocal_HasCommittedSnapshot() Then
-            If GanttLocal_PrimeNormalState() Then
-                gLastWorksheetShapeCount = wsGantt.Shapes.Count
-            End If
-        ElseIf gLastWorksheetShapeCount <= 0 Then
-            gLastWorksheetShapeCount = wsGantt.Shapes.Count
-        End If
-    End If
-
     Set wsCalc = ThisWorkbook.Worksheets(CALC_SHEET)
     Set tblCalc = wsCalc.ListObjects(CALC_TABLE)
     If tblCalc.DataBodyRange Is Nothing Then
@@ -241,6 +262,22 @@ Public Sub RunGanttRefreshCore( _
     If renderableRowCount < 1 Then
         Gantt_SafeEmptyState
         GoTo SafeExit
+    End If
+
+    If displayOnly And Not wasGanttSheetCreated Then
+        If Not GanttLocal_HasCommittedSnapshot() Then
+            ' Current inputs cannot prove that the persisted cells already represent them.
+            If GanttLayout_IsNormalTaskProjectionCurrent(wsGantt, dataArr, mapWBS) Then
+                If GanttLocal_PrimeNormalState() Then gLastWorksheetShapeCount = wsGantt.Shapes.Count
+            Else
+                forceTimelineLayout = True
+                forceCanonicalRebuild = True
+                canonicalFallbackReason = "ColdLeftPanelProjectionMismatch"
+                Profiler_RecordOperation "GanttColdLeftPanelMismatchBootstraps", 1, 0#
+            End If
+        ElseIf gLastWorksheetShapeCount <= 0 Then
+            gLastWorksheetShapeCount = wsGantt.Shapes.Count
+        End If
     End If
 
     Set hasChildren = GanttHierarchy_BuildDirectParentPresenceFromWbs(dataArr, mapWBS)
@@ -270,11 +307,39 @@ Public Sub RunGanttRefreshCore( _
         GoTo SafeExit
     End If
 
+    If displayOnly And Not forceTimelineLayout Then
+        If Not GanttTimeline_HasPhysicalHeader(wsGantt) Then
+            forceTimelineLayout = True
+            Profiler_RecordOperation "GanttTimelineMissingHeaderBootstraps", 1, 0#
+        End If
+    End If
+
+    If displayOnly Then
+        If Not GanttLayout_HasPhysicalTaskProjection(wsGantt, rowCount) Then
+            forceTimelineLayout = True
+            forceCanonicalRebuild = True
+            canonicalFallbackReason = "MissingLeftPanelProjection"
+            Profiler_RecordOperation "GanttMissingLeftPanelBootstraps", 1, 0#
+        End If
+    End If
+
     renderSignature = GanttRefresh_BuildRenderSignature( _
         dataArr, mapWBS, hasChildren, baseById, testById, isTestMode, _
         projectStart, projectFinish, totalDays, renderMode)
     timelineSignature = GanttRefresh_BuildTimelineSignature( _
         projectStart, projectFinish, totalDays, rowCount)
+    contextSlotCount = totalDays
+    If Len(gLastTimelineSignature) > 0 Then
+        committedTimelineParts = Split(gLastTimelineSignature, "|")
+        If UBound(committedTimelineParts) >= 3 Then contextSlotCount = CLng(committedTimelineParts(3))
+    End If
+    ' A compatible tail extension is not yet rendered; validate the committed footprint.
+    renderContext = GanttRefresh_BuildRenderContext(wsGantt, rowCount, contextSlotCount)
+    If displayOnly And (Len(gLastRenderContext) = 0 Or renderContext <> gLastRenderContext) Then
+        forceCanonicalRebuild = True
+        canonicalFallbackReason = "RenderContextChanged"
+        Profiler_RecordOperation "GanttFullScopeReason_RenderContextChanged", 1, 0#
+    End If
     physicalGeometryCurrent = GanttDependencySvg_IsPhysicalStateCurrent(wsGantt)
 
     If displayOnly And Not forceTimelineLayout Then
@@ -295,7 +360,7 @@ Public Sub RunGanttRefreshCore( _
         End If
     End If
 
-    If displayOnly And Not forceTimelineLayout Then
+    If displayOnly And Not forceTimelineLayout And Not forceCanonicalRebuild Then
         If renderSignature = gLastRenderSignature And _
            wsGantt.Shapes.Count = gLastWorksheetShapeCount And _
            physicalGeometryCurrent Then
@@ -326,7 +391,7 @@ Public Sub RunGanttRefreshCore( _
 
     'A local transaction is decided before building a global expected registry
     'or scanning the worksheet Shapes collection.
-    If displayOnly And Not forceTimelineLayout And _
+    If displayOnly And Not forceTimelineLayout And Not forceCanonicalRebuild And _
        (timelineSignature = gLastTimelineSignature Or timelineCompatibleChange) Then
         Set localChangeSet = GanttLocal_BuildChangeSet( _
             dataArr, mapWBS, hasChildren, baseById, testById, isTestMode, renderMode)
@@ -490,8 +555,10 @@ LocalDecisionComplete:
         baseById, testById, isTestMode, Nothing, (Not displayOnly Or forceCanonicalRebuild), _
         localFallbackReason)
     If Not dependencyLocalApplied Then Err.Raise 5, "RunGanttRefreshCore", _
-        "Dependency routing failed: " & localFallbackReason
-    ApplyGanttUiState wsGantt, (Not displayOnly Or forceCanonicalRebuild), _
+        PlanningMessageText_Format("GANTT.ERROR.DEPENDENCY_ROUTING", _
+            TextCatalog_Arguments("Details", localFallbackReason), TextCatalog_Arguments("Details", localFallbackReason))
+    ApplyGanttUiState wsGantt, (Not displayOnly Or forceCanonicalRebuild Or _
+        GetGanttViewMode() = GANTT_VIEW_SUMMARY), _
         (Not displayOnly Or forceCanonicalRebuild)
     If displayOnly And Not forceCanonicalRebuild Then
         GanttConstraint_ClearOverlay wsGantt, rowCount, totalDays
@@ -506,7 +573,9 @@ LocalDecisionComplete:
 
 RenderComplete:
     GanttDependencySvg_EnsureFrontLayer wsGantt
+    GanttRefresh_PublishRenderedExtent wsGantt, rowCount, totalDays
     If Not noOpApplied Then
+        gLastRenderContext = GanttRefresh_BuildRenderContext(wsGantt, rowCount, totalDays)
         gLastRenderSignature = renderSignature
         gLastTimelineSignature = timelineSignature
         gLastWorksheetShapeCount = wsGantt.Shapes.Count
@@ -561,6 +630,24 @@ SafeExit:
 
 End Sub
 
+Private Sub GanttRefresh_PublishRenderedExtent(ByVal ws As Worksheet, ByVal rowCount As Long, ByVal slotCount As Long)
+    Dim published As Range
+    If rowCount < 1 Or slotCount < 1 Then Exit Sub
+    ' A proven no-op can still be the first update after importing this metadata contract.
+    On Error Resume Next
+    Set published = ThisWorkbook.Names("_PE_GANTT_RENDERED_EXTENT").RefersToRange
+    On Error GoTo 0
+    If Not published Is Nothing Then
+        If published.Parent Is ws Then
+            If published.Areas.Count = 1 And published.Row = 5 And published.Column = 11 Then
+                If published.Rows.Count = rowCount And published.Columns.Count = slotCount Then Exit Sub
+            End If
+        End If
+    End If
+    ThisWorkbook.Names.Add Name:="_PE_GANTT_RENDERED_EXTENT", _
+        RefersTo:="=" & ws.Cells(5, 11).Resize(rowCount, slotCount).Address(External:=True), Visible:=False
+    Profiler_RecordOperation "GanttRenderedExtentPublications", 1, 0#
+End Sub
 Private Sub GanttRefresh_ProjectTasksStage( _
     ByVal wsGantt As Worksheet, _
     ByRef dataArr As Variant, _
@@ -635,6 +722,7 @@ Public Sub GanttRefresh_InvalidateDifferentialState(Optional ByVal reason As Str
 
     gLastRenderSignature = ""
     gLastTimelineSignature = ""
+    gLastRenderContext = ""
     gLastWorksheetShapeCount = -1
     GanttLocal_Invalidate reason
     GanttShapeRegistry_InvalidateCanonical reason
@@ -644,7 +732,6 @@ Public Sub GanttRefresh_InvalidateDifferentialState(Optional ByVal reason As Str
     End If
 
 End Sub
-
 Public Sub GanttRefresh_MarkRenderSignatureDirty(Optional ByVal reason As String = "")
 
     gLastRenderSignature = ""
@@ -693,7 +780,7 @@ Public Sub GanttRefresh_ApplyAnalyticsStyleOnly()
             GANTT_UPDATE_SCOPE_INCREMENTAL, _
             GANTT_RENDER_INTENT_OFFSCREEN, _
             "GanttRefresh_ApplyAnalyticsStyleOnlyGeometryInvalidation") Then
-            Err.Raise 5, "GanttRefresh_ApplyAnalyticsStyleOnly", "Gantt geometry reconciliation failed."
+            Err.Raise 5, "GanttRefresh_ApplyAnalyticsStyleOnly", PlanningMessageText_Format("GANTT.ERROR.GEOMETRY_RECONCILIATION")
         End If
         Exit Sub
     End If
@@ -834,6 +921,109 @@ End Function
 ' FR: Construit la signature du modele visuel courant sans lire les shapes.
 ' EN: Builds the current visual-model signature without reading shapes.
 '------------------------------------------------------------------------------
+Private Function GanttRefresh_BuildRenderContext( _
+    ByVal ws As Worksheet, ByVal rowCount As Long, ByVal slotCount As Long) As String
+
+    Dim perfScope As clsPerfScope
+    Dim constraints As Object, key As Variant, values As Variant
+    Dim links As ListObject, parts As Collection
+    Dim dimension As Range, layoutSlice As Range, layoutValue As Variant
+    Dim tokens() As String, i As Long, c As Long
+
+    Set perfScope = Profiler_BeginScope("GanttRefresh_BuildRenderContext", "Gantt Validation")
+    Set parts = New Collection
+    parts.Add CStr(Date) & ":" & GetGanttTimelineScaleMode() & ":" & GetGanttViewMode() & ":" & _
+        GetGanttAnalyticsPathMode() & ":" & CStr(GetGanttShowConstraints()) & ":" & _
+        CStr(IsAnalyticsEnabled()) & ":" & Settings_GetGlobalDisplayLanguage() & ":" & _
+        GanttLive_GetPendingRenderMode() & ":" & CStr(GanttLive_IsTestRenderRequested()) & ":" & _
+        CStr(IsCriticalPathMultiNetworkEnabled())
+
+    ' These are the actual marker inputs, read through the existing marker owner.
+    Set constraints = BuildGanttConstraintMapFromCalc(IsAnalyticsEnabled())
+    For Each key In constraints.Keys
+        parts.Add GanttRefresh_ContextToken(key)
+        values = constraints(key)
+        For c = LBound(values) To UBound(values)
+            parts.Add GanttRefresh_ContextToken(values(c))
+        Next c
+    Next key
+
+    ' Expanded topology, types and lags are authoritative in CALC, not only WBS text.
+    Set links = ThisWorkbook.Worksheets(CALC_SHEET).ListObjects("tbl_LOGIC_LINKS")
+    parts.Add CStr(links.ListRows.Count) & ":" & CStr(links.ListColumns.Count)
+    If Not links.DataBodyRange Is Nothing Then
+        values = links.DataBodyRange.Value2
+        For i = 1 To UBound(values, 1)
+            For c = 1 To UBound(values, 2)
+                parts.Add GanttRefresh_ContextToken(values(i, c))
+            Next c
+        Next i
+    End If
+
+    ' Uniform layout is checked in bulk; mixed dimensions need an exact ordered scan.
+    Set dimension = ws.Rows("5:" & CStr(rowCount + 4))
+    layoutValue = dimension.RowHeight
+    If IsNull(layoutValue) Then
+        For Each layoutSlice In dimension.Rows
+            parts.Add GanttRefresh_ContextToken(layoutSlice.RowHeight)
+        Next layoutSlice
+    Else
+        parts.Add GanttRefresh_ContextToken(layoutValue)
+    End If
+    layoutValue = dimension.Hidden
+    If IsNull(layoutValue) Then
+        For Each layoutSlice In dimension.Rows
+            parts.Add GanttRefresh_ContextToken(layoutSlice.Hidden)
+        Next layoutSlice
+    Else
+        parts.Add GanttRefresh_ContextToken(layoutValue)
+    End If
+    Set dimension = ws.Range(ws.Cells(1, 11), ws.Cells(1, slotCount + 10)).EntireColumn
+    layoutValue = dimension.ColumnWidth
+    If IsNull(layoutValue) Then
+        For Each layoutSlice In dimension.Columns
+            parts.Add GanttRefresh_ContextToken(layoutSlice.ColumnWidth)
+        Next layoutSlice
+    Else
+        parts.Add GanttRefresh_ContextToken(layoutValue)
+    End If
+    layoutValue = dimension.Hidden
+    If IsNull(layoutValue) Then
+        For Each layoutSlice In dimension.Columns
+            parts.Add GanttRefresh_ContextToken(layoutSlice.Hidden)
+        Next layoutSlice
+    Else
+        parts.Add GanttRefresh_ContextToken(layoutValue)
+    End If
+    parts.Add GanttRefresh_ContextToken(ws.Cells(5, 11).Left)
+    parts.Add GanttRefresh_ContextToken(ws.Cells(5, 11).Top)
+    parts.Add GanttRefresh_ContextToken(ws.Rows(3).RowHeight)
+    parts.Add GanttRefresh_ContextToken(ws.Rows(4).RowHeight)
+    values = ws.Range(ws.Cells(3, 11), ws.Cells(4, slotCount + 10)).Value2
+    For i = 1 To 2
+        For c = 1 To UBound(values, 2)
+            parts.Add GanttRefresh_ContextToken(values(i, c))
+        Next c
+    Next i
+    ReDim tokens(1 To parts.Count)
+    For i = 1 To parts.Count
+        tokens(i) = CStr(parts(i))
+    Next i
+    GanttRefresh_BuildRenderContext = Join(tokens, vbLf)
+End Function
+
+Private Function GanttRefresh_ContextToken(ByVal value As Variant) As String
+    Dim contextText As String
+    If IsNull(value) Then
+        contextText = "NULL"
+    ElseIf IsEmpty(value) Then
+        contextText = "EMPTY"
+    Else
+        contextText = CStr(value)
+    End If
+    GanttRefresh_ContextToken = CStr(VarType(value)) & ":" & CStr(Len(contextText)) & ":" & contextText
+End Function
+
 Private Function GanttRefresh_BuildRenderSignature( _
     ByRef dataArr As Variant, _
     ByVal mapWBS As Object, _
@@ -867,19 +1057,8 @@ Private Function GanttRefresh_BuildRenderSignature( _
     For r = 1 To UBound(dataArr, 1)
         idVal = Trim$(CStr(dataArr(r, mapWBS(VTS_COL_ID))))
         wbsVal = NormalizeWBS(CStr(dataArr(r, mapWBS(VTS_COL_WBS))))
-        progressVal = GanttLive_GetDisplayProgress(idVal, baseById, testById, isTestMode)
-        taskNameVal = GanttRefresh_ArrayText(dataArr, r, mapWBS, VTS_COL_TASK_NAME)
-        taskTypeVal = GanttRefresh_ArrayText(dataArr, r, mapWBS, VTS_COL_TASK_TYPE)
-        summaryDisplayVal = GanttRefresh_ArrayText(dataArr, r, mapWBS, VTS_COL_S)
-        criticalPathVal = GanttRefresh_ArrayText(dataArr, r, mapWBS, VTS_COL_CRITICAL_PATH)
-        longestPathVal = GanttRefresh_ArrayText(dataArr, r, mapWBS, VTS_COL_LONGEST_PATH)
-        parts(r) = _
-            idVal & "|" & wbsVal & "|" & taskNameVal & "|" & taskTypeVal & "|" & _
-            summaryDisplayVal & "|" & criticalPathVal & "|" & longestPathVal & "|" & _
-            GanttRefresh_SignatureValue(GanttLive_GetDisplayStart(idVal, baseById, testById, isTestMode)) & "|" & _
-            GanttRefresh_SignatureValue(GanttLive_GetDisplayFinish(idVal, baseById, testById, isTestMode)) & "|" & _
-            GanttRefresh_SignatureValue(progressVal) & "|" & _
-            CStr(hasChildren.Exists(wbsVal))
+        parts(r) = GanttLocal_BuildRowSignature( _
+            dataArr, mapWBS, hasChildren, r, idVal, wbsVal, baseById, testById, isTestMode)
     Next r
 
     GanttRefresh_BuildRenderSignature = Join(parts, vbLf)
@@ -1021,22 +1200,5 @@ End Function
 Private Sub RestoreGanttCallerVisualContext(ByVal ws As Worksheet, ByVal selectionAddress As String)
 
     'Navigation is owned by the workflow facade, not by the renderer.
-
-End Sub
-
-'------------------------------------------------------------------------------
-' FR: Execute le helper Gantt  Add Console Message dans le workflow de rendu GANTT.
-' EN: Runs the Gantt  Add Console Message helper in the GANTT rendering workflow.
-'------------------------------------------------------------------------------
-Private Sub Gantt_AddConsoleMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
-
-    If consoleMessages Is Nothing Then Exit Sub
-
-    CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
 
 End Sub

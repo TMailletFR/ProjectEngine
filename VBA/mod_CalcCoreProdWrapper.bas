@@ -53,8 +53,7 @@ Public Sub Run_Calc_Core_PROD_Pilot()
 
         CalcCoreProd_ShowConsoleMessage _
             "WARNING", _
-            "La table tbl_CALC est vide.", _
-            "Table tbl_CALC is empty."
+            "DIAG.CORE_PILOT.CALC_EMPTY"
 
         Exit Sub
 
@@ -64,8 +63,7 @@ Public Sub Run_Calc_Core_PROD_Pilot()
 
         CalcCoreProd_ShowConsoleMessage _
             "WARNING", _
-            "La table tbl_WBS est vide.", _
-            "Table tbl_WBS is empty."
+            "DIAG.CORE_PILOT.WBS_EMPTY"
 
         Exit Sub
 
@@ -87,10 +85,7 @@ Public Sub Run_Calc_Core_PROD_Pilot()
 
     CalcCoreProd_ShowConsoleMessage _
         "INFO", _
-        "Pilot core terminé." & vbCrLf & _
-        "-> résultats écrits dans tbl_CALC", _
-        "Pilot core completed." & vbCrLf & _
-        "-> results written to tbl_CALC"
+        "DIAG.CORE_PILOT.COMPLETE"
 
 SafeExit:
     EndMacroRun
@@ -100,10 +95,8 @@ ErrHandler:
 
     CalcCoreProd_ShowConsoleMessage _
         "STOP", _
-        "Erreur dans Run_Calc_Core_PROD_Pilot" & vbCrLf & _
-        "-> " & Err.Description, _
-        "Error in Run_Calc_Core_PROD_Pilot" & vbCrLf & _
-        "-> " & Err.Description
+        "DIAG.CORE_PILOT.ERROR", _
+        TextCatalog_Arguments("Details", Err.Description)
 
     Resume SafeExit
 
@@ -256,10 +249,10 @@ Public Function BuildCoreLinksBySucc_FromLogicLinksTable_Expanded( _
     Set network = ParsedPlanningNetwork_LoadCanonical()
     Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
 
-    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Succ ID"
-    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Pred ID"
-    If Not network.HasColumn("Link Type") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Link Type"
-    If Not network.HasColumn("Lag") Then Err.Raise vbObjectError + 901, "RequireColumn", "Missing column in tbl_LOGIC_LINKS: Lag"
+    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 901, "RequireColumn", CalcCoreProd_MissingColumnMessage("tbl_LOGIC_LINKS", "Succ ID")
+    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 901, "RequireColumn", CalcCoreProd_MissingColumnMessage("tbl_LOGIC_LINKS", "Pred ID")
+    If Not network.HasColumn("Link Type") Then Err.Raise vbObjectError + 901, "RequireColumn", CalcCoreProd_MissingColumnMessage("tbl_LOGIC_LINKS", "Link Type")
+    If Not network.HasColumn("Lag") Then Err.Raise vbObjectError + 901, "RequireColumn", CalcCoreProd_MissingColumnMessage("tbl_LOGIC_LINKS", "Lag")
 
     RequireColumn mapCalc, "ID", "tbl_CALC"
     RequireColumn mapCalc, "ParentID", "tbl_CALC"
@@ -465,10 +458,16 @@ Private Sub RequireColumn( _
 
     If Not mapCol.Exists(colName) Then
         Err.Raise vbObjectError + 901, "RequireColumn", _
-            "Missing column in " & tableName & ": " & colName
+            CalcCoreProd_MissingColumnMessage(tableName, colName)
     End If
 
 End Sub
+
+Private Function CalcCoreProd_MissingColumnMessage(ByVal tableName As String, ByVal columnName As String) As String
+    CalcCoreProd_MissingColumnMessage = PlanningMessageText_Format("DIAG.TECH.MISSING_COLUMN", _
+        TextCatalog_Arguments("Table", tableName, "Column", columnName), _
+        TextCatalog_Arguments("Table", tableName, "Column", columnName))
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Retourne Single Column Array depuis le contexte core bridge.
@@ -516,8 +515,8 @@ End Function
 
 Private Sub CalcCoreProd_ShowConsoleMessage( _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     Dim consoleMessages As Collection
 
@@ -525,10 +524,7 @@ Private Sub CalcCoreProd_ShowConsoleMessage( _
 
     CalcBridge_AddConsoleMessage consoleMessages, _
         msgType, _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
     CalcBridge_ShowPlanningConsole consoleMessages
 

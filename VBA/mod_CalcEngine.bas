@@ -49,11 +49,9 @@ ErrHandler:
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Erreur dans Run_Calc_Engine" & vbCrLf & _
-            "-> " & Err.Description, _
-            "Error in Run_Calc_Engine" & vbCrLf & _
-            "-> " & Err.Description)
+        PlanningMessageText_Format("DIAG.CALC_ENGINE.RUN_ERROR", _
+            TextCatalog_Arguments("Details", Err.Description), _
+            TextCatalog_Arguments("Details", Err.Description))
 
     CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -100,129 +98,17 @@ End Sub
 Private Sub ShowCalcErrorMessages( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
+    ByVal messageKey As String)
 
     If idsDict Is Nothing Then Exit Sub
     If idsDict.Count = 0 Then Exit Sub
 
     CalcEngine_ShowSingleConsoleMessage "STOP", _
-        BuildGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction)
+        CalcBridge_BuildGroupedMessage(idsDict, idToWbs, messageKey)
 
 End Sub
 
 
-
-
-'------------------------------------------------------------------------------
-' FR: Construit la map Grouped Message a partir des donnees fournies par l'appelant.
-' EN: Builds the Grouped Message map from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function BuildGroupedMessage( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String) As String
-
-    Dim idsLine As String
-    Dim wbsLine As String
-
-    idsLine = BuildInlineList(idsDict, 20)
-    wbsLine = BuildInlineWBSList(idsDict, idToWbs, 20)
-
-    BuildGroupedMessage = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Construit la collection Inline List a partir des donnees fournies par l'appelant.
-' EN: Builds the Inline List collection from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function BuildInlineList(ByVal idsDict As Object, ByVal maxItems As Long) As String
-
-    Dim result As String
-    Dim key As Variant
-    Dim countShown As Long
-    Dim totalCount As Long
-
-    result = ""
-    countShown = 0
-    totalCount = idsDict.Count
-
-    For Each key In idsDict.Keys
-        countShown = countShown + 1
-        If countShown <= maxItems Then
-            If result <> "" Then result = result & " / "
-            result = result & CStr(key)
-        Else
-            Exit For
-        End If
-    Next key
-
-    If totalCount > maxItems Then
-        result = result & " / +" & CStr(totalCount - maxItems)
-    End If
-
-    BuildInlineList = result
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Construit la collection Inline WBS List a partir des donnees fournies par l'appelant.
-' EN: Builds the Inline WBS List collection from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function BuildInlineWBSList(ByVal idsDict As Object, ByVal idToWbs As Object, ByVal maxItems As Long) As String
-
-    Dim result As String
-    Dim key As Variant
-    Dim countShown As Long
-    Dim totalCount As Long
-    Dim itemText As String
-
-    result = ""
-    countShown = 0
-    totalCount = idsDict.Count
-
-    For Each key In idsDict.Keys
-        countShown = countShown + 1
-        If countShown <= maxItems Then
-            If idToWbs.Exists(CStr(key)) Then
-                itemText = CStr(idToWbs(CStr(key)))
-            Else
-                itemText = "-"
-            End If
-
-            If result <> "" Then result = result & " / "
-            result = result & itemText
-        Else
-            Exit For
-        End If
-    Next key
-
-    If totalCount > maxItems Then
-        result = result & " / +" & CStr(totalCount - maxItems)
-    End If
-
-    BuildInlineWBSList = result
-
-End Function
 
 
 '------------------------------------------------------------------------------
@@ -945,6 +831,12 @@ Private Function CalcEngine_IsDrivingLongestPathLink( _
 
 End Function
 
+Private Function CalcEngine_MissingColumnMessage(ByVal tableName As String, ByVal columnName As String) As String
+    CalcEngine_MissingColumnMessage = PlanningMessageText_Format("DIAG.TECH.MISSING_COLUMN", _
+        TextCatalog_Arguments("Table", tableName, "Column", columnName), _
+        TextCatalog_Arguments("Table", tableName, "Column", columnName))
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Retourne la valeur Dates Equal sans modifier les donnees d'entree.
 ' EN: Returns the Dates Equal value without mutating input data.
@@ -1028,7 +920,7 @@ Public Function BuildBaselineRexTemporalState( _
         End If
 
         If Not HasValue(baselineDuration) Then
-            diagnosticsById(taskId) = "Baseline temporal duration cannot be inferred."
+            diagnosticsById(taskId) = "REX_MISSING_DURATION"
             GoTo NextRexTemporalTask
         End If
 
@@ -1062,7 +954,7 @@ Public Function BuildBaselineRexTemporalState( _
                 If rexStartById.Exists(CStr(predId)) And rexFinishById.Exists(CStr(predId)) Then
                     linkKey = taskId & "|" & CStr(predId)
                     If Not predLagBySuccPred.Exists(linkKey) Or Not predTypeBySuccPred.Exists(linkKey) Then
-                        diagnosticsById(taskId) = "Baseline dependency attributes are incomplete."
+                        diagnosticsById(taskId) = "REX_INCOMPLETE_DEPENDENCY"
                         GoTo NextRexTemporalTask
                     End If
 
@@ -1087,7 +979,7 @@ Public Function BuildBaselineRexTemporalState( _
                                 If Not HasValue(bestStart) Or CDbl(candidateStart) > CDbl(bestStart) Then bestStart = candidateStart
                             End If
                         Case Else
-                            diagnosticsById(taskId) = "Baseline dependency type is invalid."
+                            diagnosticsById(taskId) = "REX_INVALID_DEPENDENCY_TYPE"
                             GoTo NextRexTemporalTask
                     End Select
                 End If
@@ -1114,9 +1006,9 @@ Public Function BuildBaselineRexTemporalState( _
             rexStartById(taskId) = SubtractWorkingDays(bestFinish, baselineDuration, taskCal)
             rexDurationById(taskId) = baselineDuration
         ElseIf hasPredInput Then
-            diagnosticsById(taskId) = "Baseline dependency dates could not be projected."
+            diagnosticsById(taskId) = "REX_DEPENDENCY_DATES_UNAVAILABLE"
         Else
-            diagnosticsById(taskId) = "Baseline temporal anchor missing."
+            diagnosticsById(taskId) = "REX_MISSING_TEMPORAL_ANCHOR"
         End If
 
 NextRexTemporalTask:
@@ -1789,8 +1681,8 @@ Public Sub Push_Analytics_Back_To_WBS()
     Set mapWBS = CanonicalIdentity_BuildColumnMap(tblWBS)
     Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
 
-    If Not mapWBS.Exists(VTS_COL_ID) Then Err.Raise vbObjectError + 1301, "Push_Analytics_Back_To_WBS", "Missing column in tbl_WBS: ID"
-    If Not mapCalc.Exists("ID") Then Err.Raise vbObjectError + 1302, "Push_Analytics_Back_To_WBS", "Missing column in tbl_CALC: ID"
+    If Not mapWBS.Exists(VTS_COL_ID) Then Err.Raise vbObjectError + 1301, "Push_Analytics_Back_To_WBS", CalcEngine_MissingColumnMessage("tbl_WBS", "ID")
+    If Not mapCalc.Exists("ID") Then Err.Raise vbObjectError + 1302, "Push_Analytics_Back_To_WBS", CalcEngine_MissingColumnMessage("tbl_CALC", "ID")
 
     arrCalc = tblCalc.DataBodyRange.value
     arrWBS = tblWBS.DataBodyRange.value
@@ -1938,7 +1830,8 @@ Private Sub PushOneAnalyticsCellIfExists( _
 
     If Not IsAllowedAnalyticsPushField(columnKey) Then
         Err.Raise vbObjectError + 1303, "PushOneAnalyticsCellIfExists", _
-            "Forbidden analytics WBS write attempted: " & columnKey
+            PlanningMessageText_Format("DIAG.TECH.FORBIDDEN_ANALYTICS_WRITE", _
+                TextCatalog_Arguments("Column", columnKey), TextCatalog_Arguments("Column", columnKey))
     End If
 
     calcFieldName = SchemaCanonicalEnglishColumnTitle(VTS_TABLE_WBS, columnKey)
@@ -1963,7 +1856,8 @@ Private Sub ClearOneAnalyticsCellIfExists( _
 
     If Not IsAllowedAnalyticsPushField(columnKey) Then
         Err.Raise vbObjectError + 1304, "ClearOneAnalyticsCellIfExists", _
-            "Forbidden analytics WBS clear attempted: " & columnKey
+            PlanningMessageText_Format("DIAG.TECH.FORBIDDEN_ANALYTICS_CLEAR", _
+                TextCatalog_Arguments("Column", columnKey), TextCatalog_Arguments("Column", columnKey))
     End If
 
     If mapWBS.Exists(columnKey) Then
@@ -2059,9 +1953,7 @@ Public Sub Validate_LogicLinksNetwork()
 
     If tblWBS.DataBodyRange Is Nothing Then
         CalcEngine_ShowSingleConsoleMessage "WARNING", _
-            BiMsg( _
-                "tbl_WBS est vide.", _
-                "tbl_WBS is empty.")
+            PlanningMessageText_Format("DIAG.CALC_ENGINE.WBS_EMPTY", Nothing, Nothing)
         Exit Sub
     End If
 
@@ -2082,16 +1974,16 @@ Public Sub Validate_LogicLinksNetwork()
     Set errNotPositionable = CreateObject("Scripting.Dictionary")
     Set errLOEPred = CreateObject("Scripting.Dictionary")
 
-    If Not mapWBS.Exists(VTS_COL_ID) Then Err.Raise vbObjectError + 801, , "Missing column in tbl_WBS: ID"
-    If Not mapWBS.Exists(VTS_COL_WBS) Then Err.Raise vbObjectError + 802, , "Missing column in tbl_WBS: WBS"
-    If Not mapWBS.Exists(VTS_COL_BASELINE_START) Then Err.Raise vbObjectError + 803, , "Missing column in tbl_WBS: Baseline Start"
-    If Not mapWBS.Exists(VTS_COL_FORECAST_START) Then Err.Raise vbObjectError + 804, , "Missing column in tbl_WBS: Forecast Start"
-    If Not mapWBS.Exists(VTS_COL_ACTUAL_START) Then Err.Raise vbObjectError + 805, , "Missing column in tbl_WBS: Actual Start"
+    If Not mapWBS.Exists(VTS_COL_ID) Then Err.Raise vbObjectError + 801, , CalcEngine_MissingColumnMessage("tbl_WBS", "ID")
+    If Not mapWBS.Exists(VTS_COL_WBS) Then Err.Raise vbObjectError + 802, , CalcEngine_MissingColumnMessage("tbl_WBS", "WBS")
+    If Not mapWBS.Exists(VTS_COL_BASELINE_START) Then Err.Raise vbObjectError + 803, , CalcEngine_MissingColumnMessage("tbl_WBS", "Baseline Start")
+    If Not mapWBS.Exists(VTS_COL_FORECAST_START) Then Err.Raise vbObjectError + 804, , CalcEngine_MissingColumnMessage("tbl_WBS", "Forecast Start")
+    If Not mapWBS.Exists(VTS_COL_ACTUAL_START) Then Err.Raise vbObjectError + 805, , CalcEngine_MissingColumnMessage("tbl_WBS", "Actual Start")
 
     hasTaskType = mapWBS.Exists(VTS_COL_TASK_TYPE)
 
-    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 806, , "Missing column in tbl_LOGIC_LINKS: Succ ID"
-    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 807, , "Missing column in tbl_LOGIC_LINKS: Pred ID"
+    If Not network.HasColumn("Succ ID") Then Err.Raise vbObjectError + 806, , CalcEngine_MissingColumnMessage("tbl_LOGIC_LINKS", "Succ ID")
+    If Not network.HasColumn("Pred ID") Then Err.Raise vbObjectError + 807, , CalcEngine_MissingColumnMessage("tbl_LOGIC_LINKS", "Pred ID")
 
     arrWBS = tblWBS.DataBodyRange.value
 
@@ -2293,44 +2185,36 @@ Public Sub Validate_LogicLinksNetwork()
 
         If errMissingPred.Count > 0 Then
             ShowLogicLinksErrorMessages errMissingPred, taskInfoById, _
-                "Prédécesseur introuvable dans tbl_LOGIC_LINKS", "vérifier la colonne Predecessors WBS", _
-                "Missing predecessor in tbl_LOGIC_LINKS", "check the Predecessors WBS column"
+                "DIAG.CALC_ENGINE.LINKS_MISSING_PREDECESSOR_WBS"
         End If
 
         If errLOEPred.Count > 0 Then
             ShowLogicLinksErrorMessages errLOEPred, taskInfoById, _
-                "Un Level of Effort ne peut pas être prédécesseur", "corriger la logique de liaison", _
-                "A Level of Effort cannot be used as predecessor", "fix the logical relationship"
+                "DIAG.CALC_ENGINE.LOE_PREDECESSOR"
         End If
 
         If errCycle.Count > 0 Then
             ShowLogicLinksErrorMessages errCycle, taskInfoById, _
-                "Boucle logique détectée", "corriger les relations de dépendance", _
-                "Logical cycle detected", "fix the dependency relationships"
+                "DIAG.CALC_ENGINE.LOGICAL_CYCLE"
         End If
 
         If errNotPositionable.Count > 0 Then
             ShowLogicLinksErrorMessages errNotPositionable, taskInfoById, _
-                "Tâche ou chaîne non positionnable", "ajouter une date de début ou une logique amont ancrée", _
-                "Task or chain cannot be positioned", "add a start date or an anchored upstream logic"
+                "DIAG.CALC_ENGINE.NOT_POSITIONABLE"
         End If
 
         Exit Sub
     End If
 
     CalcEngine_ShowSingleConsoleMessage "INFO", _
-        BiMsg( _
-            "Validation réseau OK." & vbCrLf & _
-            "-> aucun prédécesseur manquant, aucun cycle, aucune tâche non positionnable détectée.", _
-            "Network validation OK." & vbCrLf & _
-            "-> no missing predecessor, no cycle, no non-positionable task detected.")
+        PlanningMessageText_Format("DIAG.CALC_ENGINE.NETWORK_OK", Nothing, Nothing)
 
 SafeExit:
     If Err.Number <> 0 Then
         CalcEngine_ShowSingleConsoleMessage "STOP", _
-            BiMsg( _
-                "Erreur VBA dans Validate_LogicLinksNetwork : " & Err.Description, _
-                "VBA error in Validate_LogicLinksNetwork: " & Err.Description)
+            PlanningMessageText_Format("DIAG.CALC_ENGINE.NETWORK_ERROR", _
+                TextCatalog_Arguments("Details", Err.Description), _
+                TextCatalog_Arguments("Details", Err.Description))
     End If
 
 End Sub
@@ -2375,10 +2259,7 @@ End Sub
 Private Sub ShowLogicLinksErrorMessages( _
     ByVal idsDict As Object, _
     ByVal taskInfoById As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
+    ByVal messageKey As String)
 
     Dim idsLine As String
     Dim wbsLine As String
@@ -2389,18 +2270,9 @@ Private Sub ShowLogicLinksErrorMessages( _
 
     idsLine = BuildInlineList_LogicLinks(idsDict, 20)
     wbsLine = BuildInlineWBSList_LogicLinks(idsDict, taskInfoById, 20)
-
-    msgText = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
+    msgText = PlanningMessageText_Format(messageKey, _
+        TextCatalog_Arguments("Ids", idsLine, "Wbs", wbsLine), _
+        TextCatalog_Arguments("Ids", idsLine, "Wbs", wbsLine))
 
     CalcEngine_ShowSingleConsoleMessage "STOP", msgText
 
@@ -2505,13 +2377,7 @@ Private Sub ShowCalcUnsupportedLinkTypeMessages( _
     If idsDict.Count = 0 Then Exit Sub
 
     CalcEngine_ShowSingleConsoleMessage "STOP", _
-        BuildGroupedMessage( _
-            idsDict, _
-            idToWbs, _
-            "Type de lien non encore supporté par le moteur", _
-            "à ce stade, seuls les liens FS sont calculés", _
-            "Link type not yet supported by the engine", _
-            "at this stage, only FS links are calculated")
+        CalcBridge_BuildGroupedMessage(idsDict, idToWbs, "DIAG.CALC_ENGINE.UNSUPPORTED_LINK_TYPE")
 
 End Sub
 
@@ -2556,8 +2422,7 @@ Private Sub ShowLogicLinksStructuralMessages_Stage5A( _
 
     If errMissingPred.Count > 0 Then
         ShowCalcErrorMessages errMissingPred, idToWbs, _
-            "Prédécesseur introuvable dans tbl_LOGIC_LINKS", "vérifier la table des liens logiques", _
-            "Missing predecessor in tbl_LOGIC_LINKS", "check the logical links table"
+            "DIAG.CALC_ENGINE.LINKS_MISSING_PREDECESSOR_TABLE"
     End If
 
     If errUnsupportedLinkType.Count > 0 Then
@@ -2603,10 +2468,7 @@ Public Sub Test_WBS_UnauthorizedWrite()
         Set consoleMessages = New Collection
 
         CalcBridge_AddConsoleMessage consoleMessages, "WARNING", _
-            "FR:" & vbCrLf & _
-            "KO test : aucune demande d'abort n'a été détectée." & vbCrLf & vbCrLf & _
-            "EN:" & vbCrLf & _
-            "KO test: no abort request was detected."
+            PlanningMessageText_Format("DIAG.CALC_ENGINE.UNAUTHORIZED_WRITE_TEST", Nothing, Nothing)
 
         CalcBridge_ShowPlanningConsole consoleMessages
     End If
@@ -2954,40 +2816,6 @@ End Function
 ' FR: Affiche Upstream Violation Messages pour l'utilisateur ou le diagnostic.
 ' EN: Shows Upstream Violation Messages for the user or diagnostics.
 '------------------------------------------------------------------------------
-Private Sub ShowUpstreamViolationMessages( _
-    ByVal idsDict As Object, _
-    ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
-
-    Dim itemsLine As String
-    Dim msgText As String
-    Dim consoleMessages As Collection
-
-    If idsDict Is Nothing Then Exit Sub
-    If idsDict.Count = 0 Then Exit Sub
-
-    itemsLine = BuildUpstreamViolationMessages(idsDict, idToWbs, 20)
-
-    msgText = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "Tâches : " & itemsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "Tasks: " & itemsLine
-
-    Set consoleMessages = New Collection
-    CalcBridge_AddConsoleMessage consoleMessages, "STOP", msgText
-    CalcBridge_ShowPlanningConsole consoleMessages
-
-End Sub
-
-
 '------------------------------------------------------------------------------
 ' FR: Indique si CALC contient une erreur bloquante avant la persistance de CALC_STATE. La lecture est fail-closed : une source absente ou illisible est consideree bloquante.
 ' EN: Returns whether CALC contains a blocking error before CALC_STATE persistence. The read is fail-closed: a missing or unreadable source is treated as blocking.

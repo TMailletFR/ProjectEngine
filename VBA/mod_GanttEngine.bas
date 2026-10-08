@@ -56,7 +56,9 @@ Public Function CommitGanttUpdate( _
 
     Select Case normalizedIntent
         Case GANTT_RENDER_INTENT_DEFER
-            GanttDependencySvg_InvalidatePersistentCache ws, "CommitGanttUpdate|DEFER|" & reason
+            ' Pending planning is not a mutation of the last committed physical view.
+            ' Reuse is decided by the common renderer, never by the DEFER adapter.
+            GanttRefresh_MarkRenderSignatureDirty "DeferredPlanning"
             GanttDeferredRender_MarkPending "CommitGanttUpdate|DEFER|" & reason
             Profiler_RecordOperation "GanttEngineDeferredCommits", 1, 0#
             CommitGanttUpdate = True
@@ -96,7 +98,8 @@ Public Function CommitGanttUpdate( _
             ' handled below
 
         Case Else
-            Err.Raise 5, "CommitGanttUpdate", "Unknown Gantt update scope: " & updateScope
+        Err.Raise 5, "CommitGanttUpdate", PlanningMessageText_Format("GANTT.ERROR.UNKNOWN_UPDATE_SCOPE", _
+            TextCatalog_Arguments("Scope", updateScope), TextCatalog_Arguments("Scope", updateScope))
     End Select
 
     If normalizedScope = GANTT_UPDATE_SCOPE_FULL And Not scopeAlreadyRendered Then

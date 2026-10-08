@@ -52,25 +52,17 @@ Public Sub CreateScenarioPlanningFromCurrentScenario()
     Dim oldAlerts As Boolean
     Dim oldEvents As Boolean
     Dim macroName As String
+    Dim errorDescription As String
 
     answer = MsgBox( _
-        "Vous êtes actuellement en mode scénario." & vbCrLf & vbCrLf & _
-        "Le lock direct n'est pas autorisé en mode scénario." & vbCrLf & vbCrLf & _
-        "Voulez-vous créer un nouveau planning scénario basé sur l'état calculé actuel ?" & vbCrLf & vbCrLf & _
-        "Le nouveau fichier :" & vbCrLf & _
-        "* utilisera le scénario actuel comme nouvelle baseline ;" & vbCrLf & _
-        "* conservera les % Progress du scénario ;" & vbCrLf & _
-        "* videra Actual et Forecast ;" & vbCrLf & _
-        "* désactivera les contraintes ;" & vbCrLf & _
-        "* videra l'historique et les ACK ;" & vbCrLf & _
-        "* sortira du mode scénario.", _
+        TextCatalog_Get("GANTT.SCENARIO.CREATE.CONFIRMATION", Gantt_CurrentLanguage()), _
         vbQuestion + vbYesNo, _
-        "Créer un planning scénario")
+        TextCatalog_Get(TXT_GANTT_SCENARIO_CREATE_TITLE, Gantt_CurrentLanguage()))
 
     If answer <> vbYes Then Exit Sub
 
     If Trim$(ThisWorkbook.Path) = "" Then
-        MsgBox "Le fichier source doit être enregistré avant de créer un planning scénario.", vbExclamation, "Créer un planning scénario"
+        CalcBridge_ShowSingleConsoleMessage "WARNING", "GANTT.SCENARIO.CREATE.UNSAVED"
         Exit Sub
     End If
 
@@ -100,10 +92,12 @@ Public Sub CreateScenarioPlanningFromCurrentScenario()
     Exit Sub
 
 Fail:
+    errorDescription = Err.Description
     Application.ScreenUpdating = oldScreenUpdating
     Application.DisplayAlerts = oldAlerts
     Application.EnableEvents = oldEvents
-    MsgBox "Erreur pendant la création du planning scénario :" & vbCrLf & Err.Description, vbCritical, "Créer un planning scénario"
+    CalcBridge_ShowSingleConsoleMessage "STOP", TXT_GANTT_SCENARIO_CREATE_ERROR, _
+        TextCatalog_Arguments("Error", errorDescription)
 
 End Sub
 
@@ -225,7 +219,8 @@ CleanExit:
     Exit Sub
 
 Fail:
-    MsgBox "Erreur pendant l'initialisation du nouveau planning scénario :" & vbCrLf & Err.Description, vbCritical, "Planning scénario"
+    CalcBridge_ShowSingleConsoleMessage "STOP", "GANTT.SCENARIO.INITIALIZE.ERROR", _
+        TextCatalog_Arguments("Error", Err.Description)
     Resume CleanExit
 
 End Sub
@@ -354,7 +349,9 @@ Private Sub RequireScenarioForkColumns(ByVal mapWBS As Object)
     For Each c In Array(VTS_COL_ID, VTS_COL_BASELINE_START, VTS_COL_BASELINE_DURATION, _
                         VTS_COL_FORECAST_START, VTS_COL_FORECAST_FINISH, _
                         VTS_COL_ACTUAL_START, VTS_COL_ACTUAL_FINISH, VTS_COL_PROGRESS_PERCENT)
-        If Not mapWBS.Exists(CStr(c)) Then Err.Raise vbObjectError + 1290, , "Missing WBS column: " & CStr(c)
+        If Not mapWBS.Exists(CStr(c)) Then Err.Raise vbObjectError + 1290, , _
+            PlanningMessageText_Format("GANTT.ERROR.MISSING_WBS_COLUMN", _
+                TextCatalog_Arguments("Column", CStr(c)), TextCatalog_Arguments("Column", CStr(c)))
     Next c
 
 End Sub

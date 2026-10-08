@@ -45,13 +45,9 @@ Private Const BTN_SCALE_KNOB_NAME As String = "btn_Gantt_Scale_Knob"
 Private Const BTN_SCALE_LEFT_NAME As String = "btn_Gantt_Scale_Left"
 Private Const BTN_SCALE_RIGHT_NAME As String = "btn_Gantt_Scale_Right"
 Private Const BTN_RESET_NAME As String = "btn_Gantt_Reset"
-Private Const BTN_RESET_CAPTION As String = "Reset"
 Private Const BTN_SCENARIO_NAME As String = "btn_Gantt_Scenario"
-Private Const BTN_SCENARIO_CAPTION As String = "Scenario"
 Private Const BTN_TEST_NAME As String = "btn_Gantt_Test"
 Private Const BTN_LOCK_NAME As String = "btn_Gantt_Lock"
-Private Const BTN_TEST_CAPTION As String = "Test"
-Private Const BTN_LOCK_CAPTION As String = "Lock"
 Private Const GANTT_COMMAND_BUTTON_GAP As Double = 4
 Private Const GANTT_SCALE_DAY As String = "DAY"
 Private Const GANTT_SCALE_WEEK As String = "WEEK"
@@ -102,45 +98,16 @@ End Sub
 '------------------------------------------------------------------------------
 Public Sub GanttUiControls_EnsureCanonical(ByVal ws As Worksheet)
 
-    Dim scenarioCell As Range
-    Dim lockCell As Range
-    Dim buttonWidth As Double
-    Dim buttonHeight As Double
-    Dim buttonTop As Double
-    Dim buttonRight As Double
-    Dim resetLeft As Double
-    Dim scenarioLeft As Double
-    Dim testLeft As Double
-    Dim lockLeft As Double
-
     If ws Is Nothing Then Exit Sub
 
     Gantt_SetLanguage Settings_GetOwnerLanguage("GANTT")
     EnsureGanttViewInitialized
 
-    Set scenarioCell = ws.Range("B1")
-    Set lockCell = ws.Range("D1")
-
-    buttonWidth = (scenarioCell.Width - 4) * 0.34
-    If buttonWidth < 36 Then buttonWidth = 36
-
-    buttonHeight = lockCell.Height - 4
-    buttonTop = lockCell.Top + 2
-    buttonRight = lockCell.Left + lockCell.Width - 2
-
-    lockLeft = buttonRight - buttonWidth
-    testLeft = lockLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
-    scenarioLeft = testLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
-    resetLeft = scenarioLeft - GANTT_COMMAND_BUTTON_GAP - buttonWidth
-
-    CreateOrUpdateGanttButton ws, BTN_RESET_NAME, Gantt_Text("Réinitialiser", BTN_RESET_CAPTION), _
-        "GanttSimulation_ResetToNormal", resetLeft, buttonTop, buttonWidth, buttonHeight
-    CreateOrUpdateGanttButton ws, BTN_SCENARIO_NAME, Gantt_Text("Scénario", BTN_SCENARIO_CAPTION), _
-        "Run_Gantt_Scenario_Engine", scenarioLeft, buttonTop, buttonWidth, buttonHeight
-    CreateOrUpdateGanttButton ws, BTN_TEST_NAME, Gantt_Text("Test", BTN_TEST_CAPTION), _
-        "Run_Gantt_Test_Engine", testLeft, buttonTop, buttonWidth, buttonHeight
-    CreateOrUpdateGanttButton ws, BTN_LOCK_NAME, Gantt_Text("Verrouiller", BTN_LOCK_CAPTION), _
-        "Run_Gantt_Lock_Changes", lockLeft, buttonTop, buttonWidth, buttonHeight
+    'Command buttons are owned by the Ribbon; retain only sheet presentation controls.
+    DeleteShapeIfExists ws, BTN_RESET_NAME
+    DeleteShapeIfExists ws, BTN_SCENARIO_NAME
+    DeleteShapeIfExists ws, BTN_TEST_NAME
+    DeleteShapeIfExists ws, BTN_LOCK_NAME
 
     'Legacy right-side labels are not part of the current control contract.
     DeleteShapeIfExists ws, BTN_VIEW_RIGHT_NAME
@@ -218,7 +185,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     CreateFixedHeaderToggle ws, _
         BTN_VIEW_LEFT_NAME, BTN_VIEW_BG_NAME, BTN_VIEW_KNOB_NAME, _
-        x, y, labelW1, Gantt_Text("Détail / Synthèse", "Detail / Summary"), _
+        x, y, labelW1, TextCatalog_Get("GANTT.CONTROL.VIEW", Gantt_CurrentLanguage()), _
         x + labelW1 + trackGap, y + 2, trackW, trackH, knobSize, _
         "Toggle_Gantt_View"
 
@@ -226,7 +193,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     ThreePositionControl_Ensure ws, _
         BTN_SCALE_LEFT_NAME, BTN_SCALE_BG_NAME, BTN_SCALE_KNOB_NAME, _
-        x, y, labelW3, Gantt_Text("Jour / Sem. / Mois", "Day / Week / Month"), _
+        x, y, labelW3, TextCatalog_Get("GANTT.CONTROL.SCALE", Gantt_CurrentLanguage()), _
         x + labelW3 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
         "Toggle_Gantt_Scale"
 
@@ -234,7 +201,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     CreateFixedHeaderToggle ws, _
         BTN_CONSTRAINT_LEFT_NAME, BTN_CONSTRAINT_BG_NAME, BTN_CONSTRAINT_KNOB_NAME, _
-        x, y, labelW5, Gantt_Text("Contrainte", "Constraint"), _
+        x, y, labelW5, TextCatalog_Get("GANTT.CONTROL.CONSTRAINT", Gantt_CurrentLanguage()), _
         x + labelW5 + trackGap, y + 2, trackW, trackH, knobSize, _
         "Toggle_Gantt_Constraints"
 
@@ -243,7 +210,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     ThreePositionControl_Ensure ws, _
         BTN_CP_LEFT_NAME, BTN_CP_BG_NAME, BTN_CP_KNOB_NAME, _
-        x, y, labelW2, Gantt_Text("N/A / Chem. Crit. / Le plus long", "None / Critical Path / Longest Path"), _
+        x, y, labelW2, TextCatalog_Get("GANTT.CONTROL.PATH", Gantt_CurrentLanguage()), _
         x + labelW2 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
         "Toggle_Gantt_CriticalPath"
 
@@ -251,7 +218,7 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     CreateFixedHeaderToggle ws, _
         BTN_CP_MULTI_LEFT_NAME, BTN_CP_MULTI_BG_NAME, BTN_CP_MULTI_KNOB_NAME, _
-        x, y, labelW4, Gantt_Text("Unique / Multi-projet", "Single / Multiple Project"), _
+        x, y, labelW4, TextCatalog_Get("GANTT.CONTROL.MULTI_PROJECT", Gantt_CurrentLanguage()), _
         x + labelW4 + trackGap, y + 2, trackW, trackH, knobSize, _
         "Toggle_CriticalPathMode_FromGantt"
 

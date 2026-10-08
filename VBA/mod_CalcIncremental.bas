@@ -102,7 +102,9 @@ Private Sub ValidateIncrementalCalcColumns(ByVal mapCalc As Object)
         If Not mapCalc.Exists(CStr(c)) Then
             Err.Raise vbObjectError + 9201, _
                 "ValidateIncrementalCalcColumns", _
-                "Missing required column in tbl_CALC: " & CStr(c)
+                PlanningMessageText_Format("DIAG.TECH.MISSING_REQUIRED_COLUMN", _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)), _
+                    TextCatalog_Arguments("Table", "tbl_CALC", "Column", CStr(c)))
         End If
     Next c
 
@@ -169,7 +171,7 @@ End Function
 '=====================================================
 ' Build_Impacted_TaskIds
 '=====================================================
-' Entrée :
+' EntrÃ©e :
 ' - changedIds (Dictionary of String -> True)
 ' - childrenByPred (predId -> children list)
 ' - parentById (id -> parentId)
@@ -177,7 +179,7 @@ End Function
 ' Sortie :
 ' - impactedIds (Dictionary)
 '
-' Règles :
+' RÃ¨gles :
 ' - inclut changed
 ' - inclut tous les descendants
 ' - inclut tous les parents (rollup)

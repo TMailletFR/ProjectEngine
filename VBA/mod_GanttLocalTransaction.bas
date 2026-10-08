@@ -241,6 +241,9 @@ Public Function GanttLocal_BuildChangeSet( _
     If fallbackReason = "" And gCommittedScale <> GetGanttTimelineScaleMode() Then fallbackReason = "ScaleChanged"
     If fallbackReason = "" And gCommittedView <> GetGanttViewMode() Then fallbackReason = "ViewChanged"
 
+    If fallbackReason = "" And changedIds.Count > WorksheetFunction.Max(32, rowCount / 4) Then
+        fallbackReason = "ChangeSetTooLarge"
+    End If
     localEligible = (fallbackReason = "")
     If localEligible Then
         Profiler_RecordOperation "GanttLocalCostModelAccepted", changedIds.Count, 0#
@@ -301,7 +304,7 @@ Public Sub GanttLocal_CaptureFullSnapshot( _
 
 End Sub
 
-Private Function GanttLocal_BuildRowSignature( _
+Public Function GanttLocal_BuildRowSignature( _
     ByRef dataArr As Variant, _
     ByVal mapWBS As Object, _
     ByVal hasChildren As Object, _
@@ -321,6 +324,8 @@ Private Function GanttLocal_BuildRowSignature( _
     Dim isLoE As Boolean
     Dim isHighlighted As Boolean
     Dim separator As String
+    Dim inputSignature As String
+    Dim columnKey As Variant
 
     startVal = GanttLive_GetDisplayStart(idVal, baseById, testById, isTestMode)
     finishVal = GanttLive_GetDisplayFinish(idVal, baseById, testById, isTestMode)
@@ -333,6 +338,20 @@ Private Function GanttLocal_BuildRowSignature( _
     isHighlighted = ShouldHighlightGanttAnalyticsPath( _
         dataArr, mapWBS, rowIndex, idVal, testById, isTestMode)
     separator = Chr$(30)
+    ' Raw normal values feed the left panel even while simulation drives the bars.
+    For Each columnKey In Array(VTS_COL_CALCULATED_START, VTS_COL_CALCULATED_FINISH, _
+        VTS_COL_CALCULATED_DURATION, VTS_COL_PROGRESS_PERCENT, VTS_COL_DRIVING_LOGIC, VTS_COL_S)
+        If mapWBS.Exists(CStr(columnKey)) Then
+            separator = GanttLocal_ValueSignature(dataArr(rowIndex, mapWBS(CStr(columnKey))))
+            inputSignature = inputSignature & CStr(Len(separator)) & ":" & separator & Chr$(31)
+        Else
+            inputSignature = inputSignature & "ABSENT" & Chr$(31)
+        End If
+    Next columnKey
+    inputSignature = inputSignature & CStr(HasValue(dataArr(rowIndex, mapWBS(VTS_COL_ACTUAL_START)))) & _
+        CStr(HasValue(dataArr(rowIndex, mapWBS(VTS_COL_ACTUAL_FINISH)))) & _
+        CStr(isTestMode And GanttLive_HasRenderableTestDelta(idVal, baseById, testById))
+    separator = Chr$(30)
 
     GanttLocal_BuildRowSignature = _
         CStr(rowIndex) & separator & idVal & separator & wbs & separator & _
@@ -343,7 +362,7 @@ Private Function GanttLocal_BuildRowSignature( _
         CStr(isParent) & separator & CStr(isMilestone) & separator & _
         CStr(isLoE) & separator & CStr(isHighlighted) & separator & _
         Trim$(CStr(dataArr(rowIndex, mapWBS(VTS_COL_PREDECESSORS_WBS)))) & separator & _
-        Trim$(CStr(dataArr(rowIndex, mapWBS(VTS_COL_TASK_NAME))))
+        Trim$(CStr(dataArr(rowIndex, mapWBS(VTS_COL_TASK_NAME)))) & separator & inputSignature
 
 End Function
 

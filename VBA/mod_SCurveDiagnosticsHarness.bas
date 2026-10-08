@@ -64,34 +64,25 @@ Public Function SCurveDiagnosticsHarness_Smoke( _
     idToWbs("SC-WARN-002") = "20.2"
 
     SCurve_AddGroupedMessage messages, "STOP", stopIds, idToWbs, _
-        "Données bloquantes pour S-curve", _
-        "corriger les champs nécessaires avant recalcul", _
-        "Blocking data for S-curve", _
-        "fix required fields before recalculation"
+        "SCURVE.DIAG.BLOCKING_GROUP"
     SCurveDiagnosticsHarness_Trace "03 grouped stop produced"
 
     ackTokens = SCurve_LogGroupedWarningEvents( _
         warningIds, idToWbs, _
         "SCURVE_MISSING_WEIGHT", _
-        "Poids manquant sur certaines taches feuilles", _
-        "Missing weight on some leaf tasks", _
-        "les taches sont exclues de la S-curve ; completer Weight (%) si necessaire", _
-        "tasks are excluded from the S-curve; fill Weight (%) if needed")
+        "SCURVE.EVENT.MISSING_WEIGHT.MESSAGE", _
+        "SCURVE.EVENT.MISSING_WEIGHT.DETAIL")
     SCurveDiagnosticsHarness_Assert Trim$(ackTokens) <> "", "ack tokens generated"
     SCurveDiagnosticsHarness_Trace "04 warning events logged"
 
     SCurve_AddGroupedMessage messages, "WARNING", warningIds, idToWbs, _
-        "Poids manquant sur certaines tâches feuilles - non prises en compte dans la S-curve", _
-        "compléter Weight (%) si nécessaire", _
-        "Missing weight on some leaf tasks - excluded from S-curve", _
-        "fill Weight (%) if needed", _
+        "SCURVE.DIAG.MISSING_WEIGHT_GROUP", _
         True, _
         ackTokens
     SCurveDiagnosticsHarness_Trace "05 grouped warning produced"
 
     SCurve_AddConsoleMessage messages, "WARNING", _
-        "Aucune tâche feuille exploitable pour la S-curve.", _
-        "No valid leaf task available for S-curve.", _
+        "SCURVE.DIAG.NO_VALID_LEAF", Nothing, _
         "SCURVE_NO_VALID_LEAF_TASK"
     SCurveDiagnosticsHarness_Trace "06 simple warning produced"
 

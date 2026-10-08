@@ -67,15 +67,7 @@ Public Sub CalcBridge_AppendCoreErrorMessages( _
 
 FailSafe:
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Calcul arrete : le moteur a detecte des erreurs bloquantes." & vbCrLf & _
-            "Impossible de reconstruire le message detaille." & vbCrLf & _
-            "-> verifier les colonnes Error flag et ErrorMsg dans tbl_CALC." & vbCrLf & _
-            "-> aucune donnee calculee n'a ete repoussee vers WBS.", _
-            "Calculation stopped: the engine detected blocking errors." & vbCrLf & _
-            "Unable to rebuild the detailed message." & vbCrLf & _
-            "-> check Error flag and ErrorMsg columns in tbl_CALC." & vbCrLf & _
-            "-> no calculated data was pushed back to WBS.")
+        PlanningMessageText_Format("DIAG.PLANNING.SOURCE_DIAGNOSTIC_FAILED", Nothing, Nothing)
 
 End Sub
 
@@ -93,7 +85,8 @@ Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
     Optional ByVal contextMode As String = "PROD", _
     Optional ByVal dependencyDiagnostics As Object = Nothing, _
     Optional ByVal constraintDiagnostics As Object = Nothing, _
-    Optional ByVal cascadeDiagnostics As Object = Nothing)
+    Optional ByVal cascadeDiagnostics As Object = Nothing, _
+    Optional ByVal coreDiagnostics As Object = Nothing)
 
     Dim mapCalc As Object
     Dim arr As Variant
@@ -183,75 +176,23 @@ Public Sub CalcBridge_AppendCoreErrorMessagesFromData( _
 
                 errMsg = Trim$(CStr(arr(r, mapCalc("ErrorMsg"))))
 
+                If coreDiagnostics Is Nothing Then GoTo FailSafe
+
                 'Inherited errors remain visible in the source table,
                 'but are not highlighted in the main popup.
-                If CalcBridge_IsInheritedCoreError(errMsg) Then
-                    GoTo NextRow
-                End If
+                If Not CoreDiagnostics_TaskHasClassification(coreDiagnostics, idVal, "ROOT") Then GoTo NextRow
 
                 If Not rootErrorIds Is Nothing Then
                     If Not rootErrorIds.Exists(idVal) Then GoTo NextRow
                 End If
 
-                Select Case True
-
-                    Case InStr(1, errMsg, "LOE cannot be used as predecessor", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "Blocked by invalid LOE predecessor", vbTextCompare) > 0
-                        errLOEAsPredecessor(idVal) = True
-
-                    Case InStr(1, errMsg, "LOE must have at least one SS predecessor", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE SS predecessor missing", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE SS predecessor not found", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE SS predecessor start not available", vbTextCompare) > 0
-                        errLOEMissingSS(idVal) = True
-
-                    Case InStr(1, errMsg, "LOE must have at least one FF predecessor", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE FF predecessor missing", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE FF predecessor not found", vbTextCompare) > 0 Or _
-                         InStr(1, errMsg, "LOE FF predecessor finish not available", vbTextCompare) > 0
-                        errLOEMissingFF(idVal) = True
-
-                    Case InStr(1, errMsg, "LOE only supports SS and FF predecessors", vbTextCompare) > 0
-                        errLOEInvalidLink(idVal) = True
-
-                    Case InStr(1, errMsg, "Missing predecessor", vbTextCompare) > 0
-                        errMissingPred(idVal) = True
-
-                    Case InStr(1, errMsg, "Cycle detected", vbTextCompare) > 0
-                        errCycle(idVal) = True
-                        If cycleDetailMessage = "" Then cycleDetailMessage = errMsg
-
-                    Case InStr(1, errMsg, "Unsupported link type", vbTextCompare) > 0
-                        errUnsupportedLinkType(idVal) = True
-
-                    Case InStr(1, errMsg, "Actual Start violates dependencies", vbTextCompare) > 0
-                        errActualStartConflict(idVal) = True
-
-                    Case InStr(1, errMsg, "Actual Finish violates finish constraints", vbTextCompare) > 0
-                        errActualFinishConflict(idVal) = True
-
-                    Case InStr(1, errMsg, "Forecast Start violates dependencies", vbTextCompare) > 0
-                        errForecastConflict(idVal) = True
-
-                    Case InStr(1, errMsg, "Forecast Finish violates finish constraints", vbTextCompare) > 0
-                        errForecastFinishConflict(idVal) = True
-
-                    Case InStr(1, errMsg, "Baseline Duration missing", vbTextCompare) > 0
-                        errMissingDuration(idVal) = True
-
-                    Case InStr(1, errMsg, "Start date not computable", vbTextCompare) > 0
-                        errStartNotComputable(idVal) = True
-
-                    Case InStr(1, errMsg, "Finish before start", vbTextCompare) > 0
-                        errFinishBeforeStart(idVal) = True
-
-                    Case CalcBridge_IsConstraintCoreError(errMsg)
-                        errConstraintRootMessages(idVal) = errMsg
-
-                    Case Else
-                        errOtherRoot(idVal) = True
-
-                End Select
+                CalcBridge_ClassifyStructuredCoreDiagnostics coreDiagnostics, idVal, errMsg, _
+                    errMissingPred, errCycle, errUnsupportedLinkType, _
+                    errActualStartConflict, errActualFinishConflict, errForecastConflict, _
+                    errForecastFinishConflict, errMissingDuration, errStartNotComputable, _
+                    errFinishBeforeStart, errLOEAsPredecessor, errLOEMissingSS, _
+                    errLOEMissingFF, errLOEInvalidLink, errOtherRoot, _
+                    errConstraintRootMessages, cycleDetailMessage
 
             End If
         End If
@@ -278,50 +219,32 @@ NextRow:
 
     If errLOEAsPredecessor.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errLOEAsPredecessor, idToWbs, _
-            "LOE utilisée comme prédécesseur", _
-            "supprimer la LOE de la logique amont ; une LOE est pilotée par le réseau mais ne doit pas piloter d'autres tâches", _
-            "LOE used as predecessor", _
-            "remove the LOE from upstream logic; a LOE is driven by the network but must not drive other tasks"
+            "DIAG.GROUP.LOE.PREDECESSOR"
     End If
 
     If errLOEMissingSS.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errLOEMissingSS, idToWbs, _
-            "LOE sans lien SS exploitable", _
-            "ajouter au moins un prédécesseur SS valide pour définir le début de la LOE", _
-            "LOE without usable SS link", _
-            "add at least one valid SS predecessor to define the LOE start"
+            "DIAG.GROUP.LOE.MISSING_SS"
     End If
 
     If errLOEMissingFF.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errLOEMissingFF, idToWbs, _
-            "LOE sans lien FF exploitable", _
-            "ajouter au moins un prédécesseur FF valide pour définir la fin de la LOE", _
-            "LOE without usable FF link", _
-            "add at least one valid FF predecessor to define the LOE finish"
+            "DIAG.GROUP.LOE.MISSING_FF"
     End If
 
     If errLOEInvalidLink.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errLOEInvalidLink, idToWbs, _
-            "Lien invalide sur LOE", _
-            "une LOE accepte uniquement des liens SS et FF", _
-            "Invalid link on LOE", _
-            "a LOE only supports SS and FF links"
+            "DIAG.GROUP.LOE.INVALID_LINK"
     End If
 
     If errMissingPred.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errMissingPred, idToWbs, _
-            "Prédécesseur introuvable", _
-            "vérifier la colonne Predecessors WBS", _
-            "Missing predecessor", _
-            "check the Predecessors WBS column"
+            "DIAG.GROUP.DEPENDENCY.MISSING_PREDECESSOR"
     End If
 
     If errUnsupportedLinkType.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errUnsupportedLinkType, idToWbs, _
-            "Type de lien non supporté par le moteur", _
-            "corriger le type de lien dans Predecessors WBS ou tbl_LOGIC_LINKS", _
-            "Link type not supported by the engine", _
-            "fix the link type in Predecessors WBS or tbl_LOGIC_LINKS"
+            "DIAG.GROUP.DEPENDENCY.UNSUPPORTED_LINK"
     End If
 
     If errCycle.Count > 0 Then
@@ -330,28 +253,19 @@ NextRow:
                 CalcBridge_CycleDetailMessageFromCoreError(cycleDetailMessage)
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errCycle, idToWbs, _
-                "Boucle de dépendance détectée", _
-                "corriger la colonne Predecessors WBS", _
-                "Dependency cycle detected", _
-                "fix the Predecessors WBS column"
+                "DIAG.GROUP.DEPENDENCY.CYCLE"
         End If
     End If
 
     If errActualStartConflict.Count > 0 Then
         CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualStartConflict, idToWbs, _
-            "Actual Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
-            "corriger Actual Start, la logique amont ou le lag", _
-            "Actual Start is incompatible with upstream dependencies", _
-            "fix Actual Start, upstream logic, or lag"
+            "DIAG.UPSTREAM.ACTUAL_START_CONFLICT"
     End If
 
     If errActualFinishConflict.Count > 0 Then
         If Not CalcBridge_TryAddConstraintDiagnosticStops(consoleMessages, errActualFinishConflict, idToWbs, idToTaskName, constraintDiagnostics, cascadeDiagnostics, contextKey) Then
             CalcBridge_AddUpstreamStopToCollection consoleMessages, errActualFinishConflict, idToWbs, _
-                "Actual Finish incompatible avec les contraintes de fin amont", _
-                "corriger Actual Finish, la logique amont ou le lag", _
-                "Actual Finish is incompatible with upstream finish constraints", _
-                "fix Actual Finish, upstream logic, or lag"
+                "DIAG.UPSTREAM.ACTUAL_FINISH_CONFLICT"
         End If
     End If
 
@@ -361,17 +275,11 @@ NextRow:
                 consoleMessages, errForecastConflict, idToWbs, idToTaskName, dependencyDiagnostics, contextKey) Then
 
                 CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
-                    "Test Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
-                    "corriger Test Start ou la logique amont", _
-                    "Test Start is incompatible with upstream dependencies", _
-                    "fix Test Start or upstream logic"
+                    "DIAG.GROUP.TEST.START_CONFLICT"
             End If
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastConflict, idToWbs, _
-                "Forecast Start incompatible avec les d" & ChrW$(233) & "pendances amont", _
-                "corriger Forecast Start ou la logique amont", _
-                "Forecast Start is incompatible with upstream dependencies", _
-                "fix Forecast Start or upstream logic"
+                "DIAG.GROUP.FORECAST.START_CONFLICT"
         End If
     End If
     If errForecastFinishConflict.Count > 0 Then
@@ -379,16 +287,10 @@ NextRow:
             'Structured constraint diagnostic already rendered.
         ElseIf contextKey = "TEST" Or contextKey = "SCENARIO" Then
             CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
-                "Test Finish incompatible avec les contraintes de fin amont", _
-                "corriger Test Finish ou la logique amont", _
-                "Test Finish is incompatible with upstream finish constraints", _
-                "fix Test Finish or upstream logic"
+                "DIAG.GROUP.TEST.FINISH_CONFLICT"
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errForecastFinishConflict, idToWbs, _
-                "Forecast Finish incompatible avec les contraintes de fin amont", _
-                "corriger Forecast Finish ou la logique amont", _
-                "Forecast Finish is incompatible with upstream finish constraints", _
-                "fix Forecast Finish or upstream logic"
+                "DIAG.GROUP.FORECAST.FINISH_CONFLICT"
         End If
     End If
     If errConstraintRootMessages.Count > 0 Then
@@ -399,62 +301,36 @@ NextRow:
 
     If errMissingDuration.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errMissingDuration, idToWbs, _
-            "Baseline Duration manquante", _
-            "compléter la durée baseline", _
-            "Missing Baseline Duration", _
-            "please fill in Baseline Duration"
+            "DIAG.GROUP.BASELINE.MISSING_DURATION"
     End If
 
     If errStartNotComputable.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errStartNotComputable, idToWbs, _
-            "Date de début non déterminable", _
-            "vérifier les dépendances ou la baseline", _
-            "Start date not computable", _
-            "check dependencies or baseline"
+            "DIAG.GROUP.DATES.START_UNRESOLVED"
     End If
 
     If errFinishBeforeStart.Count > 0 Then
         CalcBridge_AddGroupedStopToCollection consoleMessages, errFinishBeforeStart, idToWbs, _
-            "Fin incompatible avec le d" & ChrW$(233) & "but", _
-            "corriger les dates ou la dur" & ChrW$(233) & "e", _
-            "Finish is incompatible with start", _
-            "fix dates or duration"
+            "DIAG.GROUP.DATES.FINISH_BEFORE_START"
     End If
 
     If errOtherRoot.Count > 0 And Not hasSpecificRootError Then
         If contextKey = "TEST" Then
             CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
-                "Erreur de calcul dans le moteur live", _
-                "corriger les valeurs test ou la logique amont", _
-                "Calculation error in live engine", _
-                "fix test values or upstream logic"
+                "DIAG.GROUP.ENGINE.TEST_ERROR"
         ElseIf contextKey = "SCENARIO" Then
             CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
-                "Erreur de calcul dans le sc" & ChrW$(233) & "nario", _
-                "corriger les valeurs de test ou la logique amont", _
-                "Calculation error in scenario", _
-                "fix test values or upstream logic"
+                "DIAG.GROUP.ENGINE.SCENARIO_ERROR"
         Else
             CalcBridge_AddGroupedStopToCollection consoleMessages, errOtherRoot, idToWbs, _
-                "Erreur bloquante d" & ChrW$(233) & "tect" & ChrW$(233) & "e par le moteur", _
-                "v" & ChrW$(233) & "rifier ErrorMsg dans tbl_CALC pour le d" & ChrW$(233) & "tail technique", _
-                "Blocking error detected by the engine", _
-                "check ErrorMsg in tbl_CALC for technical details"
+                "DIAG.GROUP.ENGINE.ERROR"
         End If
     End If
     Exit Sub
 
 FailSafe:
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
-        BiMsg( _
-            "Calcul arrêté : le moteur a détecté des erreurs bloquantes." & vbCrLf & _
-            "Impossible de reconstruire le message détaillé." & vbCrLf & _
-            "-> vérifier les colonnes Error flag et ErrorMsg dans tbl_CALC." & vbCrLf & _
-            "-> aucune donnée calculée n'a été repoussée vers WBS.", _
-            "Calculation stopped: the engine detected blocking errors." & vbCrLf & _
-            "Unable to rebuild the detailed message." & vbCrLf & _
-            "-> check Error flag and ErrorMsg columns in tbl_CALC." & vbCrLf & _
-            "-> no calculated data was pushed back to WBS.")
+        PlanningMessageText_Format("DIAG.PLANNING.DATA_DIAGNOSTIC_FAILED", Nothing, Nothing)
 
 End Sub
 
@@ -467,10 +343,7 @@ End Sub
 Public Sub CalcBridge_ShowGroupedErrorMessage( _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
+    ByVal messageKey As String)
 
     Dim consoleMessages As Collection
 
@@ -480,7 +353,7 @@ Public Sub CalcBridge_ShowGroupedErrorMessage( _
     Set consoleMessages = New Collection
 
     CalcBridge_AddGroupedStopToCollection consoleMessages, idsDict, idToWbs, _
-        frProblem, frAction, enProblem, enAction
+        messageKey
 
     CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -494,18 +367,13 @@ End Sub
 
 Public Sub CalcBridge_AddInfoMessage( _
     ByVal messages As Collection, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String)
 
     Dim msg As String
 
     If messages Is Nothing Then Exit Sub
 
-    msg = _
-        "FR:" & vbCrLf & _
-        frText & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enText
+    msg = PlanningMessageText_Format(messageKey, Nothing, Nothing)
 
     CalcBridge_AddConsoleMessage messages, "INFO", msg
 
@@ -521,37 +389,50 @@ Public Sub CalcBridge_AddGroupedWarningToCollection( _
     ByVal messages As Collection, _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String, _
+    ByVal messageKey As String, _
     Optional ByVal historyHandled As Boolean = False, _
-    Optional ByVal ackTokens As String = "")
+    Optional ByVal ackTokens As String = "", _
+    Optional ByVal memberReceipts As Object = Nothing)
 
-    Dim idsLine As String
-    Dim wbsLine As String
+    CalcBridge_AddGroupedConsoleMessage messages, "WARNING", idsDict, idToWbs, _
+        messageKey, ackTokens, memberReceipts
+
+End Sub
+
+Public Sub CalcBridge_AddGroupedConsoleMessage( _
+    ByVal messages As Collection, _
+    ByVal severity As String, _
+    ByVal idsDict As Object, _
+    ByVal idToWbs As Object, _
+    ByVal messageKey As String, _
+    Optional ByVal ackTokens As String = "", _
+    Optional ByVal memberReceipts As Object = Nothing)
+
     Dim msg As String
+    Dim item As Object
+    Dim members As Collection
+    Dim id As Variant
+    Dim receipt As Object
 
     If messages Is Nothing Then Exit Sub
     If idsDict Is Nothing Then Exit Sub
     If idsDict.Count = 0 Then Exit Sub
 
-    idsLine = CalcBridge_BuildInlineList(idsDict, 20)
-    wbsLine = CalcBridge_BuildInlineWBSList(idsDict, idToWbs, 20)
-
-    msg = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "IDs : " & idsLine & vbCrLf & _
-        "WBS : " & wbsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "IDs: " & idsLine & vbCrLf & _
-        "WBS: " & wbsLine
-
-    CalcBridge_AddConsoleMessage messages, "WARNING", msg, historyHandled, ackTokens:=ackTokens
+    msg = CalcBridge_BuildGroupedMessage(idsDict, idToWbs, messageKey)
+    Set item = CalcBridge_CreateConsoleItem(severity, msg, False, messageKey, , ackTokens)
+    Set members = New Collection
+    For Each id In idsDict.Keys
+        If Not memberReceipts Is Nothing Then
+            If Not memberReceipts.Exists(CStr(id)) Then _
+                Err.Raise 5, "CalcBridge_AddGroupedConsoleMessage", "Missing member receipt."
+            Set receipt = memberReceipts(CStr(id))
+            members.Add CStr(receipt("Hash"))
+        Else
+            members.Add "TASK:" & CStr(id)
+        End If
+    Next id
+    Set item("GroupMembers") = members
+    messages.Add item
 
 End Sub
 
@@ -567,17 +448,26 @@ Private Function CalcBridge_CreateConsoleItem( _
     Optional ByVal historyHandled As Boolean = False, _
     Optional ByVal eventType As String = "", _
     Optional ByVal eventHash As String = "", _
-    Optional ByVal ackTokens As String = "") As Object
+    Optional ByVal ackTokens As String = "", _
+    Optional ByVal historyReceipt As Object = Nothing, _
+    Optional ByVal subjectTaskId As String = "", _
+    Optional ByVal sourceSheet As String = "") As Object
 
     Dim item As Object
 
     Set item = CreateObject("Scripting.Dictionary")
     item("Type") = UCase$(Trim$(msgType))
     item("Message") = CStr(msgText)
-    item("HistoryHandled") = historyHandled
+    item("HistoryState") = "NOT_LOGGED"
+    If Not historyReceipt Is Nothing Then
+        Set item("HistoryReceipt") = historyReceipt
+        item("HistoryState") = "PERSISTED"
+    End If
     If Trim$(eventType) <> "" Then item("EventType") = Trim$(eventType)
     If Trim$(eventHash) <> "" Then item("Hash") = Trim$(eventHash)
     If Trim$(ackTokens) <> "" Then item("AckTokens") = Trim$(ackTokens)
+    If Trim$(subjectTaskId) <> "" Then item("TaskId") = Trim$(subjectTaskId)
+    If Trim$(sourceSheet) <> "" Then item("SourceSheet") = Trim$(sourceSheet)
 
     Set CalcBridge_CreateConsoleItem = item
 
@@ -596,12 +486,15 @@ Public Sub CalcBridge_AddConsoleMessage( _
     Optional ByVal historyHandled As Boolean = False, _
     Optional ByVal eventType As String = "", _
     Optional ByVal eventHash As String = "", _
-    Optional ByVal ackTokens As String = "")
+    Optional ByVal ackTokens As String = "", _
+    Optional ByVal historyReceipt As Object = Nothing, _
+    Optional ByVal subjectTaskId As String = "", _
+    Optional ByVal sourceSheet As String = "")
 
     If targetMessages Is Nothing Then Exit Sub
     If Trim$(msgText) = "" Then Exit Sub
 
-    targetMessages.Add CalcBridge_CreateConsoleItem(msgType, msgText, historyHandled, eventType, eventHash, ackTokens)
+    targetMessages.Add CalcBridge_CreateConsoleItem(msgType, msgText, historyHandled, eventType, eventHash, ackTokens, historyReceipt, subjectTaskId, sourceSheet)
 
 End Sub
 
@@ -618,6 +511,8 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
     Dim historyErrorMessage As String
     Dim prepScope As clsPerfScope
     Dim showScope As clsPerfScope
+    Dim historyOk As Boolean
+    Dim failureItem As Object
 
     If messages Is Nothing Then Exit Sub
     If messages.Count = 0 Then Exit Sub
@@ -628,12 +523,14 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
 
     Set historyMessages = MessageEngine_PrepareConsoleMessages(messages)
 
-    If Not PlanningEvents_LogConsoleMessagesSafe( _
+    historyOk = PlanningEvents_LogConsoleMessagesSafe( _
         historyMessages, _
         "CalcBridge_ShowPlanningConsole", _
-        historyErrorMessage) Then
-
-        CalcBridge_AddConsoleMessage historyMessages, "STOP", historyErrorMessage, True
+        historyErrorMessage)
+    If Not historyOk Then
+        Set failureItem = CalcBridge_CreateConsoleItem("STOP", historyErrorMessage)
+        failureItem("HistoryState") = "STORE_UNAVAILABLE"
+        historyMessages.Add failureItem
     End If
 
     If Profiler_ShouldSuppressUserInterface() Then Exit Sub
@@ -650,6 +547,14 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
     End If
     If Not MessageEngine_ShouldShowConsole(displayMessages) Then Exit Sub
     If Not CanCurrentWorkflowDisplay("CalcBridge_ShowPlanningConsole") Then Exit Sub
+    If historyOk Then
+        If Not PlanningEvents_LogConsoleMessagesSafe( _
+            displayMessages, "CalcBridge_ShowPlanningConsole", historyErrorMessage) Then
+            Set failureItem = CalcBridge_CreateConsoleItem("STOP", historyErrorMessage)
+            failureItem("HistoryState") = "STORE_UNAVAILABLE"
+            displayMessages.Add failureItem
+        End If
+    End If
 
     If PlanningConsolePolicy_IsNonInteractive() Then
         Set prepScope = Nothing
@@ -673,6 +578,7 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
     frmPlanningMessages.Show vbModal
     Set showScope = Nothing
     RunButtonsTrace_Checkpoint "Console", "Planning console modal show returned"
+    Unload frmPlanningMessages
     Profiler_RecordOperation "PlanningConsole_SHOW_RETURN", 1, 0#
 
 End Sub
@@ -850,17 +756,14 @@ Public Sub CalcBridge_AddGroupedStopToCollection( _
     ByVal messages As Collection, _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
+    ByVal messageKey As String)
 
     If messages Is Nothing Then Exit Sub
     If idsDict Is Nothing Then Exit Sub
     If idsDict.Count = 0 Then Exit Sub
 
     CalcBridge_AddConsoleMessage messages, "STOP", _
-        CalcBridge_BuildGroupedMessage(idsDict, idToWbs, frProblem, frAction, enProblem, enAction)
+        CalcBridge_BuildGroupedMessage(idsDict, idToWbs, messageKey)
 
 End Sub
 
@@ -874,10 +777,7 @@ Private Sub CalcBridge_AddUpstreamStopToCollection( _
     ByVal messages As Collection, _
     ByVal idsDict As Object, _
     ByVal idToWbs As Object, _
-    ByVal frProblem As String, _
-    ByVal frAction As String, _
-    ByVal enProblem As String, _
-    ByVal enAction As String)
+    ByVal messageKey As String)
 
     Dim itemsLine As String
     Dim msg As String
@@ -888,15 +788,9 @@ Private Sub CalcBridge_AddUpstreamStopToCollection( _
 
     itemsLine = CalcBridge_BuildUpstreamViolationItems(idsDict, idToWbs, 20)
 
-    msg = _
-        "FR:" & vbCrLf & _
-        frProblem & vbCrLf & _
-        "-> " & frAction & vbCrLf & vbCrLf & _
-        "Tâches : " & itemsLine & vbCrLf & vbCrLf & _
-        "EN:" & vbCrLf & _
-        enProblem & vbCrLf & _
-        "-> " & enAction & vbCrLf & vbCrLf & _
-        "Tasks: " & itemsLine
+    msg = PlanningMessageText_Format(messageKey, _
+        TextCatalog_Arguments("Items", itemsLine), _
+        TextCatalog_Arguments("Items", itemsLine))
 
     CalcBridge_AddConsoleMessage messages, "STOP", msg
 
@@ -910,15 +804,15 @@ End Sub
 
 Public Sub CalcBridge_ShowSingleConsoleMessage( _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     Dim consoleMessages As Collection
 
     Set consoleMessages = New Collection
 
     CalcBridge_AddConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
     CalcBridge_ShowPlanningConsole consoleMessages
 
@@ -958,63 +852,101 @@ End Sub
 Public Sub CalcBridge_AddOrShowConsoleMessage( _
     ByVal consoleMessages As Collection, _
     ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
+    ByVal messageKey As String, _
+    Optional ByVal namedArguments As Object = Nothing)
 
     CalcBridge_AddOrShowRawConsoleMessage consoleMessages, msgType, _
-        BiMsg(frText, enText)
+        PlanningMessageText_Format(messageKey, namedArguments, namedArguments)
 
 End Sub
 
 
 
 '------------------------------------------------------------------------------
-' FR: Indique si la valeur Inherited Core Error satisfait la condition attendue, sans modifier les donnees source.
-' EN: Returns whether the Inherited Core Error value satisfies the expected condition without mutating source data.
+' FR: Classe les diagnostics Core par codes stables, jamais par texte rendu.
+' EN: Classifies Core diagnostics by stable codes, never rendered text.
 '------------------------------------------------------------------------------
+Private Sub CalcBridge_ClassifyStructuredCoreDiagnostics( _
+    ByVal coreDiagnostics As Object, _
+    ByVal taskId As String, _
+    ByVal renderedErrorText As String, _
+    ByVal errMissingPred As Object, _
+    ByVal errCycle As Object, _
+    ByVal errUnsupportedLinkType As Object, _
+    ByVal errActualStartConflict As Object, _
+    ByVal errActualFinishConflict As Object, _
+    ByVal errForecastConflict As Object, _
+    ByVal errForecastFinishConflict As Object, _
+    ByVal errMissingDuration As Object, _
+    ByVal errStartNotComputable As Object, _
+    ByVal errFinishBeforeStart As Object, _
+    ByVal errLOEAsPredecessor As Object, _
+    ByVal errLOEMissingSS As Object, _
+    ByVal errLOEMissingFF As Object, _
+    ByVal errLOEInvalidLink As Object, _
+    ByVal errOtherRoot As Object, _
+    ByVal errConstraintRootMessages As Object, _
+    ByRef cycleDetailMessage As String)
 
-Private Function CalcBridge_IsInheritedCoreError(ByVal errMsg As String) As Boolean
+    Dim records As Collection
+    Dim record As Variant
+    Dim code As String
+    Dim foundSpecific As Boolean
 
-    Dim txt As String
+    Set records = CoreDiagnostics_ForTask(coreDiagnostics, taskId)
+    If records Is Nothing Then
+        errOtherRoot(taskId) = True
+        Exit Sub
+    End If
 
-    txt = Trim$(CStr(errMsg))
+    For Each record In records
+        If IsObject(record) Then
+            If StrComp(CStr(record("Classification")), "ROOT", vbTextCompare) = 0 Then
+                code = UCase$(Trim$(CStr(record("Code"))))
 
-    CalcBridge_IsInheritedCoreError = _
-        (InStr(1, txt, "Blocked by predecessor error", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Blocked by predecessor chain", vbTextCompare) > 0)
+                Select Case code
+                    Case "CORE.ERROR.LOE_AS_PREDECESSOR", "CORE.ERROR.INVALID_LOE_PREDECESSOR_ID"
+                        errLOEAsPredecessor(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.LOE_SS_REQUIRED", "CORE.ERROR.LOE_SS_PREDECESSOR_MISSING", _
+                         "CORE.ERROR.LOE_SS_PREDECESSOR_NOT_FOUND", "CORE.ERROR.LOE_SS_START_UNAVAILABLE"
+                        errLOEMissingSS(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.LOE_FF_REQUIRED", "CORE.ERROR.LOE_FF_PREDECESSOR_MISSING", _
+                         "CORE.ERROR.LOE_FF_PREDECESSOR_NOT_FOUND", "CORE.ERROR.LOE_FF_FINISH_UNAVAILABLE"
+                        errLOEMissingFF(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.LOE_LINK_TYPE"
+                        errLOEInvalidLink(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.MISSING_PREDECESSOR", "CORE.ERROR.MISSING_PREDECESSOR_ID"
+                        errMissingPred(taskId) = True: foundSpecific = True
+                    Case "DIAG.CALC_ENGINE.CYCLE_MARKER"
+                        errCycle(taskId) = True: foundSpecific = True
+                        If cycleDetailMessage = "" Then cycleDetailMessage = renderedErrorText
+                    Case "CORE.ERROR.UNSUPPORTED_LINK_TYPE"
+                        errUnsupportedLinkType(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.ACTUAL_START_DEPENDENCIES"
+                        errActualStartConflict(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.ACTUAL_FINISH_CONSTRAINTS"
+                        errActualFinishConflict(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.FORECAST_START_DEPENDENCIES"
+                        errForecastConflict(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.FORECAST_FINISH_CONSTRAINTS"
+                        errForecastFinishConflict(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.BASELINE_DURATION_MISSING"
+                        errMissingDuration(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.START_NOT_COMPUTABLE"
+                        errStartNotComputable(taskId) = True: foundSpecific = True
+                    Case "CORE.ERROR.FINISH_BEFORE_START", "CORE.ERROR.LOE_FINISH_BEFORE_START"
+                        errFinishBeforeStart(taskId) = True: foundSpecific = True
+                    Case Else
+                        If Left$(code, Len("DIAG.CONSTRAINT.")) = "DIAG.CONSTRAINT." Then
+                            errConstraintRootMessages(taskId) = renderedErrorText
+                            foundSpecific = True
+                        End If
+                End Select
+            End If
+        End If
+    Next record
 
-End Function
+    If Not foundSpecific Then errOtherRoot(taskId) = True
 
-'------------------------------------------------------------------------------
-' FR: Indique si la valeur Constraint Core Error satisfait la condition attendue, sans modifier les donnees source.
-' EN: Returns whether the Constraint Core Error value satisfies the expected condition without mutating source data.
-'------------------------------------------------------------------------------
-
-Private Function CalcBridge_IsConstraintCoreError(ByVal errMsg As String) As Boolean
-
-    Dim txt As String
-
-    txt = Trim$(CStr(errMsg))
-
-    CalcBridge_IsConstraintCoreError = _
-        (InStr(1, txt, "avant contrainte debut", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "before start constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "apres contrainte debut max", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "after latest start constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "different de contrainte Must Start On", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "differs from Must Start On constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "avant contrainte fin", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "before finish constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "apres contrainte fin max", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "after latest finish constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "contrainte Must Finish On", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Must Finish On constraint", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "contraintes Must Start On / Must Finish On", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Must Start On / Must Finish On constraints", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Type de contrainte debut non reconnu", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Unknown start constraint type", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Type de contrainte fin non reconnu", vbTextCompare) > 0) Or _
-        (InStr(1, txt, "Unknown finish constraint type", vbTextCompare) > 0)
-
-End Function
+End Sub
 

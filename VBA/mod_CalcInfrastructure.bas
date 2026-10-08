@@ -80,11 +80,8 @@ SafeExit:
 ErrHandler:
     Application.ScreenUpdating = True
 
-    CalcInfrastructure_AddOrShowConsoleMessage consoleMessages, "STOP", _
-        "Erreur Ensure_Calc_Infrastructure" & vbCrLf & _
-        "-> " & Err.Description, _
-        "Error Ensure_Calc_Infrastructure" & vbCrLf & _
-        "-> " & Err.Description
+    CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.INFRASTRUCTURE.ERROR", _
+        TextCatalog_Arguments("Details", Err.Description)
 
 End Sub
 
@@ -408,22 +405,3 @@ Private Sub Apply_tbl_CALC_ColumnFormats(ByVal tblCalc As ListObject)
     On Error GoTo 0
 
 End Sub
-
-
-
-'------------------------------------------------------------------------------
-' FR: Ajoute la collection Calc Infrastructure Add Or Show Console Message a la structure cible fournie par l'appelant.
-' EN: Adds the Calc Infrastructure Add Or Show Console Message collection to the target structure supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Sub CalcInfrastructure_AddOrShowConsoleMessage( _
-    ByVal consoleMessages As Collection, _
-    ByVal msgType As String, _
-    ByVal frText As String, _
-    ByVal enText As String)
-
-    CalcBridge_AddOrShowConsoleMessage consoleMessages, msgType, frText, enText
-
-End Sub
-
-
