@@ -37,3 +37,19 @@ This vocabulary describes how terms are actually used in this workbook. It is th
 ## Selection rule
 
 Use the narrowest term that describes an owned responsibility. If a new component needs several conflicting terms, its boundary is probably too broad.
+
+## v1.3.0 terminology additions
+
+| Term | Definition | Owner / invariant |
+|---|---|---|
+| **Ribbon adapter** | Context-sensitive Excel Ribbon callback layer. | `mod_RibbonCallbacks` validates workbook/window and delegates; does not own scheduling. |
+| **Welcome** | Initial choice for an eligible empty workbook. | `mod_ProjectWelcome` / `frmProjectWelcome`; acknowledgement uses existing `EVENT_ACK`, not a new store. |
+| **Project import / migration** | Transfer supported inputs and selected persistent history from a previous ProjectEngine workbook into the current template. | `mod_Migration` / `mod_MigrationData`; direct, data-only, source unchanged, destination replaced; no automatic destination backup. |
+| **SchemaVersion** | Persistent structural format identifier, distinct from software release. | ProjectEngine workbook schema owner; not inferred from an old filename. |
+| **ReleaseId** | Build/release identifier independent of schema version. | Set by the release process, not fabricated by migration. |
+| **Localization key** | TextKey combined with a caller-supplied LanguageKey. | Shared TextCatalog; each domain continues to own its language selection. |
+| **READY** | Confirmed coherence of the current rendered Gantt, including its physical presentation. | Existing Gantt engine; retained caches or a successful Core run alone do not prove READY. |
+| **Deferred rendering (DEFER)** | A pending Gantt presentation update following an operation such as Full Update. | Existing Gantt pipeline; retained geometry/routes are only candidates until validated. |
+| **Canonical FULL render** | Complete authoritative Gantt projection used when safe local reuse cannot be demonstrated. | Existing rendering pipeline, not an alternative engine. |
+| **Output-write elision** | Skipping WBS calculated output columns only when all results match and the column contains no formulas. | Core output writer; Full Update still computes Core/Analytics completely. |
+| **Persistence receipt** | Evidence of an attempted and confirmed history write. | EventHistory owner; not equivalent to merely displaying a console message. |

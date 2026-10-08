@@ -37,3 +37,19 @@ Ce vocabulaire décrit l'usage réel des termes dans ce classeur. Il constitue l
 ## Règle de choix
 
 Utiliser le terme le plus étroit qui décrit une responsabilité possédée. Si un nouveau composant nécessite plusieurs termes contradictoires, sa frontière est probablement trop large.
+
+## Compléments de vocabulaire v1.3.0
+
+| Terme | Définition | Propriétaire / invariant |
+|---|---|---|
+| **Adaptateur Ribbon** | Couche de callbacks Excel contextuels. | `mod_RibbonCallbacks` valide classeur/fenêtre puis délègue, sans logique de planning. |
+| **Accueil / Welcome** | Choix initial proposé à un classeur vide éligible. | `mod_ProjectWelcome` / `frmProjectWelcome` ; acquittement dans `EVENT_ACK`, sans nouveau store. |
+| **Import / Migration** | Transfert des inputs pris en charge et de certains stores historiques d'un ancien ProjectEngine au template courant. | `mod_Migration` / `mod_MigrationData` ; direct, data-only, source intacte, destination remplacée ; aucun backup automatique de destination. |
+| **SchemaVersion** | Version persistante du schéma, distincte de la version logicielle. | Owner schéma du workbook ; ne se déduit pas du nom d'un ancien fichier. |
+| **ReleaseId** | Identifiant de build/release indépendant du schéma. | Fourniture par le processus de release, jamais inventé par l'import. |
+| **Clé de localisation** | TextKey associé au LanguageKey fourni par l'appelant. | TextCatalog commun ; chaque domaine conserve l'autorité sur sa langue. |
+| **READY** | Cohérence vérifiée du Gantt rendu, y compris sa présentation physique. | Moteur Gantt existant ; un cache conservé ou un Core réussi ne suffisent pas. |
+| **Rendu différé (DEFER)** | Mise à jour Gantt en attente après une opération comme Full Update. | Pipeline Gantt existant ; géométrie/routes conservées = candidats non validés. |
+| **Rendu FULL canonique** | Projection Gantt complète faisant autorité lorsque le réemploi local sûr n'est pas démontré. | Pipeline de rendu existant, pas un moteur alternatif. |
+| **Évitement d'écriture des sorties** | Saut d'une colonne de résultats WBS seulement si toutes les valeurs correspondent et qu'aucune formule ne s'y trouve. | Writer Core ; Full Update recalcule toujours Core/Analytics. |
+| **Reçu de persistance** | Preuve contrôlée d'une écriture effective dans l'historique. | Owner EventHistory ; afficher un message en console ne prouve pas sa persistance. |

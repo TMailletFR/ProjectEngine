@@ -40,6 +40,14 @@ The producer owns meaning and severity. MessageEngine owns preparation. EventHis
 
 Never rename an external callback for style alone. Keep a wrapper when compatibility requires it.
 
+## Ribbon, welcome, and import maintenance (v1.3.0)
+
+**Ribbon:** modify embedded `customUI.xml` and its 18 packaged icons only through the existing package workflow. Keep `mod_RibbonCallbacks` as an adapter that validates workbook/window ownership before invoking business owners. Maintain context-specific visibility and child-control invalidation, and preserve the coexistence rule: **no Ribbon invalidation from `Workbook_Deactivate`**. Compile/save/reopen, verify XML/relationships/image count, language labels and callbacks, then test a real Excel window on an owned copy.
+
+**Welcome:** `mod_ProjectWelcome` coordinates `frmProjectWelcome` and the existing `EVENT_ACK` owner. Do not add a `WelcomeShown` store. Start New or a genuinely successful Import can acknowledge; Cancel/FAIL/X must not. Full Reset should re-enable welcome as part of its existing cleanup. Verify existing projects do not receive the first-use prompt.
+
+**Migration:** follow `Migration_ImportFile` -> `MigrationData_Read` -> `Migration_ApplyInputs` -> existing Settings/WBS/Constraints/Dashboard/EventHistory owners. The source is read-only with macros disabled and must remain unchanged. Import is **data-only**; never run planning Core or graphical refresh implicitly. The v1.3.0 direct-import workflow intentionally makes **no destination recovery backup or staging copy**; an explicit destructive warning and prior user backup are essential. Validate destination inputs/stores, formula/literal distinctions and success ACK, allow only one final Save, and surface all failures without false SUCCESS. Unsupported schemas or formulas must fail explicitly. Never describe an unsaved state as transactionally rolled back or guarantee recovery from Excel AutoSave.
+
 ## Adding a Task Type rule
 
 1. Add normalization or classification to `mod_TaskTypeRules`.
@@ -70,6 +78,13 @@ Never rename an external callback for style alone. Keep a wrapper when compatibi
 | TEST, SCENARIO or LOCK | corresponding service | transactional smoke on a copy |
 
 Never change Shape names, `OnAction`, z-order, tolerances or fallback during cosmetic cleanup. Never create a second renderer or simulation engine.
+
+## Full Update, Gantt reuse and EventHistory performance contracts
+
+- **Full Update:** keep complete Core/Analytics execution. In `mod_CoreBridgeOutputWriter`, skip a WBS output *column* only after complete equality checking and only if the current column contains **no formula**. Correct altered values and unexpected formulas on Full Update. Do not call this a scheduling-engine speedup.
+- **Gantt reuse:** treat retained DEFER caches as unverified candidates. Check full visual context and physical state; verify every incident route for locally changed shapes. Preserve canonical FULL fallback for structural, constraint, layout or unknown physical edits. Compare physical shapes and exact routes against a canonical FULL result; measure no-change, small, large and negative counterexamples separately.
+- **EventHistory:** retain one store and ACK owner, persistence receipts and explicit error handling. Bulk history writes or grouped display must not drop events, alter identity, duplicate ACKs or silently suppress storage failures. Check both history store and visible projection.
+- **Performance:** record actual work skipped, wall times, setup/cache state and host variance. Do not present a single warm measurement as universal acceleration.
 
 ## Selecting validation level
 
@@ -114,10 +129,10 @@ Compile the complete VBAProject after import. Static scanning cannot replace VBA
 1. Capture existing Excel processes before starting a worker.
 2. Create a dedicated COM instance and retain its PID or handle.
 3. Open only an identified temporary copy.
-4. Close the copy, call `Quit` on the owned instance and release its COM objects.
-5. On timeout, stop only the PID created by the worker.
-6. Never perform global process-name or partial-workbook-name termination.
-7. Every user Excel instance remains out of scope, even when it opens another workbook.
+4. Close **only the exact owned test workbook** after checking its `FullName` and `Name`; release owned COM references. Use `Application.Quit` **only when exclusive ownership of the Excel instance is positively established** and no user workbook is attached.
+5. On timeout or RPC loss, record the state and distinguish product, harness, fixture and COM/session faults. Do **not** kill an Excel process merely because a PID was created or appears linked to a test; never force-close an instance with uncertain ownership.
+6. Never perform global process-name termination, generic `taskkill` / `Stop-Process EXCEL`, or partial-workbook-name termination.
+7. Every user Excel instance and workbook remains out of scope, even when it opens another workbook.
 
 ## Choosing Public, Friend or Private
 

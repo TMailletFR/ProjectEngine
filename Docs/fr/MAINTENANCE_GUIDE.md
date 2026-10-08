@@ -40,6 +40,14 @@ Le producteur possède le sens et la sévérité. MessageEngine possède la pré
 
 Ne jamais renommer un callback externe uniquement pour des raisons de style. Conserver un wrapper lorsque la compatibilité l'exige.
 
+## Maintenance du Ribbon, de l'accueil et de l'import (v1.3.0)
+
+**Ribbon :** modifier `customUI.xml` et ses 18 icônes embarquées par le packaging existant. `mod_RibbonCallbacks` reste un adaptateur qui valide l'ownership workbook/fenêtre avant délégation métier. Conserver la visibilité contextuelle et l'invalidation des contrôles enfants ; **aucune invalidation Ribbon dans `Workbook_Deactivate`**. Compiler/sauvegarder/rouvrir, vérifier XML, relations, nombre d'images, labels et callbacks, puis tester dans une vraie fenêtre Excel possédée.
+
+**Accueil :** `mod_ProjectWelcome` orchestre `frmProjectWelcome` et le propriétaire `EVENT_ACK`. Pas de store parallèle `WelcomeShown`. Start New ou un import réellement réussi peuvent acquitter ; Cancel/FAIL/X ne le doivent pas. Full Reset rend l'accueil éligible par le nettoyage existant. Vérifier qu'un projet actif ne déclenche pas l'accueil.
+
+**Migration :** suivre `Migration_ImportFile` -> `MigrationData_Read` -> `Migration_ApplyInputs` -> propriétaires Settings/WBS/Constraints/Dashboard/EventHistory. Source en lecture seule, macros désactivées, inchangée. Import **data-only** : ni Core ni graphique automatique. En v1.3.0, l'import direct **ne crée pas** de backup automatique de la destination ni de classeur de staging : avertissement destructif et copie préalable par l'utilisateur indispensables. Vérifier les données, les distinctions formule/texte/valeur et l'ACK de succès, limiter à un Save final, propager les erreurs sans faux SUCCESS. Refuser explicitement les schémas/formules non supportés. Ne pas garantir une restauration transactionnelle ou une protection contre AutoSave.
+
 ## Ajouter une règle Task Type
 
 1. Ajouter la normalisation ou la classification dans `mod_TaskTypeRules`.
@@ -70,6 +78,13 @@ Ne jamais renommer un callback externe uniquement pour des raisons de style. Con
 | TEST, SCENARIO ou LOCK | service correspondant | smoke transactionnel sur copie |
 
 Ne jamais modifier les noms de Shapes, `OnAction`, z-order, tolérances ou fallback au cours d'un simple nettoyage. Ne jamais créer un second renderer ou un second moteur de simulation.
+
+## Contrats performance Full Update, Gantt et EventHistory
+
+- **Full Update :** conserver l'exécution complète Core/Analytics. Dans `mod_CoreBridgeOutputWriter`, sauter une *colonne* WBS uniquement après comparaison intégrale et en absence de **toute formule** dans cette colonne. Un résultat modifié ou une formule parasite doivent être corrigés par Full Update. Ne pas présenter cela comme un gain de vitesse du moteur de calcul.
+- **Réutilisation Gantt :** les caches conservés par DEFER restent des candidats non validés. Vérifier le contexte visuel complet et l'état physique, et toutes les routes incidentes aux Shapes localement modifiées. Garder le fallback FULL canonique pour les changements de structure, contraintes, layout ou géométrie inconnue. Comparer formes physiques et routes à un rendu FULL canonique ; mesurer séparément unchanged, small, large et contre-exemples.
+- **EventHistory :** conserver l'unique store et owner ACK, les reçus d'écriture et la propagation d'erreur. Le bulk ou le regroupement ne doivent ni perdre d'événement, ni modifier une identité, ni dupliquer un ACK, ni masquer une panne de stockage. Vérifier store **et** projection visible.
+- **Performance :** mesurer le travail réellement évité, temps muraux, état de cache et variance Excel. Un chrono warm isolé ne prouve pas une accélération universelle.
 
 ## Choisir le niveau de validation
 

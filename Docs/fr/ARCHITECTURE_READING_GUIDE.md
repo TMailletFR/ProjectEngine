@@ -15,6 +15,12 @@ Lire les éléments suivants dans cet ordre pour comprendre les frontières du p
 9. `mod_MessageEngine`, `mod_EventHistory`, `frmPlanningMessages` : chemin des diagnostics jusqu'à l'utilisateur.
 10. `PROJECT_GLOSSARY.md` et `MAINTENANCE_GUIDE.md` : vocabulaire et règles de modification.
 
+## Entrées Ribbon et accueil (v1.3.0)
+
+`customUI.xml` est embarqué dans chaque `.xlsm` avec dix-huit commandes illustrées. `mod_RibbonCallbacks` est un **adaptateur UI mince**, pas un propriétaire de calcul. Il valide le classeur d'origine et la fenêtre active avant d'appeler les entrées publiques existantes. Les Updates sont contextuelles sur WBS ; Test/Scenario/Lock/Reset sur GANTT ; Settings, Navigation, Reset et Import suivent leur périmètre global. `ThisWorkbook` orchestre les événements du classeur et l'activation rafraîchit le Ribbon. **Ne pas invalider les contrôles Ribbon dans `Workbook_Deactivate`** (coexistence de plusieurs fichiers ProjectEngine).
+
+Sur un classeur vide et modifiable, `mod_ProjectWelcome` affiche `frmProjectWelcome` via `ProjectWelcome_ShowIfNeeded`. Start New acquitte l'accueil via le propriétaire EventHistory/ACK existant ; Import réutilise la même entrée que le Ribbon. Fermeture, annulation ou échec n'enregistrent pas un accueil réussi. Full Reset rend l'accueil à nouveau éligible. Le formulaire est une vue dédiée, sans nouveau store de messages, moteur de planning ou catalogue de traduction.
+
 ## Flux principal
 
 ```text
@@ -33,6 +39,29 @@ Callback Excel / macro Run_* / OnAction
 ```
 
 Les flèches indiquent la direction d'orchestration. Un domaine accède à un autre domaine par ses contrats publics, jamais par son état privé. Les diagnostics se déplacent vers MessageEngine ; ils ne remontent pas dans le calcul.
+
+## Import depuis un ancien classeur ProjectEngine
+
+```text
+Ribbon Import / accueil Import
+    -> ProjectWelcome_ImportPrevious
+    -> Migration_ImportPrevious / Migration_ImportFile
+    -> vérification source/destination/schéma et confirmation destructive
+    -> source ouverte en lecture seule, macros désactivées, liens non mis à jour
+    -> MigrationData_Read (entrées et stores pris en charge)
+    -> fermeture de la source sans sauvegarde
+    -> Migration_ApplyInputs (remplacement des données cibles prises en charge)
+    -> propriétaires Settings / formules WBS / Constraints / Dashboard / EventHistory
+    -> vérification des données et des sorties dérivées vides
+    -> reçu SUCCESS + acquittement accueil, puis une sauvegarde de la cible
+    -> vérification après sauvegarde
+```
+
+L'import est **data-only** : aucun appel automatique au Core, aucun Gantt/S-Curve reconstruit, aucune macro du fichier source exécutée. L'utilisateur vérifie WBS et Constraints puis lance explicitement Planning Update ou Full Update. Les données prises en charge incluent les inputs WBS (formules utilisateur compatibles), Constraints, Settings, EVENT_ACK et snapshots Dashboard ; un historique compatible peut être repris, sinon le bonus incompatible est écarté explicitement. La cible conserve son propre VBA, Ribbon et ses contrats de sorties.
+
+**Frontière transactionnelle v1.3.0 :** import direct et destructif, sans création automatique d'une copie de récupération de la destination ni workbook de staging. La source reste intacte. Demander une **sauvegarde préalable de la destination**. Une erreur avant le Save final ne doit pas produire SUCCESS/ACK de succès ; ne pas présenter cette procédure comme un rollback atomique garanti face à Excel, AutoSave ou une interruption après Save.
+
+`ProjectEngine.SchemaVersion` versionne le schéma persistant ; `ProjectEngine.ReleaseId` identifie séparément la release et n'est pas inventé par l'import. Un legacy sans marqueur est reconnu par son profil structurel validé. Schémas futurs/incompatibles et entrées dangereuses sont refusés ; le VBA source n'est jamais exécuté pour la migration.
 
 ## Workflow Update Planning
 
@@ -57,6 +86,10 @@ Les flèches indiquent la direction d'orchestration. Un domaine accède à un au
 | Persistance | `mod_CoreBridgeOutputWriter` | CALC puis WBS | Full et Partial conservent les mêmes champs et le même ordre. |
 | Protection WBS | `mod_WBSWriteGuard` | scopes tokenisés | Un appelant ne ferme que son propre token, en ordre LIFO. |
 
+## Full Update et publication des sorties
+
+`Run_Full_Update` impose toujours un calcul Core et Analytics complet. En v1.3.0, le writer **compare les colonnes de résultats déjà calculés** avec les valeurs WBS existantes et saute uniquement une colonne entièrement identique sans formule. Toute différence, ou toute formule dans une colonne de sortie calculée, déclenche l'écriture bulk normale. Ce n'est pas un calcul Core incrémental, et un premier rendu complet n'est pas promis plus rapide. L'owner des sorties reste unique.
+
 ## Domaine Gantt
 
 `Refresh_Gantt` est le wrapper public stable. `mod_GanttRefreshPipeline` acquiert les données et choisit le chemin Full ou Display Only. Les renderers reçoivent des arrays et maps déjà préparés.
@@ -75,6 +108,12 @@ Zones sensibles :
 - cycle de vie du watcher Drag et de son timer ;
 - cohérence entre registry attendu et état réel de la feuille.
 
+## Navigation Gantt, READY et réutilisation sûre
+
+`mod_GanttNavigation` résout les Task IDs et la visibilité ; `mod_GanttViewState` possède la projection Detail/Summary. La navigation peut demander `EnsureGanttForCurrentPlanning` si la vue doit être préparée, mais ne lance pas silencieusement un calcul de planning obsolète. Show Full Timeline cadre l'étendue rendue dans les limites physiques de zoom Excel et utilise un fallback explicite si le fit complet est impossible.
+
+Le rendu conserve les owners `mod_GanttRefreshPipeline`, `mod_GanttRenderer`, `mod_GanttDependencyRenderer` et `mod_GanttDependencySvg`. DEFER peut conserver la géométrie et les routes comme **candidats à la réutilisation**, jamais comme preuve READY automatique. La réutilisation demande des vérifications d'inputs, contexte et état physique ; la géométrie locale modifiée doit couvrir toutes les routes affectées. Changement structurel, contraintes, layout de la frise ou mutation physique non suivie : fallback FULL canonique. Day rend les dépendances ; Week/Month conservent leur politique de visibilité agrégée. Aucun deuxième renderer, store de routes ou autorité READY.
+
 ## TEST, SCENARIO et LOCK
 
 | Mode | Propriétaire | Entrée | Sortie | Interdiction principale |
@@ -90,6 +129,10 @@ Zones sensibles :
 `mod_SCurve` est l'unique moteur des séries temporelles et le propriétaire de leurs sorties. `SCurve_BuildDashboardProjection` expose une projection dédiée au Dashboard.
 
 `mod_DashboardReadContext` acquiert une fois WBS, CALC et cette projection pour les trois modes Dashboard. `mod_Dashboard` conserve séparément les politiques Full Build, Content Only et Texts/Comparison.
+
+## Localisation commune
+
+Le TextCatalog logique partagé résout **TextKey + LanguageKey fourni par le consumer**. Le catalogue ne possède pas la langue. Les six owners indépendants sont conservés ; GLOBAL coordonne les changements sans devenir l'autorité unique. Ribbon, accueil, import et navigation consomment cette infrastructure. Les fallbacks doivent être explicites et testables ; l'API logique ne doit pas être enfermée dans le stockage CP1252.
 
 ## Diagnostics, console, EventHistory et ACK
 
