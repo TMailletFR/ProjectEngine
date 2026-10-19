@@ -1551,6 +1551,34 @@ Public Sub Gantt_Clear_Test_State()
     GanttSimulation_ResetToNormal False
 End Sub
 
+Public Function GanttLayout_TutorialTimelineTarget() As Range
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("GANTT")
+    If GanttDeferredRender_IsPending() Then Exit Function
+    If Not GanttTimeline_HasPhysicalHeader(ws) Then Exit Function
+    Set GanttLayout_TutorialTimelineTarget = ws.Range( _
+        ws.Cells(FIRST_TASK_ROW, FIRST_TIMELINE_COL), _
+        ws.Cells(FIRST_TASK_ROW + 7, FIRST_TIMELINE_COL + 20))
+End Function
+
+Public Function GanttLayout_TutorialTestTarget() As Range
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("GANTT")
+    If GanttDeferredRender_IsPending() Then Exit Function
+    If Not GanttTimeline_HasPhysicalHeader(ws) Then Exit Function
+    Set GanttLayout_TutorialTestTarget = ws.Range( _
+        ws.Cells(FIRST_TASK_ROW, COL_TEST_START), _
+        ws.Cells(FIRST_TASK_ROW + 4, COL_TEST_PROGRESS))
+End Function
+
+Public Function GanttLayout_TutorialControlsTarget() As Range
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("GANTT")
+    If Not GanttTimeline_HasPhysicalHeader(ws) Then Exit Function
+    Set GanttLayout_TutorialControlsTarget = ws.Range( _
+        ws.Cells(1, COL_WBS), ws.Cells(HEADER_ROW_1 - 1, COL_LOGIC))
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Efface une plage d'entree uniquement lorsqu'elle contient des valeurs.
 ' EN: Clears an input range only when it contains values.

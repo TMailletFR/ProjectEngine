@@ -8,11 +8,13 @@
 - [Maintenance Guide](MAINTENANCE_GUIDE.md): change the project without breaking its contracts.
 - [Project Glossary](PROJECT_GLOSSARY.md): official vocabulary used in code and documentation.
 
-## Using ProjectEngine v1.3.0
+## Using ProjectEngine v1.4.0
 
-- **First use:** the welcome screen offers **Start New Project** or **Import Previous Project** when the workbook is eligible (empty and writable). The welcome choice is stored through the existing acknowledgement system; Full Reset can bring the welcome screen back.
+- **First use:** the welcome screen offers **Start New Project**, **Import Previous Project**, or **Discover ProjectEngine** when the workbook is eligible (empty and writable). The welcome choice is stored through the existing acknowledgement system; Full Reset can bring the welcome screen back.
 - **Excel Ribbon:** the embedded **ProjectEngine** tab groups planning updates, Gantt simulation controls, Settings, navigation, reset and import. Controls change with the active worksheet; no separate add-in is required.
 - **Importing older projects:** select **Import Previous Project** in the welcome screen or Ribbon. The destination's supported project inputs are replaced, the source workbook remains unchanged, and the user must review WBS/Constraints and explicitly run Planning Update or Full Update afterward. **Back up the destination workbook yourself before importing.**
+- **Interactive tutorial:** open **Tutorial** from the Ribbon or **Discover ProjectEngine** from Welcome. Choose **Discovery** for a passive tour or **Practice** to edit actual WBS inputs and execute normal commands with explicit consent. Both modes have independent bookmarks across 29 steps. The tutorial does not inject sample tasks or recalculate on passive Next.
+- **Modern dialogs:** Welcome, Planning Messages and Tutorial use updated layouts and controls. Message windows are sized once before showing and retain selectable, scrollable text. Conventional native controls remain available as a fallback when required.
 - **Gantt navigation:** **Go to Selected Task** and **Show Full Timeline** use the existing Gantt owner. Complete vertical/horizontal fit is limited by Excel's minimum zoom on very large schedules.
 
 The [Architecture Reading Guide](ARCHITECTURE_READING_GUIDE.md) explains ownership and processing flows; the [Maintenance Guide](MAINTENANCE_GUIDE.md) covers changes and safety constraints.

@@ -11,6 +11,31 @@ Private mLastAction As String
 Private mLastDiagnostic As String
 Private mOpenInitialized As Boolean
 Private mInitialTabPending As Boolean
+Private mTutorialCommands As String
+Private mTutorialPresentationActive As Boolean
+
+Public Sub Ribbon_SetTutorialPresentation(ByVal commandIds As String, Optional ByVal restrictEmpty As Boolean = False)
+    Dim enabled As Boolean
+    enabled = restrictEmpty Or Len(commandIds) > 0
+    If mTutorialCommands = commandIds And mTutorialPresentationActive = enabled Then Exit Sub
+    mTutorialCommands = commandIds
+    mTutorialPresentationActive = enabled
+    Ribbon_InvalidateContext
+End Sub
+
+Private Function Ribbon_TutorialAllows(ByVal commandId As String) As Boolean
+    Ribbon_TutorialAllows = True
+    If Not mTutorialPresentationActive Then Exit Function
+    If Not ProjectTutorial_IsActive() Then Exit Function
+    If Not ProjectTutorial_IsOwnerWindowActive() Then Exit Function
+    Ribbon_TutorialAllows = (InStr(1, "|" & mTutorialCommands & "|", "|" & commandId & "|", vbBinaryCompare) > 0)
+End Function
+
+Public Function Ribbon_CommandProcedure(ByVal commandId As String) As String
+    Dim entry As Variant
+    entry = Ribbon_ControlEntry(commandId)
+    If Not IsEmpty(entry) Then Ribbon_CommandProcedure = CStr(entry(3))
+End Function
 
 Public Sub PERibbon_OnLoad(ByVal ribbon As Office.IRibbonUI)
     Set mRibbon = ribbon
@@ -37,7 +62,9 @@ Public Sub PERibbon_GetEnabled(ByVal control As Office.IRibbonControl, ByRef ret
     Set owner = Ribbon_ControlWorkbook(control)
     If owner Is Nothing Then Exit Sub
     If Not Ribbon_IsActiveOwnerWindow(control.Context, owner) Then Exit Sub
-    If control.Id <> "peSettings" Then
+    If mExecuting Then Exit Sub
+    If Not Ribbon_TutorialAllows(control.Id) Then Exit Sub
+    If control.Id <> "peSettings" And control.Id <> "peTutorial" Then
         If Not WorkbookSchema_WritesAllowed() Then Exit Sub
     End If
     If Ribbon_IsGanttCommand(control.Id) Then
@@ -70,31 +97,39 @@ SafeExit:
 End Function
 
 Public Sub PERibbon_OnAction(ByVal control As Office.IRibbonControl)
+    Ribbon_ExecuteCommand control.Id, control.Context
+End Sub
+
+Public Function Ribbon_ExecuteCommand(ByVal commandId As String, ByVal commandWindow As Object) As Boolean
     Dim owner As Workbook
     Dim ribbonWindow As Object
     Dim entry As Variant
 
     On Error GoTo Failed
-    Set owner = Ribbon_ControlWorkbook(control)
+    If commandWindow Is Nothing Then GoTo Rejected
+    Set owner = commandWindow.ActiveSheet.Parent
+    If Not (owner Is ThisWorkbook) Then GoTo Rejected
     mLastDiagnostic = "RIBBON_OWNER_REJECTED"
     If owner Is Nothing Then GoTo Rejected
-    Set ribbonWindow = control.Context
+    Set ribbonWindow = commandWindow
     ' Ribbon and Excel can expose distinct COM wrappers for the same native window.
     ' Existing owners use ActiveSheet: require the same window AND workbook first.
     mLastDiagnostic = "RIBBON_WINDOW_NOT_ACTIVE"
     If Not Ribbon_IsActiveOwnerWindow(ribbonWindow, owner) Then GoTo Rejected
-    If control.Id <> "peSettings" Then
+    mLastDiagnostic = "RIBBON_TUTORIAL_ACTIVE"
+    If Not Ribbon_TutorialAllows(commandId) Then GoTo Rejected
+    If commandId <> "peSettings" And commandId <> "peTutorial" Then
         If Not WorkbookSchema_WritesAllowed() Then GoTo Rejected
     End If
     mLastDiagnostic = "RIBBON_CONTEXT_NOT_WORKSHEET"
     If TypeName(ribbonWindow.ActiveSheet) <> "Worksheet" Then GoTo Rejected
-    entry = Ribbon_ControlEntry(control.Id)
+    entry = Ribbon_ControlEntry(commandId)
     mLastDiagnostic = "RIBBON_UNKNOWN_CONTROL"
     If IsEmpty(entry) Then GoTo Rejected
-    If Ribbon_IsGanttCommand(control.Id) Then
+    If Ribbon_IsGanttCommand(commandId) Then
         mLastDiagnostic = "RIBBON_GANTT_CONTEXT_REQUIRED"
         If CStr(ribbonWindow.ActiveSheet.Name) <> "GANTT" Then GoTo Rejected
-    ElseIf Ribbon_IsWBSCommand(control.Id) Then
+    ElseIf Ribbon_IsWBSCommand(commandId) Then
         mLastDiagnostic = "RIBBON_WBS_CONTEXT_REQUIRED"
         If CStr(ribbonWindow.ActiveSheet.Name) <> "WBS" Then GoTo Rejected
     End If
@@ -103,6 +138,7 @@ Public Sub PERibbon_OnAction(ByVal control As Office.IRibbonControl)
 
     mLastDiagnostic = vbNullString
     mExecuting = True
+    If commandId <> "peTutorial" Then ProjectTutorial_BeginBusinessAction
     Select Case CStr(entry(3))
         Case "Run_Planning_Update": Run_Planning_Update
         Case "Run_Forced_Planning_Update": Run_Forced_Planning_Update
@@ -112,6 +148,7 @@ Public Sub PERibbon_OnAction(ByVal control As Office.IRibbonControl)
         Case "Reset_Planning": Reset_Planning
         Case "Settings": owner.Worksheets("SETTINGS").Activate
         Case "ProjectWelcome_ImportPrevious": ProjectWelcome_ImportPrevious
+        Case "ProjectTutorial_Show": ProjectTutorial_Show
         Case "ClearPlanningEventHistory": ClearPlanningEventHistory
         Case "ClearPlanningWarningAcknowledgements": ClearPlanningWarningAcknowledgements
         Case "Reset_Dashboard": Reset_Dashboard
@@ -129,15 +166,20 @@ Public Sub PERibbon_OnAction(ByVal control As Office.IRibbonControl)
     mLastAction = CStr(entry(3))
     mActions = mActions + 1
     mExecuting = False
-    Exit Sub
+    If commandId <> "peTutorial" Then ProjectTutorial_EndBusinessAction
+    Ribbon_ExecuteCommand = True
+    Ribbon_InvalidateContext
+    Exit Function
 Rejected:
     mRejected = mRejected + 1
-    Exit Sub
+    Exit Function
 Failed:
     mLastDiagnostic = "RIBBON_CALLBACK:" & CStr(Err.Number) & ":" & Err.Description
     Debug.Print mLastDiagnostic
     mExecuting = False
-End Sub
+    ProjectTutorial_EndBusinessAction
+    Ribbon_InvalidateContext
+End Function
 
 Public Sub Ribbon_WorkbookOpened()
     mOpenInitialized = True
@@ -160,7 +202,9 @@ Public Sub Ribbon_InvalidateContext()
     If mRibbon Is Nothing Then Exit Sub
     On Error GoTo Failed
     For Each controlId In Array("peGanttContext", "peUpdate", "pePlanning", "peForced", "peFull", "peGantt", "peSCurve", _
-                               "peGanttReset", "peScenario", "peTest", "peLock")
+                               "peGanttReset", "peScenario", "peTest", "peLock", "peSettings", "peImport", "peTutorial", _
+                               "peClearHistory", "peClearAck", "peCleanDashboard", "peResetPlanning", "peFullReset", _
+                               "peFullTimeline", "peSelectedTask")
         mRibbon.InvalidateControl CStr(controlId)
     Next controlId
     Exit Sub
@@ -226,7 +270,7 @@ Public Sub Ribbon_InvalidateLanguage()
     On Error GoTo Failed
     For Each controlId In Array("peTab", "peUpdate", "pePlanning", "peForced", "peFull", "peGantt", "peSCurve", _
                                "pePlanningTools", "peResetPlanning", "peClearHistory", "peClearAck", "peCleanDashboard", "peFullReset", _
-                               "peNavigation", "peSettings", "peImport", "peFullTimeline", "peSelectedTask", "peGanttContext", _
+                               "peNavigation", "peSettings", "peImport", "peTutorial", "peFullTimeline", "peSelectedTask", "peGanttContext", _
                                "peGanttReset", "peScenario", "peTest", "peLock")
         mRibbon.InvalidateControl CStr(controlId)
     Next controlId
@@ -297,6 +341,7 @@ Private Function Ribbon_ControlEntry(ByVal controlId As String) As Variant
         Case "peNavigation": Ribbon_ControlEntry = Array("NAV.GROUP.LABEL", "", "", "")
         Case "peSettings": Ribbon_ControlEntry = Array("RIBBON.SETTINGS.LABEL", "RIBBON.SETTINGS.TIP", "", "Settings")
         Case "peImport": Ribbon_ControlEntry = Array("RIBBON.IMPORT.LABEL", "RIBBON.IMPORT.TIP", "", "ProjectWelcome_ImportPrevious")
+        Case "peTutorial": Ribbon_ControlEntry = Array("TUTORIAL.LABEL", "TUTORIAL.TIP", "", "ProjectTutorial_Show")
         Case "peGanttContext": Ribbon_ControlEntry = Array("RIBBON.GANTT_CONTEXT.LABEL", "", "", "")
         Case "peGanttReset": Ribbon_ControlEntry = Array("GANTT.COMMAND.RESET", "RIBBON.GANTT_RESET.TIP", "", "GanttSimulation_ResetToNormal")
         Case "peScenario": Ribbon_ControlEntry = Array("GANTT.COMMAND.SCENARIO", "RIBBON.SCENARIO.TIP", "", "Run_Gantt_Scenario_Engine")
@@ -305,4 +350,10 @@ Private Function Ribbon_ControlEntry(ByVal controlId As String) As Variant
         Case "peFullTimeline": Ribbon_ControlEntry = Array("NAV.FULL.LABEL", "NAV.FULL.TIP", "NAV.FULL.HELP", "NavigationFull")
         Case "peSelectedTask": Ribbon_ControlEntry = Array("NAV.TASK.LABEL", "NAV.TASK.TIP", "NAV.TASK.HELP", "NavigationTask")
     End Select
+End Function
+
+Public Function Ribbon_CommandLabel(ByVal controlId As String, ByVal language As String) As String
+    Dim entry As Variant
+    entry = Ribbon_ControlEntry(controlId)
+    Ribbon_CommandLabel = TextCatalog_Get(CStr(entry(0)), language)
 End Function

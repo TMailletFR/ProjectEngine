@@ -21,14 +21,14 @@ Public Function TextCatalogSCurve_Definitions() As Variant
         "Données bloquantes pour S-curve" & vbCrLf & "-> corriger les champs nécessaires avant recalcul" & vbCrLf & vbCrLf & "IDs : {Ids}" & vbCrLf & "WBS : {Wbs}")
     definitions(12) = Array("SCURVE.DIAG.MISSING_WEIGHT_GROUP", _
         "Missing weight on some leaf tasks - excluded from S-curve" & vbCrLf & "-> fill Weight (%) if needed" & vbCrLf & vbCrLf & "IDs: {Ids}" & vbCrLf & "WBS: {Wbs}", _
-        "Poids manquant sur certaines tâches feuilles - non prises en compte dans la S-curve" & vbCrLf & "-> compléter Weight (%) si nécessaire" & vbCrLf & vbCrLf & "IDs : {Ids}" & vbCrLf & "WBS : {Wbs}")
+        "Poids manquant sur certaines tâches feuilles - non prises en compte dans la S-curve" & vbCrLf & "-> compléter Poids [%] si nécessaire" & vbCrLf & vbCrLf & "IDs : {Ids}" & vbCrLf & "WBS : {Wbs}")
     definitions(13) = Array("SCURVE.DIAG.EXCLUDED_WEIGHT_GROUP", _
         "Weight entered on Milestones or Level of Effort - excluded from S-curve" & vbCrLf & "-> remove Weight (%) if you want to avoid this warning" & vbCrLf & vbCrLf & "IDs: {Ids}" & vbCrLf & "WBS: {Wbs}", _
-        "Poids renseigné sur des Milestones ou Level of Effort - non pris en compte dans la S-curve" & vbCrLf & "-> supprimer le Weight (%) si vous voulez éviter ce warning" & vbCrLf & vbCrLf & "IDs : {Ids}" & vbCrLf & "WBS : {Wbs}")
+        "Poids renseigné sur des Milestones ou Level of Effort - non pris en compte dans la S-curve" & vbCrLf & "-> supprimer le Poids [%] si vous voulez éviter cet avertissement" & vbCrLf & vbCrLf & "IDs : {Ids}" & vbCrLf & "WBS : {Wbs}")
     definitions(14) = Array("SCURVE.EVENT.MISSING_WEIGHT.MESSAGE", "Missing weight on some leaf tasks", "Poids manquant sur certaines taches feuilles")
-    definitions(15) = Array("SCURVE.EVENT.MISSING_WEIGHT.DETAIL", "tasks are excluded from the S-curve; fill Weight (%) if needed", "les taches sont exclues de la S-curve ; completer Weight (%) si necessaire")
+    definitions(15) = Array("SCURVE.EVENT.MISSING_WEIGHT.DETAIL", "tasks are excluded from the S-curve; fill Weight (%) if needed", "les taches sont exclues de la S-curve ; completer Poids [%] si necessaire")
     definitions(16) = Array("SCURVE.EVENT.EXCLUDED_WEIGHT.MESSAGE", "Weight entered on Milestones or Level of Effort", "Poids renseigne sur des Milestones ou Level of Effort")
-    definitions(17) = Array("SCURVE.EVENT.EXCLUDED_WEIGHT.DETAIL", "tasks are excluded from the S-curve; remove Weight (%) if you want to avoid this warning", "les taches sont exclues de la S-curve ; supprimer Weight (%) si vous voulez eviter ce warning")
+    definitions(17) = Array("SCURVE.EVENT.EXCLUDED_WEIGHT.DETAIL", "tasks are excluded from the S-curve; remove Weight (%) if you want to avoid this warning", "les taches sont exclues de la S-curve ; supprimer Poids [%] si vous voulez eviter cet avertissement")
     definitions(18) = Array("SCURVE.ERROR.MISSING_SOURCE_COLUMN", "Missing source column in {Table}: {Column}", "Colonne source absente de {Table} : {Column}")
     definitions(19) = Array("SCURVE.ERROR.MISSING_OUTPUT_COLUMN", "Missing column in {Table}: {Column}", "Colonne absente de {Table} : {Column}")
     definitions(20) = Array("SCURVE.ERROR.INVALID_SIGNATURE_KEY", "Invalid fixed-length S-Curve chart signature key.", "Clé de signature fixe du graphique S-Curve invalide.")

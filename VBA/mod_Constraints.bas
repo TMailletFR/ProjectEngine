@@ -97,11 +97,29 @@ Public Sub Handle_Constraints_Change(ByVal ws As Worksheet, ByVal Target As Rang
     Dim rngToCheck As Range
     Dim cell As Range
     Dim cellValue As String
+    Dim choices As Range
+    Dim messages As Collection
 
     On Error GoTo SafeExit
 
     Set tbl = ws.ListObjects(CONSTRAINTS_TABLE_NAME)
     If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    Set choices = Application.Union( _
+        SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_TYPE).DataBodyRange, _
+        SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).DataBodyRange, _
+        SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).DataBodyRange)
+    Set choices = Application.Intersect(Target, choices)
+    If Not choices Is Nothing Then
+        Set messages = New Collection
+        For Each cell In choices.Cells
+            ' Keep Excel's declarative list rule and the existing warning severity.
+            If Not cell.Validation.Value Then
+                CalcBridge_AddConsoleMessage messages, "WARNING", cell.Validation.ErrorTitle & vbCrLf & cell.Validation.ErrorMessage
+            End If
+        Next cell
+        If messages.Count > 0 Then CalcBridge_ShowPlanningConsole messages
+    End If
 
     Set rngDeadline = SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DEADLINE).DataBodyRange
     Set rngToCheck = Intersect(Target, rngDeadline)
@@ -1269,7 +1287,7 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
-        .ShowError = True
+        .ShowError = False
     End With
 
     With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).DataBodyRange.Validation
@@ -1285,7 +1303,7 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
-        .ShowError = True
+        .ShowError = False
     End With
 
     With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).DataBodyRange.Validation
@@ -1301,7 +1319,7 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
         .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
-        .ShowError = True
+        .ShowError = False
     End With
 
 End Sub

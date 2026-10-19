@@ -58,6 +58,7 @@ Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
         If answer <> vbYes Then Exit Sub
     End If
 
+    If Not ProjectTutorial_StopForReset() Then Exit Sub
     Set ws = ThisWorkbook.Worksheets("WBS")
     Set tbl = ws.ListObjects("tbl_WBS")
 
@@ -71,6 +72,8 @@ Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
     Reset_Dashboard
     ClearPlanningWarningAcknowledgements
     ClearPlanningEventHistory
+    Settings_ResetTutorialProgress
+    ProjectWelcome_ResetTutorialVisit
     ProjectWelcome_ShowIfNeeded
     Exit Sub
 
@@ -258,7 +261,8 @@ Private Sub ResetPlanning_ApplyListValidation( _
         .ErrorTitle = errorTitle
         .errorMessage = errorMessage
         .ShowInput = True
-        .ShowError = True
+        ' The WBS change owner rejects invalid inputs through the house console.
+        .ShowError = False
     End With
 
 End Sub

@@ -15,11 +15,27 @@ Read the following in order to understand project boundaries before entering det
 9. `mod_MessageEngine`, `mod_EventHistory`, `frmPlanningMessages`: diagnostics reaching the user.
 10. `PROJECT_GLOSSARY.md` and `MAINTENANCE_GUIDE.md`: terminology and change rules.
 
-## Ribbon and welcome entry points (v1.3.0)
+## Ribbon and welcome entry points (v1.4.0)
 
-`customUI.xml` is embedded in each `.xlsm` with eighteen image-backed commands. `mod_RibbonCallbacks` is a **thin UI adapter**, not a scheduling owner. It validates the originating workbook and active window before dispatching to existing public operations. WBS update commands are WBS-contextual; Gantt Test/Scenario/Lock/Reset are Gantt-contextual; Settings, Navigation, Reset and Import have their defined global scopes. `ThisWorkbook` coordinates lifecycle events, while activation refreshes Ribbon state. **Do not invalidate Ribbon controls during `Workbook_Deactivate`** (coexistence with another open ProjectEngine workbook).
+`customUI.xml` is embedded in each `.xlsm` with nineteen image-backed commands. `mod_RibbonCallbacks` is a **thin UI adapter**, not a scheduling owner. It validates the originating workbook and active window before dispatching to existing public operations. WBS update commands are WBS-contextual; Gantt Test/Scenario/Lock/Reset are Gantt-contextual; Settings, Navigation, Reset and Import have their defined global scopes. `ThisWorkbook` coordinates lifecycle events, while activation refreshes Ribbon state. **Do not invalidate Ribbon controls during `Workbook_Deactivate`** (coexistence with another open ProjectEngine workbook).
 
 For an eligible empty, writable workbook, `mod_ProjectWelcome` displays `frmProjectWelcome` via `ProjectWelcome_ShowIfNeeded`. Start New acknowledges welcome through the existing EventHistory/ACK owner; import shares the same migration entry as Ribbon. Closing/cancelling/failing does not acknowledge successful onboarding. Full Reset makes welcome eligible again. This form is a dedicated view, not a new message store, planning engine or translation catalogue.
+
+## Interactive tutorial and command receipts (v1.4.0)
+
+The 19th Ribbon command (`peTutorial`) and Welcome's **Discover ProjectEngine** action delegate to `mod_ProjectTutorial`; `frmProjectTutorial` is a **modeless view**, not a planning owner. The same existing TextCatalog provides FR/EN content and Settings owns persisted progress. Discovery and Practice use **29 shared semantic StepKeys** but keep independent bookmarks. Passive navigation resolves actual worksheet targets and highlights them without scheduling, Gantt repair, automatic data injection or background watchers.
+
+Practice allows normal worksheet entry and explicitly proposed standard commands via the **existing Ribbon dispatcher and business owners**. `mod_RuntimeWorkflow` carries run identity and terminal command outcome; the tutor checks the current command receipt and current inputs before advancing. A STOP, failure, cancellation or guard rejection is not a successful completion. Empty-planning safe states remain valid outcomes only when the owning pipeline confirms completion; no tutorial-specific planning engine or validator is introduced.
+
+The tutorial highlight is one temporary, ownership-marked Shape (`PE_TUTORIAL_HIGHLIGHT`). It must remain removable at Save/SaveAs/Close, not serialize into the saved workbook, and must not change cell values, formats or business Gantt Shapes. The modeless form verifies its Excel window/workbook and closes cleanly when ownership changes. Save/reopen bookmarks belong to Settings, not ACK. Full Reset clears both mode bookmarks; a project import preserves the destination's tutorial progress.
+
+## Modern dialogs and presentation boundary (v1.4.0)
+
+`frmPlanningMessages` remains **modal**, `frmProjectWelcome` remains **modal**, and `frmProjectTutorial` remains **modeless**. They use one shared visual presentation infrastructure (`PEButton`, `PEConsoleButton`, `PEConsolePresentation`, `mod_PEPaint`, `mod_PEPresentation`, `mod_PEConsoleStyle`) without adding business owners or external installations. The existing MessageEngine/EventHistory/ACK and Welcome/Tutorial handlers remain authoritative. Native MSForms CommandButtons remain a working fallback, including for captions not representable by the vector renderer. Planning messages are measured with their real MSForms text layout before Show; page navigation does not continuously resize the window. Preserve focus, Escape/Default/Cancel, keyboard access, and editing of Excel cells behind the modeless tutorial.
+
+## Import privacy and publication metadata (v1.4.0)
+
+`mod_MigrationData` and `mod_Migration` no longer persist a source workbook's absolute path in the target import snapshot, ledger details or import event identity. Full exception details remain session-only where appropriate; stored failure diagnostics use bounded phase/error data. `mod_WorkbookSchema` remains the property owner. The source is still opened read-only with macros disabled. Excel can recreate technical location metadata when saving: **do not mistake an internal sanitization pass for permanent immunity after subsequent Excel saves**. Before public distribution, sanitize the final saved artifact and run the existing privacy gate; review any personal `EVENT_ACK` attributions separately. Do not enable automatic RemovePersonalInformation/filterPrivacy just to make that gate pass if it reintroduces Excel Save warnings.
 
 ## Main flow
 
@@ -59,7 +75,7 @@ Ribbon Import / Welcome Import
 
 The import is **data-only**: it does not run Core, rebuild the Gantt, calculate the S-Curve or execute source macros. The user reviews WBS and Constraints, then explicitly runs Planning Update or Full Update. Supported data include WBS inputs (including supported input formulas), Constraints, Settings, EVENT_ACK and Dashboard snapshots; compatible history can be preserved, incompatible optional history skipped explicitly. The target retains its own VBA, Ribbon and derived data contracts.
 
-**Current v1.3.0 transaction boundary:** this is a direct destructive import with no automatically created destination recovery backup or staging workbook. The source remains unchanged. Ask the user to back up the destination **before** starting. An error before the final Save must not be reported as SUCCESS or create a success ACK; do not call the workflow atomically rollback-safe against Excel/AutoSave or an interruption after Save.
+**Current v1.4.0 transaction boundary:** this is a direct destructive import with no automatically created destination recovery backup or staging workbook. The source remains unchanged. Ask the user to back up the destination **before** starting. An error before the final Save must not be reported as SUCCESS or create a success ACK; do not call the workflow atomically rollback-safe against Excel/AutoSave or an interruption after Save.
 
 `ProjectEngine.SchemaVersion` describes the persistent schema; `ProjectEngine.ReleaseId` identifies a release separately and is not auto-invented by import. Older unmarked workbooks use validated structure/profile detection. Unsupported/future schemas and unsafe inputs fail closed; source workbooks must never be executed as migration code.
 
@@ -88,7 +104,7 @@ The import is **data-only**: it does not run Core, rebuild the Gantt, calculate 
 
 ## Full Update and output publication
 
-`Run_Full_Update` still forces complete Core scheduling and analytics. The v1.3.0 output writer **compares already-calculated output columns** with existing WBS values and skips only columns that are identical and contain no formulas. Differing columns, or any formula in a calculated output column, follow the normal bulk rewrite path. This is not an incremental-Core shortcut and does **not** promise a faster first full reconstruction. The same single output authority remains in place.
+`Run_Full_Update` still forces complete Core scheduling and analytics. The v1.4.0 output writer **compares already-calculated output columns** with existing WBS values and skips only columns that are identical and contain no formulas. Differing columns, or any formula in a calculated output column, follow the normal bulk rewrite path. This is not an incremental-Core shortcut and does **not** promise a faster first full reconstruction. The same single output authority remains in place.
 
 ## Gantt domain
 

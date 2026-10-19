@@ -339,6 +339,8 @@ Private Sub TextCatalog_EnsureBuilt()
         "MIGRATION", TextCatalogMigration_Definitions()
     TextCatalog_ImportDefinitions candidateTexts, _
         "WELCOME", TextCatalogWelcome_Definitions()
+    TextCatalog_ImportDefinitions candidateTexts, _
+        "TUTORIAL", TextCatalogTutorial_Definitions()
 
     Set mTextsByKey = candidateTexts
     mCatalogBuilt = True

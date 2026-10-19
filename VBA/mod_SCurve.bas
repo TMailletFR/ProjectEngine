@@ -1,6 +1,7 @@
 Attribute VB_Name = "mod_SCurve"
 Option Explicit
 
+
 '===============================================================================
 ' MODULE : mod_SCurve
 ' DOMAINE / DOMAIN : S-Curve
@@ -1767,3 +1768,14 @@ Public Sub SCurve_DrawDashboardTodayLine(ByVal ch As Chart, ByVal ws As Workshee
     DrawSCurveTodayVerticalLine ch, ws, tblSCurve, shapeName
 
 End Sub
+
+Public Function SCurve_TutorialChartTarget() As Range
+    Dim ws As Worksheet
+    Dim chart As ChartObject
+    On Error GoTo Missing
+    Set ws = ThisWorkbook.Worksheets(SCURVE_SHEET)
+    Set chart = ws.ChartObjects("cht_SCurve")
+    If chart.Chart.SeriesCollection.Count = 0 Then Exit Function
+    Set SCurve_TutorialChartTarget = ws.Range(chart.TopLeftCell, chart.BottomRightCell)
+Missing:
+End Function

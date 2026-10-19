@@ -15,11 +15,27 @@ Lire les éléments suivants dans cet ordre pour comprendre les frontières du p
 9. `mod_MessageEngine`, `mod_EventHistory`, `frmPlanningMessages` : chemin des diagnostics jusqu'à l'utilisateur.
 10. `PROJECT_GLOSSARY.md` et `MAINTENANCE_GUIDE.md` : vocabulaire et règles de modification.
 
-## Entrées Ribbon et accueil (v1.3.0)
+## Entrées Ribbon et accueil (v1.4.0)
 
-`customUI.xml` est embarqué dans chaque `.xlsm` avec dix-huit commandes illustrées. `mod_RibbonCallbacks` est un **adaptateur UI mince**, pas un propriétaire de calcul. Il valide le classeur d'origine et la fenêtre active avant d'appeler les entrées publiques existantes. Les Updates sont contextuelles sur WBS ; Test/Scenario/Lock/Reset sur GANTT ; Settings, Navigation, Reset et Import suivent leur périmètre global. `ThisWorkbook` orchestre les événements du classeur et l'activation rafraîchit le Ribbon. **Ne pas invalider les contrôles Ribbon dans `Workbook_Deactivate`** (coexistence de plusieurs fichiers ProjectEngine).
+`customUI.xml` est embarqué dans chaque `.xlsm` avec dix-neuf commandes illustrées. `mod_RibbonCallbacks` est un **adaptateur UI mince**, pas un propriétaire de calcul. Il valide le classeur d'origine et la fenêtre active avant d'appeler les entrées publiques existantes. Les Updates sont contextuelles sur WBS ; Test/Scenario/Lock/Reset sur GANTT ; Settings, Navigation, Reset et Import suivent leur périmètre global. `ThisWorkbook` orchestre les événements du classeur et l'activation rafraîchit le Ribbon. **Ne pas invalider les contrôles Ribbon dans `Workbook_Deactivate`** (coexistence de plusieurs fichiers ProjectEngine).
 
 Sur un classeur vide et modifiable, `mod_ProjectWelcome` affiche `frmProjectWelcome` via `ProjectWelcome_ShowIfNeeded`. Start New acquitte l'accueil via le propriétaire EventHistory/ACK existant ; Import réutilise la même entrée que le Ribbon. Fermeture, annulation ou échec n'enregistrent pas un accueil réussi. Full Reset rend l'accueil à nouveau éligible. Le formulaire est une vue dédiée, sans nouveau store de messages, moteur de planning ou catalogue de traduction.
+
+## Tutoriel interactif et reçus de commandes (v1.4.0)
+
+La 19e commande Ribbon (`peTutorial`) et **Discover ProjectEngine** depuis l’accueil délèguent à `mod_ProjectTutorial` ; `frmProjectTutorial` est une **vue non modale**, pas un propriétaire du planning. Le catalogue TextCatalog commun fournit le FR/EN et Settings possède la progression persistante. Découverte et Pratique partagent **29 StepKeys sémantiques**, avec des repères de reprise indépendants. La navigation passive résout et surligne les cibles réelles sans calcul, réparation Gantt, injection de données ni watcher permanent.
+
+La pratique conserve la vraie saisie Excel et propose explicitement les commandes normales par le **dispatcher Ribbon et les owners métier existants**. `mod_RuntimeWorkflow` fournit l’identité d'exécution et le résultat terminal ; le tutoriel exige un reçu frais et des entrées toujours valides. STOP, échec, annulation et refus de guard n’autorisent pas une progression comme succès. L’état vide n'est une réussite que si l’owner confirme une opération safe-empty accomplie : pas de second moteur ni validateur pédagogique.
+
+Le surlignage est une unique Shape temporaire identifiée (`PE_TUTORIAL_HIGHLIGHT`), retirée pour Save/SaveAs/Close et sans mutation de valeurs, formats ou Shapes métier. Le formulaire non modal vérifie son classeur et sa fenêtre, puis ferme proprement à la perte d’ownership. Les bookmarks résident dans Settings, pas dans ACK ; Full Reset remet à zéro les deux modes ; un import conserve la progression de destination.
+
+## Fenêtres modernisées et frontière de présentation (v1.4.0)
+
+`frmPlanningMessages` est **modale**, `frmProjectWelcome` est **modale**, `frmProjectTutorial` est **non modale**. Elles utilisent l’infrastructure visuelle commune (`PEButton`, `PEConsoleButton`, `PEConsolePresentation`, `mod_PEPaint`, `mod_PEPresentation`, `mod_PEConsoleStyle`), sans nouveaux owners métier ni installation externe. MessageEngine/EventHistory/ACK et les handlers Welcome/Tutorial font autorité. Les vrais CommandButtons MSForms restent le fallback, notamment pour les légendes incompatibles avec le renderer vectoriel. La console mesure son texte natif avant Show et garde une géométrie stable entre pages. Préserver clavier, focus, Échap, Default/Cancel et édition Excel derrière le tutoriel.
+
+## Confidentialité de l'import et des artefacts publiés (v1.4.0)
+
+`mod_MigrationData` et `mod_Migration` ne persistent plus le chemin absolu de la source dans le snapshot, le journal ou les identités d’événements. Les détails complets d’exception restent de session ; le diagnostic persistant est borné à la phase/code d’erreur. `mod_WorkbookSchema` conserve l’autorité sur les propriétés. La source est toujours en lecture seule, macros désactivées. Excel peut recréer des métadonnées de localisation après sauvegarde : **assainir l’artefact final après sa dernière sauvegarde et relancer le gate de confidentialité** ; nettoyer séparément les attributions nominatives `EVENT_ACK` destinées à la publication. Ne pas activer RemovePersonalInformation/filterPrivacy pour forcer le gate au prix d’un avertissement de sauvegarde.
 
 ## Flux principal
 
@@ -59,7 +75,7 @@ Ribbon Import / accueil Import
 
 L'import est **data-only** : aucun appel automatique au Core, aucun Gantt/S-Curve reconstruit, aucune macro du fichier source exécutée. L'utilisateur vérifie WBS et Constraints puis lance explicitement Planning Update ou Full Update. Les données prises en charge incluent les inputs WBS (formules utilisateur compatibles), Constraints, Settings, EVENT_ACK et snapshots Dashboard ; un historique compatible peut être repris, sinon le bonus incompatible est écarté explicitement. La cible conserve son propre VBA, Ribbon et ses contrats de sorties.
 
-**Frontière transactionnelle v1.3.0 :** import direct et destructif, sans création automatique d'une copie de récupération de la destination ni workbook de staging. La source reste intacte. Demander une **sauvegarde préalable de la destination**. Une erreur avant le Save final ne doit pas produire SUCCESS/ACK de succès ; ne pas présenter cette procédure comme un rollback atomique garanti face à Excel, AutoSave ou une interruption après Save.
+**Frontière transactionnelle v1.4.0 :** import direct et destructif, sans création automatique d'une copie de récupération de la destination ni workbook de staging. La source reste intacte. Demander une **sauvegarde préalable de la destination**. Une erreur avant le Save final ne doit pas produire SUCCESS/ACK de succès ; ne pas présenter cette procédure comme un rollback atomique garanti face à Excel, AutoSave ou une interruption après Save.
 
 `ProjectEngine.SchemaVersion` versionne le schéma persistant ; `ProjectEngine.ReleaseId` identifie séparément la release et n'est pas inventé par l'import. Un legacy sans marqueur est reconnu par son profil structurel validé. Schémas futurs/incompatibles et entrées dangereuses sont refusés ; le VBA source n'est jamais exécuté pour la migration.
 
@@ -88,7 +104,7 @@ L'import est **data-only** : aucun appel automatique au Core, aucun Gantt/S-Curv
 
 ## Full Update et publication des sorties
 
-`Run_Full_Update` impose toujours un calcul Core et Analytics complet. En v1.3.0, le writer **compare les colonnes de résultats déjà calculés** avec les valeurs WBS existantes et saute uniquement une colonne entièrement identique sans formule. Toute différence, ou toute formule dans une colonne de sortie calculée, déclenche l'écriture bulk normale. Ce n'est pas un calcul Core incrémental, et un premier rendu complet n'est pas promis plus rapide. L'owner des sorties reste unique.
+`Run_Full_Update` impose toujours un calcul Core et Analytics complet. En v1.4.0, le writer **compare les colonnes de résultats déjà calculés** avec les valeurs WBS existantes et saute uniquement une colonne entièrement identique sans formule. Toute différence, ou toute formule dans une colonne de sortie calculée, déclenche l'écriture bulk normale. Ce n'est pas un calcul Core incrémental, et un premier rendu complet n'est pas promis plus rapide. L'owner des sorties reste unique.
 
 ## Domaine Gantt
 

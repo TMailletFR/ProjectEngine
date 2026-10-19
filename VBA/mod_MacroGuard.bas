@@ -65,6 +65,7 @@ Private Sub MacroGuard_RequestResolvedAbort( _
     ByVal enText As String)
 
     gMacroAbortRequested = True
+    WorkflowCommand_Observe "STOP"
     gMacroAbortSource = sourceName
     gMacroAbortMessageFR = frText
     gMacroAbortMessageEN = enText

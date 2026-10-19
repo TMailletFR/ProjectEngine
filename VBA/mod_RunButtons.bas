@@ -115,8 +115,10 @@ End Sub
 Public Sub Run_Planning_Update()
 
     Dim workflowStarted As Boolean
+    Dim receiptId As Long, completed As Boolean, failure As String
 
     On Error GoTo SafeExit
+    receiptId = WorkflowCommand_Begin("Run_Planning_Update")
 
     RunButtonsTrace_Checkpoint "RunButtons", "Enter Run_Planning_Update"
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Planning_Update")
@@ -140,12 +142,20 @@ Public Sub Run_Planning_Update()
     End If
 
 CleanExit:
+    completed = Not CalcEngine_HasBlockingErrorsForState() And Not IsMacroAbortRequested() And Len(failure) = 0
+    ' The bridge's safe-empty outcome is valid; empty CALC is not a failed run.
+    If Not completed And Len(failure) = 0 And Not IsMacroAbortRequested() Then
+        completed = Planning_WBSIsEmpty(True, False)
+    End If
+    If IsMacroAbortRequested() Then failure = "CANCELLED"
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Planning_Update"
     If workflowStarted Then EndPlanningWorkflow
+    WorkflowCommand_End receiptId, completed, failure
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Planning_Update"
     Exit Sub
 
 SafeExit:
+    failure = "FAILED"
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Planning_Update Err=" & CStr(Err.Number)
     RunButtons_ShowConsoleError "Run_Planning_Update"
     Resume CleanExit
@@ -159,8 +169,10 @@ End Sub
 Public Sub Run_Forced_Planning_Update()
 
     Dim workflowStarted As Boolean
+    Dim receiptId As Long, completed As Boolean, failure As String
 
     On Error GoTo SafeExit
+    receiptId = WorkflowCommand_Begin("Run_Forced_Planning_Update")
 
     RunButtonsTrace_Checkpoint "RunButtons", "Enter Run_Forced_Planning_Update"
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Forced_Planning_Update")
@@ -172,12 +184,19 @@ Public Sub Run_Forced_Planning_Update()
     RunButtonsTrace_Checkpoint "CoreBridge", "Run_Calc_Engine force returned"
 
 CleanExit:
+    completed = Not CalcEngine_HasBlockingErrorsForState() And Not IsMacroAbortRequested() And Len(failure) = 0
+    If Not completed And Len(failure) = 0 And Not IsMacroAbortRequested() Then
+        completed = Planning_WBSIsEmpty(True, False)
+    End If
+    If IsMacroAbortRequested() Then failure = "CANCELLED"
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Forced_Planning_Update"
     If workflowStarted Then EndPlanningWorkflow
+    WorkflowCommand_End receiptId, completed, failure
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Forced_Planning_Update"
     Exit Sub
 
 SafeExit:
+    failure = "FAILED"
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Forced_Planning_Update Err=" & CStr(Err.Number)
     RunButtons_ShowConsoleError "Run_Forced_Planning_Update"
     Resume CleanExit
@@ -194,8 +213,10 @@ Public Sub Run_Gantt_Update()
     Dim workflowStarted As Boolean
     Dim finalConsoleShown As Boolean
     Dim hadLocalSnapshot As Boolean
+    Dim receiptId As Long, completed As Boolean, failure As String
 
     On Error GoTo SafeExit
+    receiptId = WorkflowCommand_Begin("Run_Gantt_Update")
 
     RunButtonsTrace_Checkpoint "RunButtons", "Enter Run_Gantt_Update"
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Gantt_Update")
@@ -225,6 +246,7 @@ Public Sub Run_Gantt_Update()
         RunButtonsTrace_Checkpoint "CoreBridge", "Blocking errors detected Run_Gantt_Update"
         If Planning_WBSIsEmpty() Then
             Planning_GanttSafeEmptyState
+            completed = True
         Else
             Gantt_SafeEmptyState
         End If
@@ -248,15 +270,19 @@ Public Sub Run_Gantt_Update()
         Err.Raise 5, "Run_Gantt_Update", PlanningMessageText_Format("GANTT.ERROR.UPDATE_NOT_READY")
     End If
     RunButtonsTrace_Checkpoint "Gantt", "Ensure RENDER_AND_SHOW returned Run_Gantt_Update"
+    completed = True
 
 CleanExit:
+    If IsMacroAbortRequested() Then failure = "CANCELLED"
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Gantt_Update"
     If workflowStarted And Not finalConsoleShown Then RunButtons_ShowDeferredWorkflowConsole
     If workflowStarted Then EndPlanningWorkflow
+    WorkflowCommand_End receiptId, completed, failure
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Gantt_Update"
     Exit Sub
 
 SafeExit:
+    failure = "FAILED"
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Gantt_Update Err=" & CStr(Err.Number)
     If workflowStarted Then
         RunButtons_ShowDeferredWorkflowConsole "Run_Gantt_Update"
@@ -275,8 +301,10 @@ End Sub
 Public Sub Run_SCurve_Update()
 
     Dim consoleMessages As Collection
+    Dim receiptId As Long, completed As Boolean, failure As String
 
     On Error GoTo ErrHandler
+    receiptId = WorkflowCommand_Begin("Run_SCurve_Update")
 
     RunButtonsTrace_Checkpoint "RunButtons", "Enter Run_SCurve_Update"
     Set consoleMessages = New Collection
@@ -294,18 +322,22 @@ Public Sub Run_SCurve_Update()
     RunButtonsTrace_Checkpoint "SCurve", "Activate SCURVE start"
     ThisWorkbook.Worksheets("SCURVE").Activate
     RunButtonsTrace_Checkpoint "SCurve", "Activate SCURVE returned"
+    completed = True
 
 SafeExit:
+    If IsMacroAbortRequested() Then failure = "CANCELLED"
     RunButtonsTrace_Checkpoint "Workflow stack", "SafeExit Run_SCurve_Update"
     If IsMacroAbortRequested() Then
         ShowAbortMessageOnce
     End If
 
     EndMacroRun
+    WorkflowCommand_End receiptId, completed, failure
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_SCurve_Update"
     Exit Sub
 
 ErrHandler:
+    failure = "FAILED"
     RunButtonsTrace_Checkpoint "RunButtons", "ErrHandler Run_SCurve_Update Err=" & CStr(Err.Number)
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
@@ -333,12 +365,14 @@ Public Sub Run_Full_Update(Optional ByVal propagateErrors As Boolean = False)
     Dim workflowStarted As Boolean
     Dim wsCaller As Worksheet
     Dim deferredConsoleShown As Boolean
+    Dim receiptId As Long, completed As Boolean, failure As String
 
     Dim failureNumber As Long, failureSource As String, failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Run_Full_Update", "Workflow")
 
     On Error GoTo SafeExit
+    receiptId = WorkflowCommand_Begin("Run_Full_Update")
 
     RunButtonsTrace_Checkpoint "RunButtons", "Enter Run_Full_Update"
     Set wsCaller = ActiveSheet
@@ -355,6 +389,7 @@ Public Sub Run_Full_Update(Optional ByVal propagateErrors As Boolean = False)
         RunButtonsTrace_Checkpoint "CoreBridge", "Blocking errors detected Run_Full_Update"
         If Planning_WBSIsEmpty(propagateErrors) Then
             Planning_FullSafeEmptyState
+            completed = True
         Else
             If propagateErrors Then Err.Raise 5, "Run_Full_Update", "PLANNING_VALIDATION_FAILED"
             Gantt_SafeEmptyState
@@ -395,14 +430,17 @@ Public Sub Run_Full_Update(Optional ByVal propagateErrors As Boolean = False)
     RunButtonsTrace_Checkpoint "SCurve", "Run_SCurve_Engine start Run_Full_Update"
     Run_SCurve_Engine propagateErrors
     RunButtonsTrace_Checkpoint "SCurve", "Run_SCurve_Engine returned Run_Full_Update"
+    completed = True
 
 CleanExit:
+    If IsMacroAbortRequested() Then failure = "CANCELLED"
     RunButtonsTrace_Checkpoint "Workflow stack", "CleanExit Run_Full_Update"
     On Error Resume Next
     If Not wsCaller Is Nothing Then wsCaller.Activate
     On Error GoTo 0
     If workflowStarted And Not deferredConsoleShown Then RunButtons_ShowDeferredWorkflowConsole
     If workflowStarted Then EndPlanningWorkflow
+    WorkflowCommand_End receiptId, completed, failure
     RunButtonsTrace_Checkpoint "RunButtons", "Exit Run_Full_Update"
     If propagateErrors And failureNumber <> 0 Then
         On Error GoTo 0
@@ -411,6 +449,7 @@ CleanExit:
     Exit Sub
 
 SafeExit:
+    failure = "FAILED"
     failureNumber = Err.Number: failureSource = Err.Source: failureDescription = Err.Description
     If propagateErrors Then Resume CleanExit
     RunButtonsTrace_Checkpoint "RunButtons", "SafeExit Run_Full_Update Err=" & CStr(Err.Number)

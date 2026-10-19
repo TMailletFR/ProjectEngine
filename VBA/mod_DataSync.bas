@@ -2028,7 +2028,7 @@ Private Sub EnsureWBSTaskTypeInputSetup(ByVal tblWBS As ListObject)
         .ErrorTitle = TextCatalog_Get("WBS.VALIDATION.TASK_TYPE.ERROR_TITLE", WBS_CurrentLanguage())
         .errorMessage = TextCatalog_Get("WBS.VALIDATION.TASK_TYPE.ERROR_MESSAGE", WBS_CurrentLanguage())
         .ShowInput = True
-        .ShowError = True
+        .ShowError = False
     End With
 
     rng.NumberFormat = "@"
@@ -2080,7 +2080,7 @@ Private Sub EnsureSummaryDisplayColumnExists( _
                     .ErrorTitle = TextCatalog_Get("WBS.VALIDATION.SUMMARY.ERROR_TITLE", WBS_CurrentLanguage())
                     .errorMessage = TextCatalog_Get("WBS.VALIDATION.SUMMARY.ERROR_MESSAGE", WBS_CurrentLanguage())
                     .ShowInput = True
-                    .ShowError = True
+                    .ShowError = False
                 End With
             End With
         End If
@@ -2233,7 +2233,7 @@ Private Sub EnsureWBSCalendarInputSetup(ByVal tblWBS As ListObject)
         .ErrorTitle = TextCatalog_Get("WBS.VALIDATION.CALENDAR.ERROR_TITLE", WBS_CurrentLanguage())
         .errorMessage = TextCatalog_Get("WBS.VALIDATION.CALENDAR.ERROR_MESSAGE", WBS_CurrentLanguage())
         .ShowInput = True
-        .ShowError = True
+        .ShowError = False
     End With
 
     rng.NumberFormat = "@"

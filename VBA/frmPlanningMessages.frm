@@ -1,6 +1,5 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmPlanningMessages 
-   Caption         =   ""
    ClientHeight    =   7800
    ClientLeft      =   930
    ClientTop       =   3705
@@ -12,7 +11,9 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
 Option Explicit
+Private mPE As PEConsolePresentation
 
 '===============================================================================
 ' MODULE : frmPlanningMessages
@@ -52,6 +53,7 @@ Public Sub LoadMessages( _
     End If
     mIndex = 1
 
+    PEBegin
     ApplyFormLayout
     CenterFormOnExcel
     RenderCurrentMessage
@@ -76,7 +78,7 @@ End Sub
 Private Sub cmdPrevious_Click()
 
     If mItems Is Nothing Then Exit Sub
-    If mItems.Count = 0 Then Exit Sub
+    If mItems.count = 0 Then Exit Sub
 
     If mIndex > 1 Then
         mIndex = mIndex - 1
@@ -92,9 +94,9 @@ End Sub
 Private Sub cmdNext_Click()
 
     If mItems Is Nothing Then Exit Sub
-    If mItems.Count = 0 Then Exit Sub
+    If mItems.count = 0 Then Exit Sub
 
-    If mIndex < mItems.Count Then
+    If mIndex < mItems.count Then
         mIndex = mIndex + 1
         RenderCurrentMessage
     End If
@@ -107,14 +109,17 @@ End Sub
 '------------------------------------------------------------------------------
 Private Sub cmdClose_Click()
 
+    PEEnd
     Me.Hide
 
 End Sub
 
 Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    If CloseMode <> vbFormControlMenu Then PEEnd
     If CloseMode = vbFormControlMenu Then
         Cancel = True
-        Me.Hide
+        PEEnd
+    Me.Hide
     End If
 End Sub
 
@@ -127,22 +132,24 @@ Private Sub RenderCurrentMessage()
 
     Dim item As Object
     Dim msgType As String
+    PEBegin
 
     If mItems Is Nothing Then Exit Sub
 
-    If mItems.Count = 0 Then
+    If mItems.count = 0 Then
         lblTitle.caption = TextCatalog_Get("CONSOLE.SECTION.MESSAGES", EventHistory_CurrentLanguage())
         lblCounter.caption = TextCatalog_Get("CONSOLE.EMPTY.COUNTER", EventHistory_CurrentLanguage())
         lblMessageType.caption = ""
-        txtMessage.Text = ""
-        cmdPrevious.enabled = False
-        cmdNext.enabled = False
+        txtMessage.text = ""
+        cmdPrevious.Enabled = False
+        cmdNext.Enabled = False
         chkWarningAck.Visible = False
+        PESync
         Exit Sub
     End If
 
     If mIndex < 1 Then mIndex = 1
-    If mIndex > mItems.Count Then mIndex = mItems.Count
+    If mIndex > mItems.count Then mIndex = mItems.count
 
     Set item = mItems(mIndex)
     msgType = UCase$(Trim$(CStr(item("Type"))))
@@ -156,10 +163,11 @@ Private Sub RenderCurrentMessage()
     ApplyAckControlVisual item, msgType
     mLoadingMessage = False
 
-    txtMessage.Text = FormatPlanningConsoleMessageForCurrentLanguage(CStr(item("Message")))
+    txtMessage.text = FormatPlanningConsoleMessageForCurrentLanguage(CStr(item("Message")))
 
-    cmdPrevious.enabled = (mIndex > 1)
-    cmdNext.enabled = (mIndex < mItems.Count)
+    cmdPrevious.Enabled = (mIndex > 1)
+    cmdNext.Enabled = (mIndex < mItems.count)
+    PESync
 
 End Sub
 
@@ -215,7 +223,7 @@ Private Function CurrentMessageAcknowledged() As Boolean
     On Error GoTo SafeExit
 
     If mItems Is Nothing Then Exit Function
-    If mIndex < 1 Or mIndex > mItems.Count Then Exit Function
+    If mIndex < 1 Or mIndex > mItems.count Then Exit Function
     If TypeName(mItems(mIndex)) <> "Dictionary" Then Exit Function
 
     Set item = mItems(mIndex)
@@ -265,7 +273,7 @@ Private Sub chkWarningAck_Click()
 
     If mLoadingMessage Then Exit Sub
     If mItems Is Nothing Then Exit Sub
-    If mIndex < 1 Or mIndex > mItems.Count Then Exit Sub
+    If mIndex < 1 Or mIndex > mItems.count Then Exit Sub
     If TypeName(mItems(mIndex)) <> "Dictionary" Then Exit Sub
 
     Set item = mItems(mIndex)
@@ -279,6 +287,7 @@ Private Sub chkWarningAck_Click()
     mLoadingMessage = False
 
     ApplyMessageTypeVisual CStr(item("Type"))
+    PEConsole_Badge Me
 
 End Sub
 
@@ -340,113 +349,114 @@ Private Sub ApplyFormLayout()
     margin = 24
     headerTop = 18
     headerH = 42
-    footerH = 78
+    footerH = 50
     buttonW = 138
     buttonH = 30
     gap = 14
 
-    formW = CalcDynamicFormWidth()
-    formH = CalcDynamicFormHeight()
+    PEMessageLayout_Calculate Me, mItems, formW, formH
+
 
     Me.caption = mTitle
     Me.StartUpPosition = 0
-    Me.Width = formW
-    Me.Height = formH
-    Me.BackColor = RGB(250, 250, 250)
+    Me.width = formW
+    Me.height = formH
+    Me.BackColor = RGB(247, 248, 250)
 
-    lblTitle.Left = margin
-    lblTitle.Top = headerTop
-    lblTitle.Width = 130
-    lblTitle.Height = 18
+    lblTitle.left = margin
+    lblTitle.top = headerTop
+    lblTitle.width = 130
+    lblTitle.height = 18
     lblTitle.caption = TextCatalog_Get("CONSOLE.SECTION.MESSAGES", EventHistory_CurrentLanguage())
-    lblTitle.Font.Name = "Segoe UI"
-    lblTitle.Font.Size = 10
-    lblTitle.Font.Bold = True
+    lblTitle.font.name = "Segoe UI"
+    lblTitle.font.size = 10
+    lblTitle.font.bold = True
     lblTitle.ForeColor = RGB(35, 35, 35)
     lblTitle.BackStyle = fmBackStyleTransparent
 
-    lblMessageType.Left = margin
-    lblMessageType.Top = headerTop + 22
-    lblMessageType.Width = 82
-    lblMessageType.Height = 14
+    lblMessageType.left = margin + 8
+    lblMessageType.top = headerTop + 22 + 4
+    lblMessageType.width = 110
+    lblMessageType.height = 28
     lblMessageType.TextAlign = fmTextAlignCenter
-    lblMessageType.Font.Name = "Segoe UI"
-    lblMessageType.Font.Size = 8
-    lblMessageType.Font.Bold = True
+    lblMessageType.font.name = "Segoe UI"
+    lblMessageType.font.size = 10.66667
+    lblMessageType.font.bold = True
     lblMessageType.BorderStyle = fmBorderStyleSingle
     lblMessageType.SpecialEffect = fmSpecialEffectFlat
     lblMessageType.WordWrap = False
     lblMessageType.AutoSize = False
 
-    lblCounter.Left = margin + 150
-    lblCounter.Top = headerTop
-    lblCounter.Width = formW - (2 * margin) - 150
-    lblCounter.Height = 18
+    lblCounter.left = margin + 150
+    lblCounter.top = headerTop
+    lblCounter.width = Me.InsideWidth - (2 * margin) - 150
+    lblCounter.height = 18
     lblCounter.TextAlign = fmTextAlignRight
-    lblCounter.Font.Name = "Segoe UI"
-    lblCounter.Font.Size = 10
-    lblCounter.Font.Bold = True
+    lblCounter.font.name = "Segoe UI"
+    lblCounter.font.size = 10
+    lblCounter.font.bold = True
     lblCounter.ForeColor = RGB(35, 35, 35)
     lblCounter.BackStyle = fmBackStyleTransparent
 
-    textTop = headerTop + headerH + 10
-    textH = formH - textTop - footerH
+    textTop = headerTop + 22 + 28 + 8
+    textH = Me.InsideHeight - textTop - footerH
 
-    If textH < 150 Then textH = 150
+    If textH < 24 Then textH = 24
 
-    txtMessage.Left = margin
-    txtMessage.Top = textTop
-    txtMessage.Width = formW - (2 * margin)
-    txtMessage.Height = textH
+    txtMessage.left = margin
+    txtMessage.top = textTop
+    txtMessage.width = Me.InsideWidth - (2 * margin)
+    txtMessage.height = textH
     txtMessage.Multiline = True
     txtMessage.ScrollBars = fmScrollBarsVertical
     txtMessage.Locked = True
     txtMessage.WordWrap = True
     txtMessage.BorderStyle = fmBorderStyleSingle
     txtMessage.SpecialEffect = fmSpecialEffectFlat
-    txtMessage.BackColor = RGB(255, 255, 255)
+    txtMessage.BackColor = RGB(247, 248, 250)
     txtMessage.ForeColor = RGB(25, 25, 25)
-    txtMessage.Font.Name = "Segoe UI"
-    txtMessage.Font.Size = 9
+    txtMessage.font.name = "Segoe UI"
+    txtMessage.font.size = 9
 
-    buttonTop = txtMessage.Top + txtMessage.Height + 18
+    buttonTop = txtMessage.top + txtMessage.height + 10
 
-    cmdPrevious.Left = margin
-    cmdPrevious.Top = buttonTop
-    cmdPrevious.Width = buttonW
-    cmdPrevious.Height = buttonH
+    cmdPrevious.left = margin
+    cmdPrevious.top = buttonTop
+    cmdPrevious.width = buttonW
+    cmdPrevious.height = buttonH
     cmdPrevious.caption = TextCatalog_Get("CONSOLE.COMMAND.PREVIOUS", EventHistory_CurrentLanguage())
-    cmdPrevious.Font.Name = "Segoe UI"
-    cmdPrevious.Font.Size = 9
+    cmdPrevious.font.name = "Segoe UI"
+    cmdPrevious.font.size = 9
 
-    cmdNext.Left = cmdPrevious.Left + buttonW + gap
-    cmdNext.Top = buttonTop
-    cmdNext.Width = buttonW
-    cmdNext.Height = buttonH
+    cmdNext.left = cmdPrevious.left + buttonW + gap
+    cmdNext.top = buttonTop
+    cmdNext.width = buttonW
+    cmdNext.height = buttonH
     cmdNext.caption = TextCatalog_Get("CONSOLE.COMMAND.NEXT", EventHistory_CurrentLanguage())
-    cmdNext.Font.Name = "Segoe UI"
-    cmdNext.Font.Size = 9
+    cmdNext.font.name = "Segoe UI"
+    cmdNext.font.size = 9
 
-    cmdClose.Left = formW - margin - buttonW
-    cmdClose.Top = buttonTop
-    cmdClose.Width = buttonW
-    cmdClose.Height = buttonH
+    cmdClose.left = Me.InsideWidth - margin - buttonW
+    cmdClose.top = buttonTop
+    cmdClose.width = buttonW
+    cmdClose.height = buttonH
     cmdClose.caption = TextCatalog_Get("CONSOLE.COMMAND.CLOSE", EventHistory_CurrentLanguage())
-    cmdClose.Font.Name = "Segoe UI"
-    cmdClose.Font.Size = 9
+    cmdClose.font.name = "Segoe UI"
+    cmdClose.font.size = 9
 
-    chkWarningAck.Left = lblMessageType.Left + lblMessageType.Width + 10
-    chkWarningAck.Top = lblMessageType.Top + 1
-    chkWarningAck.Width = 92
-    chkWarningAck.Height = 18
+    chkWarningAck.left = lblMessageType.left + lblMessageType.width + 10
+    chkWarningAck.top = lblMessageType.top + 5
+    chkWarningAck.width = 92
+    chkWarningAck.height = 18
     chkWarningAck.caption = TextCatalog_Get("CONSOLE.COMMAND.HIDE_WARNING", EventHistory_CurrentLanguage())
-    chkWarningAck.Font.Name = "Segoe UI"
-    chkWarningAck.Font.Size = 9
+    chkWarningAck.font.name = "Segoe UI"
+    chkWarningAck.font.size = 9
     chkWarningAck.BackStyle = fmBackStyleTransparent
     chkWarningAck.Visible = False
 
     cmdClearAck.Visible = False
     cmdClearHistory.Visible = False
+    cmdClose.Cancel = True
 
 End Sub
 
@@ -455,89 +465,14 @@ End Sub
 ' EN: Returns the Calc Dynamic Form Width map without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function CalcDynamicFormWidth() As Single
 
-    Dim maxLineLen As Long
-    Dim msg As Variant
-    Dim lines As Variant
-    Dim oneLine As Variant
-    Dim estimatedW As Single
-    Dim item As Object
-    Dim msgText As String
-
-    maxLineLen = 0
-
-    If Not mItems Is Nothing Then
-        For Each msg In mItems
-
-            If TypeName(msg) = "Dictionary" Then
-                Set item = msg
-                msgText = FormatPlanningConsoleMessageForCurrentLanguage(CStr(item("Message")))
-            Else
-                msgText = FormatPlanningConsoleMessageForCurrentLanguage(CStr(msg))
-            End If
-
-            lines = Split(msgText, vbCrLf)
-
-            For Each oneLine In lines
-                If Len(CStr(oneLine)) > maxLineLen Then
-                    maxLineLen = Len(CStr(oneLine))
-                End If
-            Next oneLine
-        Next msg
-    End If
-
-    estimatedW = 470 + (maxLineLen * 1.4)
-
-    If estimatedW < 600 Then estimatedW = 600
-    If estimatedW > 760 Then estimatedW = 760
-
-    CalcDynamicFormWidth = estimatedW
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Retourne la map Calc Dynamic Form Height sans modifier les donnees d'entree.
 ' EN: Returns the Calc Dynamic Form Height map without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function CalcDynamicFormHeight() As Single
 
-    Dim maxLineCount As Long
-    Dim msg As Variant
-    Dim lines As Variant
-    Dim estimatedH As Single
-    Dim item As Object
-    Dim msgText As String
-
-    maxLineCount = 0
-
-    If Not mItems Is Nothing Then
-        For Each msg In mItems
-
-            If TypeName(msg) = "Dictionary" Then
-                Set item = msg
-                msgText = FormatPlanningConsoleMessageForCurrentLanguage(CStr(item("Message")))
-            Else
-                msgText = FormatPlanningConsoleMessageForCurrentLanguage(CStr(msg))
-            End If
-
-            lines = Split(msgText, vbCrLf)
-
-            If UBound(lines) - LBound(lines) + 1 > maxLineCount Then
-                maxLineCount = UBound(lines) - LBound(lines) + 1
-            End If
-        Next msg
-    End If
-
-    estimatedH = 250 + (maxLineCount * 13)
-
-    If estimatedH < 370 Then estimatedH = 370
-    If estimatedH > 520 Then estimatedH = 520
-
-    CalcDynamicFormHeight = estimatedH
-
-End Function
 
 '------------------------------------------------------------------------------
 ' FR: Positionne la valeur Form On Excel relativement a la fenetre Excel active.
@@ -550,11 +485,11 @@ Private Sub CenterFormOnExcel()
 
     Me.StartUpPosition = 0
 
-    Me.Left = Application.Left + ((Application.Width - Me.Width) / 2)
-    Me.Top = Application.Top + ((Application.Height - Me.Height) / 2)
+    Me.left = Application.left + ((Application.width - Me.width) / 2)
+    Me.top = Application.top + ((Application.height - Me.height) / 2)
 
-    If Me.Left < 0 Then Me.Left = 20
-    If Me.Top < 0 Then Me.Top = 20
+    If Me.left < 0 Then Me.left = 20
+    If Me.top < 0 Then Me.top = 20
 
 SafeExit:
 End Sub
@@ -585,21 +520,21 @@ Private Sub ApplyMessageTypeBadgeLayout()
 
     With lblMessageType
 
-        oldTop = .Top
-        oldHeight = .Height
+        oldTop = .top
+        oldHeight = .height
 
         .AutoSize = False
         .WordWrap = False
         .TextAlign = fmTextAlignCenter
 
-        .Height = BADGE_HEIGHT
+        .height = BADGE_HEIGHT
 
         If oldHeight > BADGE_HEIGHT Then
-            .Top = oldTop + ((oldHeight - BADGE_HEIGHT) / 2)
+            .top = oldTop + ((oldHeight - BADGE_HEIGHT) / 2)
         End If
 
-        .Font.Bold = True
-        .Font.Size = 9
+        .font.bold = True
+        .font.size = 9
 
         .BorderStyle = fmBorderStyleSingle
         .SpecialEffect = fmSpecialEffectFlat
@@ -613,5 +548,90 @@ End Sub
 
 
 
+
+
+
+
+Private Sub PEBegin()
+    If Not mPE Is Nothing Then mPE.BeginUpdate
+End Sub
+Private Sub PESync()
+    If mPE Is Nothing Then
+        Set mPE = New PEConsolePresentation
+        mPE.Attach Me, Array("cmdPrevious", "cmdNext", "cmdClose", "cmdClearAck", "cmdClearHistory"), "cmdNext"
+    End If
+    PEConsole_Theme Me
+    mPE.Sync
+    PEConsole_Badge Me
+End Sub
+Private Sub PEEnd()
+    If Not mPE Is Nothing Then mPE.Detach
+    Set mPE = Nothing
+    PEConsole_ClearBadge Me
+End Sub
+Public Sub PEHover(ByVal name As String)
+    If Not mPE Is Nothing Then mPE.Hover name
+End Sub
+Private Sub UserForm_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal X As Single, ByVal Y As Single)
+    PEHover ""
+End Sub
+Private Sub peDefault_Click()
+    If Not mPE Is Nothing Then mPE.InvokeDefault
+End Sub
+Private Sub peCancel_Click()
+    If Not mPE Is Nothing Then mPE.InvokeCancel
+End Sub
+Public Sub PEInvoke(ByVal name As String)
+    Select Case name
+        Case "cmdPrevious": cmdPrevious_Click
+        Case "cmdNext": cmdNext_Click
+        Case "cmdClose": cmdClose_Click
+        Case "cmdClearAck": cmdClearAck_Click
+        Case "cmdClearHistory": cmdClearHistory_Click
+    End Select
+End Sub
+
+Private Sub peFocus_cmdPrevious_Enter()
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdPrevious", True
+End Sub
+Private Sub peFocus_cmdPrevious_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdPrevious", False
+End Sub
+
+Private Sub peFocus_cmdNext_Enter()
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdNext", True
+End Sub
+Private Sub peFocus_cmdNext_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdNext", False
+End Sub
+
+Private Sub peFocus_cmdClose_Enter()
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClose", True
+End Sub
+Private Sub peFocus_cmdClose_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClose", False
+End Sub
+
+Private Sub peFocus_cmdClearAck_Enter()
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClearAck", True
+End Sub
+Private Sub peFocus_cmdClearAck_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClearAck", False
+End Sub
+
+Private Sub peFocus_cmdClearHistory_Enter()
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClearHistory", True
+End Sub
+Private Sub peFocus_cmdClearHistory_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+    If Not mPE Is Nothing Then mPE.FocusChanged "cmdClearHistory", False
+End Sub
+
+Public Sub PERelease()
+    PEEnd
+End Sub
+Public Sub PERefresh()
+    PEBegin
+    PESync
+End Sub
 
 

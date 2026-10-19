@@ -118,7 +118,6 @@ Public Function MigrationData_Read(ByVal source As Workbook, ByVal target As Wor
     snapshot.Add "Tables", tables
     snapshot.Add "Settings", settings
     snapshot.Add "Profile", profile
-    snapshot.Add "Source", source.FullName
     phase = "VALIDATION"
     MigrationData_Validate snapshot
     phase = "DIGEST"

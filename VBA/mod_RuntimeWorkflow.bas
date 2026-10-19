@@ -24,6 +24,102 @@ Private gPlanningWorkflowDisplayOwnerId As String
 Private gPlanningWorkflowDeferredDisplayMessages As Collection
 Private gPlanningWorkflowStopOnlyDisplayDepth As Long
 Private gPlanningWorkflowFinalDisplayDepth As Long
+Private mCommandRuns As Collection
+Private mCommandResults As Object
+Private mCommandSequence As Long
+
+' Terminal receipts belong to the execution owner, not to tutorial pagination.
+Public Function WorkflowCommand_Begin(ByVal command As String) As Long
+    Dim receipt As Object
+    If mCommandRuns Is Nothing Then Set mCommandRuns = New Collection
+    If mCommandResults Is Nothing Then Set mCommandResults = CreateObject("Scripting.Dictionary")
+    mCommandSequence = mCommandSequence + 1
+    Set receipt = CreateObject("Scripting.Dictionary")
+    receipt("RunId") = mCommandSequence
+    receipt("Command") = command
+    receipt("Status") = "RUNNING"
+    receipt("Warning") = False
+    receipt("InputsCurrent") = True
+    mCommandRuns.Add receipt
+    WorkflowCommand_Begin = mCommandSequence
+End Function
+
+Public Sub WorkflowCommand_InputsChanged()
+    Dim key As Variant
+    If mCommandResults Is Nothing Then Exit Sub
+    For Each key In mCommandResults.Keys
+        mCommandResults(key)("InputsCurrent") = False
+    Next key
+End Sub
+
+Public Sub WorkflowCommand_Observe(ByVal severity As String)
+    Dim receipt As Object
+    If mCommandRuns Is Nothing Then Exit Sub
+    For Each receipt In mCommandRuns
+        Select Case UCase$(Trim$(severity))
+            Case "STOP": receipt("Status") = "STOP"
+            Case "WARNING", "WARN": receipt("Warning") = True
+        End Select
+    Next receipt
+End Sub
+
+Public Sub WorkflowCommand_ObserveMessages(ByVal messages As Collection)
+    Dim item As Variant
+    If messages Is Nothing Then Exit Sub
+    If mCommandRuns Is Nothing Then Exit Sub
+    If mCommandRuns.Count = 0 Then Exit Sub
+    For Each item In messages
+        WorkflowCommand_Observe CStr(item("Type"))
+    Next item
+End Sub
+
+Public Sub WorkflowCommand_End(ByVal runId As Long, ByVal completed As Boolean, _
+                               Optional ByVal failure As String = "")
+    Dim receipt As Object, parent As Object
+    If mCommandRuns Is Nothing Then Exit Sub
+    If mCommandRuns.Count = 0 Then Exit Sub
+    Set receipt = mCommandRuns(mCommandRuns.Count)
+    If CLng(receipt("RunId")) <> runId Then Err.Raise 5, "WorkflowCommand_End", "Command receipt ownership mismatch"
+    If Len(failure) > 0 Then
+        receipt("Status") = failure
+    ElseIf receipt("Status") <> "STOP" And receipt("Status") <> "CANCELLED" Then
+        If Not completed Then
+            receipt("Status") = "REJECTED"
+        ElseIf CBool(receipt("Warning")) Then
+            receipt("Status") = "WARNING_NONBLOCKING"
+        Else
+            receipt("Status") = "SUCCESS"
+        End If
+    End If
+    mCommandRuns.Remove mCommandRuns.Count
+    Set mCommandResults(CStr(receipt("Command"))) = receipt
+    ' A nested command failure cannot disappear when its parent finishes.
+    For Each parent In mCommandRuns
+        If receipt("Status") = "WARNING_NONBLOCKING" Then parent("Warning") = True
+        If receipt("Status") <> "SUCCESS" And receipt("Status") <> "WARNING_NONBLOCKING" Then parent("Status") = "STOP"
+    Next parent
+End Sub
+
+Public Function WorkflowCommand_LastResult(ByVal command As String, Optional ByVal equivalentCommand As String = "") As Variant
+    Dim receipt As Object, equivalentReceipt As Object
+    WorkflowCommand_LastResult = Array(0&, command, "NONE", False)
+    If mCommandResults Is Nothing Then Exit Function
+    If mCommandResults.Exists(command) Then Set receipt = mCommandResults(command)
+    If Len(equivalentCommand) > 0 Then
+        If mCommandResults.Exists(equivalentCommand) Then
+            Set equivalentReceipt = mCommandResults(equivalentCommand)
+            If receipt Is Nothing Then
+                Set receipt = equivalentReceipt
+                command = equivalentCommand
+            ElseIf CLng(equivalentReceipt("RunId")) > CLng(receipt("RunId")) Then
+                Set receipt = equivalentReceipt
+                command = equivalentCommand
+            End If
+        End If
+    End If
+    If receipt Is Nothing Then Exit Function
+    WorkflowCommand_LastResult = Array(CLng(receipt("RunId")), command, CStr(receipt("Status")), CBool(receipt("InputsCurrent")))
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Ouvre le cycle de traitement Planning Workflow.

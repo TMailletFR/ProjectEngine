@@ -494,6 +494,7 @@ Public Sub CalcBridge_AddConsoleMessage( _
     If targetMessages Is Nothing Then Exit Sub
     If Trim$(msgText) = "" Then Exit Sub
 
+    WorkflowCommand_Observe msgType
     targetMessages.Add CalcBridge_CreateConsoleItem(msgType, msgText, historyHandled, eventType, eventHash, ackTokens, historyReceipt, subjectTaskId, sourceSheet)
 
 End Sub
@@ -533,6 +534,7 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
         historyMessages.Add failureItem
     End If
 
+    WorkflowCommand_ObserveMessages historyMessages
     If Profiler_ShouldSuppressUserInterface() Then Exit Sub
 
     If ShouldDeferCurrentWorkflowDisplayToRoot("CalcBridge_ShowPlanningConsole") Then
@@ -556,6 +558,7 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
         End If
     End If
 
+    WorkflowCommand_ObserveMessages displayMessages
     If PlanningConsolePolicy_IsNonInteractive() Then
         Set prepScope = Nothing
         RunButtonsTrace_Checkpoint "ConsolePolicy", "Planning console noninteractive capture start"
@@ -566,7 +569,7 @@ Public Sub CalcBridge_ShowPlanningConsole(ByVal messages As Collection)
 
     Load frmPlanningMessages
     RunButtonsTrace_Checkpoint "Console", "Planning console modal load start"
-    frmPlanningMessages.LoadMessages displayMessages, "Planning console"
+    frmPlanningMessages.LoadMessages displayMessages, TextCatalog_Get("CONSOLE.WINDOW.TITLE", EventHistory_CurrentLanguage())
     frmPlanningMessages.PrepareForImmediateShow
     RunButtonsTrace_Checkpoint "Console", "Planning console ready before show"
     Profiler_RecordOperation "PlanningConsole_PREP_END", 1, 0#
@@ -642,6 +645,7 @@ Public Function CalcBridge_RecordPlanningMessages( _
         Exit Function
     End If
 
+    WorkflowCommand_ObserveMessages historyMessages
     CalcBridge_RecordPlanningMessages = PlanningEvents_LogConsoleMessagesSafe( _
         historyMessages, _
         sourceProcedure, _

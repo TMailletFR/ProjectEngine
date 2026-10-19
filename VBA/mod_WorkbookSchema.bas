@@ -30,6 +30,16 @@ Public Sub WorkbookSchema_SetProperty(ByVal wb As Workbook, ByVal key As String,
     End If
 End Sub
 
+Public Sub WorkbookSchema_DeleteProperty(ByVal wb As Workbook, ByVal key As String)
+    Dim item As Object
+    For Each item In wb.CustomDocumentProperties
+        If StrComp(item.Name, key, vbBinaryCompare) = 0 Then
+            item.Delete
+            Exit Sub
+        End If
+    Next item
+End Sub
+
 Public Function WorkbookSchema_Version(ByVal wb As Workbook) As Long
     Dim value As Variant
     value = WorkbookSchema_Property(wb, PE_SCHEMA_PROPERTY)

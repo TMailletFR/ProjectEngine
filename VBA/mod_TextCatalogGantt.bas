@@ -161,7 +161,7 @@ Public Function TextCatalogGantt_Definitions() As Variant
     definitions(71) = Array("GANTT.DRAG.ENGINE.SCENARIO", "Drag/Scenario", "Glisser/Scénario")
     definitions(72) = Array("GANTT.TEST.ACTUAL_IMPACT_WARNING", _
         "TEST INPUT IMPACTS ACTUAL TASK - LOCK MAY NOT FULLY PERSIST", _
-        "LA SAISIE TEST AFFECTE UNE TACHE ACTUAL - LE VERROUILLAGE PEUT NE PAS PERSISTER ENTIÈREMENT")
+        "LA SAISIE TEST AFFECTE UNE TÂCHE AVEC DES DATES RÉELLES - LE VERROUILLAGE PEUT NE PAS PERSISTER ENTIÈREMENT")
     definitions(73) = Array("GANTT.ERROR.UNKNOWN_ENSURE_MODE", "Unknown Gantt ensure mode: {Mode}", "Mode de préparation Gantt inconnu : {Mode}")
     definitions(74) = Array("GANTT.ERROR.UNKNOWN_UPDATE_SCOPE", "Unknown Gantt update scope: {Scope}", "Périmètre de mise à jour Gantt inconnu : {Scope}")
     definitions(75) = Array("GANTT.ERROR.UNSUPPORTED_DEPENDENCY_RENDER_MODE", "Unsupported dependency render mode: {Mode}", "Mode de rendu des dépendances non pris en charge : {Mode}")
@@ -179,7 +179,7 @@ Public Function TextCatalogGantt_Definitions() As Variant
     definitions(87) = Array("GANTT.ERROR.FULL_UPDATE_GANTT_NOT_READY", "Gantt renderer did not reach READY state after Full Update on GANTT.", "Le renderer Gantt n'a pas atteint l'état READY après Full Update sur GANTT.")
     definitions(88) = Array("GANTT.ERROR.NO_RENDER_INVALIDATION", "Gantt NO_RENDER invalidation failed.", "Échec de l'invalidation Gantt NO_RENDER.")
     definitions(89) = Array("GANTT.ERROR.FULL_UPDATE_NOT_READY", "Gantt renderer did not reach READY state after Full Update.", "Le renderer Gantt n'a pas atteint l'état READY après Full Update.")
-    definitions(90) = Array("GANTT.ERROR.CRITICAL_PATH_NOT_READY", "Gantt render did not reach READY state after Critical Path mode change.", "Le rendu Gantt n'a pas atteint l'état READY après le changement de mode Critical Path.")
+    definitions(90) = Array("GANTT.ERROR.CRITICAL_PATH_NOT_READY", "Gantt render did not reach READY state after Critical Path mode change.", "Le rendu Gantt n'a pas atteint l'état READY après le changement de mode Chemin critique.")
     definitions(91) = Array("GANTT.ERROR.LOCK_NOT_READY", "Gantt LOCK render did not reach READY state.", "Le rendu Gantt LOCK n'a pas atteint l'état READY.")
     definitions(92) = Array("GANTT.ERROR.SCENARIO_NOT_READY", "Gantt SCENARIO render did not reach READY state.", "Le rendu Gantt SCENARIO n'a pas atteint l'état READY.")
     definitions(93) = Array("GANTT.ERROR.RESET_NOT_READY", "Gantt Reset render did not reach READY state.", "Le rendu Gantt Reset n'a pas atteint l'état READY.")
@@ -188,6 +188,6 @@ Public Function TextCatalogGantt_Definitions() As Variant
     definitions(96) = Array("GANTT.ERROR.TEST_NOT_READY", "Gantt TEST render did not reach READY state.", "Le rendu Gantt TEST n'a pas atteint l'état READY.")
     definitions(97) = Array("GANTT.TEST.ROW.ACTUAL_WARNING", _
         "TEST INPUT ON ACTUAL TASK - SIMULATION MAY SHOW NO EFFECT AND LOCK MAY NOT MATCH PROD", _
-        "SAISIE TEST SUR UNE TÂCHE ACTUAL - LA SIMULATION PEUT NE PRODUIRE AUCUN EFFET ET LE VERROUILLAGE PEUT DIFFÉRER DE PROD")
+        "SAISIE TEST SUR UNE TÂCHE AVEC DES DATES RÉELLES - LA SIMULATION PEUT NE PRODUIRE AUCUN EFFET ET LE VERROUILLAGE PEUT DIFFÉRER DU PLANNING NORMAL")
     TextCatalogGantt_Definitions = definitions
 End Function

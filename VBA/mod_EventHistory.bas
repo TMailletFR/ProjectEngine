@@ -1,6 +1,7 @@
 Attribute VB_Name = "mod_EventHistory"
 Option Explicit
 
+
 '===============================================================================
 ' MODULE : mod_EventHistory
 ' DOMAINE / DOMAIN : Event History / ACK
@@ -2606,3 +2607,19 @@ Public Sub EventHistory_ResetRuntimeStorage()
     If Not tblAck Is Nothing Then ClearPlanningEventTableRows tblAck
 
 End Sub
+
+Public Function EventHistory_TutorialMessagesTarget() As Range
+    Dim tbl As ListObject
+    Dim firstColumn As Range
+    Dim lastColumn As Range
+    Dim count As Long
+    On Error GoTo Missing
+    Set tbl = ThisWorkbook.Worksheets(EVENT_HISTORY_SHEET).ListObjects(EVENT_HISTORY_TABLE)
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    Set firstColumn = SchemaListColumn(tbl, VTS_TABLE_EVENT_HISTORY, VTS_COL_SEVERITY).Range.Cells(1, 1)
+    Set lastColumn = SchemaListColumn(tbl, VTS_TABLE_EVENT_HISTORY, VTS_COL_ACKNOWLEDGED).Range.Cells(1, 1)
+    count = tbl.ListRows.Count
+    If count > 5 Then count = 5
+    Set EventHistory_TutorialMessagesTarget = tbl.Parent.Range(firstColumn, lastColumn.Offset(count, 0))
+Missing:
+End Function

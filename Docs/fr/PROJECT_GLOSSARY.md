@@ -38,7 +38,7 @@ Ce vocabulaire décrit l'usage réel des termes dans ce classeur. Il constitue l
 
 Utiliser le terme le plus étroit qui décrit une responsabilité possédée. Si un nouveau composant nécessite plusieurs termes contradictoires, sa frontière est probablement trop large.
 
-## Compléments de vocabulaire v1.3.0
+## Compléments de vocabulaire v1.4.0
 
 | Terme | Définition | Propriétaire / invariant |
 |---|---|---|
@@ -53,3 +53,15 @@ Utiliser le terme le plus étroit qui décrit une responsabilité possédée. Si
 | **Rendu FULL canonique** | Projection Gantt complète faisant autorité lorsque le réemploi local sûr n'est pas démontré. | Pipeline de rendu existant, pas un moteur alternatif. |
 | **Évitement d'écriture des sorties** | Saut d'une colonne de résultats WBS seulement si toutes les valeurs correspondent et qu'aucune formule ne s'y trouve. | Writer Core ; Full Update recalcule toujours Core/Analytics. |
 | **Reçu de persistance** | Preuve contrôlée d'une écriture effective dans l'historique. | Owner EventHistory ; afficher un message en console ne prouve pas sa persistance. |
+
+## Compléments de vocabulaire v1.4.0
+
+| Terme | Définition | Propriétaire / invariant |
+|---|---|---|
+| **Tutoriel interactif** | Parcours non modal de 29 étapes, avec Découverte et Pratique. | `mod_ProjectTutorial` possède la présentation, pas le calcul ni la validation métier. |
+| **Découverte / Pratique** | Deux modes avec étapes sémantiques communes et progression indépendante. | `mod_Settings` possède les deux bookmarks ; Découverte ne modifie pas le planning. |
+| **Reçu de commande** | Preuve terminale fraîche du résultat réel d’une commande habituelle. | `mod_RuntimeWorkflow` / owner de la commande ; pas de faux SUCCESS fondé sur le retour d’un `Sub` ou un CALC ancien. |
+| **Surlignage tutoriel** | Shape de feuille unique, temporaire et identifiée, pointant la zone réelle. | `mod_ProjectTutorial` ; ni Shape sauvegardée ni altération des formats ou du Gantt métier. |
+| **PEButton** | Adaptateur visuel et d’interaction commun aux UserForms avec fallback classique. | Les handlers et responsabilités métier existants restent propriétaires. |
+| **Console ajustée au contenu** | Fenêtre de messages dimensionnée une fois sur le texte réellement préparé. | `frmPlanningMessages` ; sélection/scroll, pagination stable et owner EventHistory/ACK maintenus. |
+| **Confidentialité d’import** | Métadonnées d’import sans chemin absolu de provenance ni exception brute persistée. | Owners Migration ; gate après dernière sauvegarde publique et revue volontaire des ACK toujours nécessaires. |

@@ -35,7 +35,7 @@ Public Function TextCatalogConstraints_Definitions() As Variant
         "Choisir Yes ou No.")
     definitions(10) = Array("CONSTRAINTS.VALIDATION.ACTIVE.ERROR_TITLE", _
         "Unknown Active value", _
-        "Valeur Active inconnue")
+        "Valeur Actif inconnue")
     definitions(11) = Array("CONSTRAINTS.VALIDATION.ACTIVE.ERROR", _
         "Recommended values: Yes or No.", _
         "Valeurs recommandees : Yes ou No.")

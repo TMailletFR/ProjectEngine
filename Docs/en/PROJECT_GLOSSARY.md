@@ -38,7 +38,7 @@ This vocabulary describes how terms are actually used in this workbook. It is th
 
 Use the narrowest term that describes an owned responsibility. If a new component needs several conflicting terms, its boundary is probably too broad.
 
-## v1.3.0 terminology additions
+## v1.4.0 terminology additions
 
 | Term | Definition | Owner / invariant |
 |---|---|---|
@@ -53,3 +53,15 @@ Use the narrowest term that describes an owned responsibility. If a new componen
 | **Canonical FULL render** | Complete authoritative Gantt projection used when safe local reuse cannot be demonstrated. | Existing rendering pipeline, not an alternative engine. |
 | **Output-write elision** | Skipping WBS calculated output columns only when all results match and the column contains no formulas. | Core output writer; Full Update still computes Core/Analytics completely. |
 | **Persistence receipt** | Evidence of an attempted and confirmed history write. | EventHistory owner; not equivalent to merely displaying a console message. |
+
+## v1.4.0 terminology additions
+
+| Term | Definition | Owner / invariant |
+|---|---|---|
+| **Interactive tutorial** | In-workbook, modeless 29-step learning flow with Discovery and Practice modes. | `mod_ProjectTutorial` owns presentation and navigation only; existing command owners calculate and validate. |
+| **Discovery / Practice** | Two tutorial experiences sharing semantic steps, but not user-progress bookmarks. | `mod_Settings` keeps independent mode progress; passive Discovery cannot mutate planning. |
+| **Command receipt** | Fresh terminal evidence of a normal command's real outcome. | `mod_RuntimeWorkflow` / command owner; never infer SUCCESS from a `Sub` returning or stale CALC values. |
+| **Tutorial highlight** | One temporary, ownership-marked worksheet Shape showing the actual target. | `mod_ProjectTutorial`; no persisted Shape, cell-format mutation or Gantt-object replacement. |
+| **PEButton** | Shared visual/interaction adapter for approved UserForm controls with classic fallback. | Existing UserForms retain handlers and business ownership; presentation is not a new message engine. |
+| **Content-aware console** | Planning message window sized once from prepared real text before showing. | `frmPlanningMessages`; preserve text selection, scroll, stable pagination and EventHistory/ACK ownership. |
+| **Import privacy boundary** | Import metadata omits source absolute paths and raw persisted exceptions. | Migration owners; final distributed artifacts still require post-save metadata scan and voluntary ACK review. |

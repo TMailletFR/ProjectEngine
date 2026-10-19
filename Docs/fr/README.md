@@ -8,11 +8,13 @@
 - [Guide de maintenance](MAINTENANCE_GUIDE.md) : modifier le projet sans casser ses contrats.
 - [Glossaire du projet](PROJECT_GLOSSARY.md) : vocabulaire officiel utilisé dans le code et la documentation.
 
-## Utiliser ProjectEngine v1.3.0
+## Utiliser ProjectEngine v1.4.0
 
-- **Premier démarrage :** l'accueil propose **Start New Project** ou **Import Previous Project** si le classeur est vide et modifiable. Le choix est conservé par le registre d'acquittement existant ; Full Reset peut réafficher l'accueil.
+- **Premier démarrage :** l'accueil propose **Start New Project**, **Import Previous Project** ou **Discover ProjectEngine** si le classeur est vide et modifiable. Le choix est conservé par le registre d'acquittement existant ; Full Reset peut réafficher l'accueil.
 - **Ruban Excel :** l'onglet **ProjectEngine**, embarqué dans le classeur, rassemble mises à jour, commandes Gantt, paramètres, navigation, réinitialisation et import. Les commandes sont contextuelles ; aucune extension externe n'est requise.
 - **Importer un ancien projet :** sélectionner **Import Previous Project** dans l'accueil ou le Ribbon. Les données prises en charge remplacent celles de la destination ; la source reste intacte. Vérifier ensuite WBS/CONSTRAINTS, puis lancer soi-même Planning Update ou Full Update. **Effectuer soi-même une copie de sécurité du classeur de destination avant l'import.**
+- **Tutoriel interactif :** ouvrir **Tutoriel** dans le Ribbon ou **Discover ProjectEngine** depuis l’accueil. **Découverte** présente les fonctions sans opération automatique ; **Pratique** permet les vraies saisies et les commandes normales avec confirmation. Les deux modes disposent de repères de reprise indépendants sur 29 étapes. Aucune donnée de démonstration n’est injectée.
+- **Fenêtres modernisées :** accueil, messages et tutoriel bénéficient de nouveaux contrôles et d’une présentation plus lisible. Les messages sont dimensionnés avant ouverture ; texte sélectionnable et défilement conservés, avec repli sur les contrôles natifs si nécessaire.
 - **Navigation Gantt :** **Go to Selected Task** et **Show Full Timeline** exploitent l'owner Gantt existant. Les très grands plannings peuvent dépasser les limites physiques de zoom d'Excel.
 
 La [carte d'architecture](ARCHITECTURE_READING_GUIDE.md) décrit les responsabilités et parcours ; le [guide de maintenance](MAINTENANCE_GUIDE.md) précise les précautions pour les évolutions.

@@ -27,6 +27,7 @@ Private Sub Workbook_Open()
     Dim sheetBefore As String
     Dim startedAt As Double
 
+    ProjectTutorial_Cleanup
     If Not WorkbookSchema_OpenAllowed() Then Exit Sub
     GanttOpenLifecycle_BeginTrace "Workbook_Open"
     sheetBefore = ThisWorkbook_ActiveSheetName()
@@ -62,6 +63,11 @@ End Sub
 ' EN: Reconnects application events and restarts the Gantt watcher when needed.
 '------------------------------------------------------------------------------
 Private Sub Workbook_Activate()
+    If ProjectTutorial_IsPassiveNavigation() Then
+        GanttDrag_PauseForLifecycle
+        Ribbon_WorkbookActivated
+        Exit Sub
+    End If
     If Not WorkbookSchema_WritesAllowed() Then
         Ribbon_WorkbookActivated
         Exit Sub
@@ -77,6 +83,11 @@ End Sub
 ' EN: Handles sheet activation and starts the drag watcher on GANTT.
 '------------------------------------------------------------------------------
 Private Sub Workbook_SheetActivate(ByVal Sh As Object)
+    If ProjectTutorial_IsPassiveNavigation() Then
+        GanttDrag_PauseForLifecycle
+        Ribbon_WorksheetActivated
+        Exit Sub
+    End If
     If Not WorkbookSchema_WritesAllowed() Then
         Ribbon_WorksheetActivated
         Exit Sub
@@ -108,6 +119,7 @@ End Sub
 ' EN: Pauses the drag watcher when the workbook loses focus.
 '------------------------------------------------------------------------------
 Private Sub Workbook_Deactivate()
+    ProjectTutorial_WorkbookDeactivated
     GanttDrag_PauseForLifecycle
 End Sub
 
@@ -116,7 +128,23 @@ End Sub
 ' EN: Stops the drag watcher before the workbook closes.
 '------------------------------------------------------------------------------
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    If Not ProjectTutorial_BeforeClose() Then
+        Cancel = True
+        CalcBridge_ShowSingleConsoleMessage "WARNING", "TUTORIAL.CLOSE.RETRY"
+        Exit Sub
+    End If
     GanttDrag_StopWatch False
+End Sub
+
+Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
+    If Not ProjectTutorial_BeforeSave() Then
+        Cancel = True
+        CalcBridge_ShowSingleConsoleMessage "STOP", "TUTORIAL.SAVE.BLOCKED"
+    End If
+End Sub
+
+Private Sub Workbook_AfterSave(ByVal Success As Boolean)
+    ProjectTutorial_AfterSave Success
 End Sub
 
 '------------------------------------------------------------------------------

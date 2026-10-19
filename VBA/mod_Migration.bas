@@ -114,7 +114,8 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
 
     Migration_AssertIdentity target, targetPath, targetName
     If target.ReadOnly Then Err.Raise 5, , "TARGET_READONLY"
-    GanttDrag_PauseForLifecycle: watchPaused = True
+    GanttDrag_PauseForLifecycle
+    watchPaused = True
     Application.ScreenUpdating = False
     Application.AutoCorrect.AutoFillFormulasInLists = False
     operationId = Format$(Now, "yyyymmdd-hhnnss") & "-" & Replace$(Trim$(Str$(Timer * 100)), ".", "-")
@@ -122,6 +123,7 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     snapshot.Add "RecoveryBackup", ""
     phase = "APPLY"
     mutationStarted = True
+    WorkflowCommand_InputsChanged
     target.Activate
     Set perfScope = Profiler_BeginScope("Migration.Target.Apply", "Migration")
     applied = Migration_ApplyInputs(snapshot)
@@ -135,7 +137,9 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     Set perfScope = Nothing
     Migration_Log "INFO", "MIGRATION.SUCCESS", operationId, "", CStr(snapshot("Profile")), snapshot, receipt
     WorkbookSchema_SetProperty target, "ProjectEngine.ImportOperation", operationId
-    WorkbookSchema_SetProperty target, "ProjectEngine.ImportSource", fullSource
+    ' Legacy builds persisted the selected absolute path. It is not part of
+    ' profile detection or preservation, so a successful import removes it.
+    WorkbookSchema_DeleteProperty target, "ProjectEngine.ImportSource"
     WorkbookSchema_SetProperty target, "ProjectEngine.ImportDigest", CStr(snapshot("Digest"))
     WorkbookSchema_SetProperty target, "ProjectEngine.ImportProfile", CStr(snapshot("Profile"))
     WorkbookSchema_SetProperty target, "ProjectEngine.ImportBackup", ""
@@ -169,7 +173,7 @@ Failed:
     If mutationStarted Then
         If Not finalSaved Then SetPlanningWarningAckState ProjectWelcome_Message(), False
         WorkbookSchema_SetProperty target, "ProjectEngine.ImportState", "FAILED"
-        WorkbookSchema_SetProperty target, "ProjectEngine.ImportDiagnostic", Left$(mLastDiagnostic, 240)
+        WorkbookSchema_SetProperty target, "ProjectEngine.ImportDiagnostic", phase & ":" & CStr(errorNumber)
         Err.Clear
         Migration_Log "STOP", IIf(finalSaved, "MIGRATION.POST_SAVE_FAILED", "MIGRATION.FAILED"), operationId, "", CStr(snapshot("Profile"))
         If Err.Number <> 0 Then mLastDiagnostic = mLastDiagnostic & "|FAILURE_RECEIPT:" & CStr(Err.Number) & ":" & Err.Description
@@ -296,7 +300,6 @@ Private Sub Migration_Log(ByVal severity As String, ByVal key As String, ByVal o
     Dim arguments As Object, receipt As Object, hash As String
     Set arguments = TextCatalog_Arguments("Backup", backup, "Operation", operation, "Profile", profile, "MessageKey", key)
     If Not snapshot Is Nothing Then
-        arguments.Add "Source", CStr(snapshot("Source"))
         arguments.Add "SourceDigest", CStr(snapshot("Digest"))
         arguments.Add "HistoryImported", CBool(snapshot("Tables")("tbl_CALC_ALARM")("Available"))
         If snapshot("Tables")("tbl_CALC_ALARM").Exists("UnavailableDiagnostic") Then arguments.Add "HistoryDiagnostic", CStr(snapshot("Tables")("tbl_CALC_ALARM")("UnavailableDiagnostic"))
@@ -307,7 +310,7 @@ Private Sub Migration_Log(ByVal severity As String, ByVal key As String, ByVal o
     End If
     hash = BuildPlanningEventIdentityV2(severity, "MIGRATION", "WORKBOOK", operation, arguments)
     Set receipt = LogPlanningEvent(severity, "MIGRATION", hash, TextCatalog_Format(key, "FR", arguments), _
-        TextCatalog_Format(key, "EN", arguments), mLastDiagnostic, mLastDiagnostic, "Migration_ImportFile", "SETTINGS", "", "", "", "", True)
+        TextCatalog_Format(key, "EN", arguments), IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), "Migration_ImportFile", "SETTINGS", "", "", "", "", True)
     If receipt Is Nothing Then Err.Raise 5, , "MIGRATION_LOG_RECEIPT_MISSING"
     If Len(CStr(receipt("EventId"))) = 0 Or CStr(receipt("Hash")) <> hash Then Err.Raise 5, , "MIGRATION_LOG_RECEIPT_INVALID"
     Set emittedReceipt = receipt

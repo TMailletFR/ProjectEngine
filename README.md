@@ -87,20 +87,33 @@ It fills a different gap:
 
 ## Built into Excel — ready for everyday planning
 
-ProjectEngine brings its main actions together in a **dedicated Excel Ribbon tab**, with 18 custom-icon commands embedded in the workbook. Controls adapt to the active sheet:
+ProjectEngine brings its main actions together in a **dedicated Excel Ribbon tab**, with 19 custom-icon commands embedded in the workbook. Controls adapt to the active sheet:
 
 - **WBS:** Planning Update, Gantt Update, S-Curve Update, Forced Planning Update and Full Update.
 - **Gantt:** TEST, SCENARIO, LOCK and Reset.
-- **Navigation:** Show Full Timeline and Go to Selected Task, plus quick access to Settings and project import.
+- **Navigation:** Show Full Timeline and Go to Selected Task, plus quick access to Settings, project import and the interactive tutorial.
 - **Project management:** Planning Reset, Full Reset, history, acknowledgement and Dashboard cleanup actions.
 
 The WBS and Gantt no longer need redundant worksheet command buttons. Ribbon labels and guidance are available in English and French. **No installation, external assets or additional user account is needed.**
 
 ### Start fresh or bring an existing project forward
 
-An empty workbook offers **Start New Project** or **Import Previous Project**. Users of older ProjectEngine versions can move supported WBS inputs, dependencies, dates, constraints, settings, warning acknowledgements, Dashboard snapshots, compatible event history and supported WBS input formulas into the newer workbook.
+An empty workbook offers **Start New Project**, **Import Previous Project**, or **Discover ProjectEngine** through the interactive tutorial. Users of older ProjectEngine versions can move supported WBS inputs, dependencies, dates, constraints, settings, warning acknowledgements, Dashboard snapshots, compatible event history and supported WBS input formulas into the newer workbook.
 
 Import leaves the original source workbook unchanged and **does not recalculate the schedule automatically**. Review the imported WBS and Constraints, then choose Planning Update or Full Update. Import replaces supported project data in the destination workbook, so **keep a backup of the destination before importing**. Unsupported or incompatible data may be rejected rather than silently discarded.
+
+### Learn inside Excel — interactive tutorial
+
+A new **29-step interactive tutorial** helps users learn ProjectEngine without leaving the workbook. Open it from the welcome screen or the ProjectEngine Ribbon, and choose between two modes:
+
+- **Discovery:** Explore the WBS, Gantt, analytics, S-Curve, Dashboard, Constraints and Event History without entering data or running calculations just to view a tutorial page.
+- **Practice:** Enter real project data directly in Excel, run normal ProjectEngine commands when prompted, and learn from actual results and diagnostics. No demonstration project or separate calculation engine is inserted.
+
+The tutorial highlights relevant workbook areas, stays open while you edit cells in Practice mode, and remembers progress separately for both modes. You can resume or restart either path. It is available in **English and French**.
+
+### Clearer, modernized dialogs
+
+The welcome screen, planning messages and tutorial now share a more consistent interface, with clearer buttons and improved spacing. Planning message windows adapt to their content: short messages stay compact, while longer messages use the available space and remain scrollable. Text can still be selected and copied, and normal warning acknowledgements are preserved.
 
 ### Navigate and update more efficiently
 
@@ -215,7 +228,7 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 - structured `INFO`, `WARNING` and `STOP` messages;
 - Event History and Alarm History;
 - warning acknowledgement and message navigation;
-- project welcome screen and import from supported earlier versions.
+- project welcome screen, interactive tutorial and import from supported earlier versions.
 
 </td>
 </tr>
@@ -261,6 +274,8 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 ### Workbook lifecycle and safety
 
 - embedded, context-sensitive Ribbon with custom icons;
+- 29-step bilingual tutorial with Discovery and Practice modes;
+- independent tutorial progress and contextual highlighting;
 - guided project import from supported earlier workbooks;
 - Planning Reset for project turnover;
 - Full Reset for complete workbook cleanup;
@@ -280,13 +295,13 @@ Compare Baseline, Actual, Forecast and Calculated progress while viewing the tim
 
 1. Visit the [latest release](https://github.com/TMailletFR/ProjectEngine/releases/latest) and download the prepared `ProjectEngine_*.xlsm` file under **Assets**.
 2. Open it in **Microsoft Excel for Windows** and enable macros if you trust the downloaded workbook.
-3. In the welcome screen, choose **Start New Project** or **Import Previous Project**.
-4. For a new project, use the integrated Quick Start guide in WBS and enter activities, hierarchy, dates, progress and dependencies.
+3. In the welcome screen, choose **Start New Project**, **Import Previous Project**, or **Discover ProjectEngine** to begin the interactive tutorial.
+4. For a new project, follow the **Discovery** tour to explore the workbook or **Practice** to enter real data with guidance. You can also use the integrated Quick Start guide in WBS.
 5. For an import, choose a supported older ProjectEngine file and **review the transferred WBS, Constraints and settings** before calculating.
 6. Run **Planning Update** from the ProjectEngine Ribbon to calculate and publish the schedule. Use **Full Update** when you want a complete recalculation and the associated reporting workflow.
 7. Review diagnostics and explore the Gantt, analytics, Dashboard and S-Curve. Use **Go to Selected Task** or **Show Full Timeline** to navigate the Gantt.
 
-WBS onboarding is available in **English and French**, with Required / Optional / Calculated field indicators, contextual column help and an integrated Quick Start guide. The Ribbon and workbook support global or per-area language preferences.
+The interactive tutorial and WBS onboarding are available in **English and French**. WBS also provides Required / Optional / Calculated field indicators, contextual column help and an integrated Quick Start guide. The Ribbon and workbook support global or per-area language preferences.
 
 > **Upgrading an existing project?** Import replaces supported data in the **destination** workbook. Keep a backup of that destination before starting. The selected source is opened read-only and is not modified. Derived calculations, old Gantt graphics and TEST/SCENARIO states are not imported; rebuild the required views after reviewing the inputs.
 >
@@ -297,7 +312,7 @@ WBS onboarding is available in **English and French**, with Required / Optional 
 ## Typical planning workflow
 
 ```text
-Welcome: Start New / Import Previous
+Welcome: Start New / Import Previous / Discover
    ↓
 WBS inputs
    ↓
@@ -361,7 +376,7 @@ For the full technical design:
 
 ProjectEngine reached its first stable baseline with v1.0.0. The scheduling engine, simulation workflows, diagnostics, Gantt rendering, analytics, Dashboard, S-Curve, localization, reset workflows and guarded workbook lifecycle are operational and protected by permanent validation harnesses.
 
-The project remains actively maintained. Recent development adds a workbook-embedded Ribbon, a welcome and previous-project import workflow, task navigation and selective output/graphics reuse. Future development is driven by real planning use cases, reported issues and community feedback.
+The project remains actively maintained. Recent improvements include the 29-step interactive tutorial, redesigned dialogs, a workbook-embedded Ribbon, project import, Gantt navigation and more efficient worksheet updates. Future development is driven by real planning use cases, reported issues and community feedback.
 
 - [Latest release](https://github.com/TMailletFR/ProjectEngine/releases/latest)
 - [All releases](https://github.com/TMailletFR/ProjectEngine/releases)
@@ -392,7 +407,7 @@ Choose the most useful entry point:
 - [Getting started with ProjectEngine](https://github.com/TMailletFR/ProjectEngine/discussions/4) for setup, inputs and first-use questions;
 - [GitHub Issues](https://github.com/TMailletFR/ProjectEngine/issues) for reproducible bugs and changes that need formal tracking.
 
-When reporting an issue, remove confidential or company-specific data before sharing any workbook or screenshot.
+When reporting an issue, remove confidential or company-specific data before sharing any workbook or screenshot. Excel may retain document metadata when saving; review both project content and metadata before publishing a file.
 
 ---
 
@@ -436,7 +451,14 @@ Yes. TEST mode supports focused non-destructive changes, while SCENARIO mode sup
 <details>
 <summary><strong>Which languages are supported?</strong></summary>
 
-The workbook onboarding, Ribbon commands and planning messages support English and French, with global and per-area language controls.
+The interactive tutorial, workbook onboarding, Ribbon commands and planning messages support English and French, with global and per-area language controls.
+
+</details>
+
+<details>
+<summary><strong>How do I learn to use ProjectEngine?</strong></summary>
+
+Open **Tutorial** from the ProjectEngine Ribbon or **Discover ProjectEngine** from the welcome screen. Choose **Discovery** for a guided tour without calculation or data entry, or **Practice** to enter real project data and follow the normal scheduling workflow. Both modes have their own saved progress and can be restarted. The tutorial is available in English and French.
 
 </details>
 

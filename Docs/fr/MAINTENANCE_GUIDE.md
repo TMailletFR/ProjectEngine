@@ -40,13 +40,23 @@ Le producteur possède le sens et la sévérité. MessageEngine possède la pré
 
 Ne jamais renommer un callback externe uniquement pour des raisons de style. Conserver un wrapper lorsque la compatibilité l'exige.
 
-## Maintenance du Ribbon, de l'accueil et de l'import (v1.3.0)
+## Maintenance du Ribbon, de l'accueil et de l'import (v1.4.0)
 
-**Ribbon :** modifier `customUI.xml` et ses 18 icônes embarquées par le packaging existant. `mod_RibbonCallbacks` reste un adaptateur qui valide l'ownership workbook/fenêtre avant délégation métier. Conserver la visibilité contextuelle et l'invalidation des contrôles enfants ; **aucune invalidation Ribbon dans `Workbook_Deactivate`**. Compiler/sauvegarder/rouvrir, vérifier XML, relations, nombre d'images, labels et callbacks, puis tester dans une vraie fenêtre Excel possédée.
+**Ribbon :** modifier `customUI.xml` et ses 19 icônes embarquées par le packaging existant. `mod_RibbonCallbacks` reste un adaptateur qui valide l'ownership workbook/fenêtre avant délégation métier. Conserver la visibilité contextuelle et l'invalidation des contrôles enfants ; **aucune invalidation Ribbon dans `Workbook_Deactivate`**. Compiler/sauvegarder/rouvrir, vérifier XML, relations, nombre d'images, labels et callbacks, puis tester dans une vraie fenêtre Excel possédée.
 
 **Accueil :** `mod_ProjectWelcome` orchestre `frmProjectWelcome` et le propriétaire `EVENT_ACK`. Pas de store parallèle `WelcomeShown`. Start New ou un import réellement réussi peuvent acquitter ; Cancel/FAIL/X ne le doivent pas. Full Reset rend l'accueil éligible par le nettoyage existant. Vérifier qu'un projet actif ne déclenche pas l'accueil.
 
-**Migration :** suivre `Migration_ImportFile` -> `MigrationData_Read` -> `Migration_ApplyInputs` -> propriétaires Settings/WBS/Constraints/Dashboard/EventHistory. Source en lecture seule, macros désactivées, inchangée. Import **data-only** : ni Core ni graphique automatique. En v1.3.0, l'import direct **ne crée pas** de backup automatique de la destination ni de classeur de staging : avertissement destructif et copie préalable par l'utilisateur indispensables. Vérifier les données, les distinctions formule/texte/valeur et l'ACK de succès, limiter à un Save final, propager les erreurs sans faux SUCCESS. Refuser explicitement les schémas/formules non supportés. Ne pas garantir une restauration transactionnelle ou une protection contre AutoSave.
+**Migration :** suivre `Migration_ImportFile` -> `MigrationData_Read` -> `Migration_ApplyInputs` -> propriétaires Settings/WBS/Constraints/Dashboard/EventHistory. Source en lecture seule, macros désactivées, inchangée. Import **data-only** : ni Core ni graphique automatique. En v1.4.0, l'import direct **ne crée pas** de backup automatique de la destination ni de classeur de staging : avertissement destructif et copie préalable par l'utilisateur indispensables. Vérifier les données, les distinctions formule/texte/valeur et l'ACK de succès, limiter à un Save final, propager les erreurs sans faux SUCCESS. Refuser explicitement les schémas/formules non supportés. Ne pas garantir une restauration transactionnelle ou une protection contre AutoSave.
+
+## Maintenance du tutoriel, des consoles et des métadonnées (v1.4.0)
+
+**Tutoriel :** `mod_ProjectTutorial` possède une session non modale, 29 étapes sémantiques et une seule Shape de surlignage ; `mod_Settings` possède deux bookmarks Découverte/Pratique. Une page passive n'appelle jamais Core, ne reconstruit pas Gantt et n’injecte pas d’exemple. Une page active propose une vraie commande avec consentement ; un retour normal de `Sub` ne prouve pas la réussite métier. Exiger un reçu terminal frais des owners. Préserver la saisie WBS, la validation classeur/fenêtre, les contextes Ribbon et le nettoyage au Save/SaveAs/Reset/Close/erreur. Valider STOP/correction, warning, planning vide, annulation d’import et coexistence avec la vraie console modale.
+
+**Présentation :** conserver les trois UserForms et l’unique infrastructure PEButton/présentation, avec fallback CommandButton MSForms natif. Pas de fenêtre hôte parallèle, ni seconde console métier. Vérifier libellés, clavier, Tab/Maj+Tab, Entrée/Échap, édition Excel derrière le tutoriel, tailles/scroll et ACK. Les glyphes Unicode non rendables fidèlement en WMF passent par le contrôle classique BSTR, jamais par une translittération silencieuse. Excel 32 bits, LTSC et multi-DPI restent non testés nativement : fallback prudent.
+
+**Confidentialité :** ne pas persister `source.FullName`, chemins absolus ou exceptions brutes dans les reçus d’import, l’historique ou les propriétés. Préserver `ImportState`, `SchemaVersion`, `ReleaseId`, digest et ACK. Garder les alertes Excel actives. Après la dernière sauvegarde du XLSM public, assainir et relancer le gate de confidentialité : Excel peut recréer ses propres métadonnées de localisation. Examiner séparément les attributions personnelles EVENT_ACK et les contenus métier. Le nettoyage des releases historiques ne modifie pas leur ancien code VBA d’import.
+
+**Limite connue :** le rejet `MIGRATION.PROFILE` rapporté puis disparu après Full Update n’a pas de cause démontrée, faute de fichier BEFORE intact. Ne pas annoncer la correction ni élargir la reconnaissance sans preuve ; préserver le refus sans mutation de la cible.
 
 ## Ajouter une règle Task Type
 
@@ -129,9 +139,9 @@ Après import, compiler le VBAProject complet. Un scan statique ne remplace pas 
 1. Capturer les processus Excel existants avant le worker.
 2. Créer une instance COM dédiée et mémoriser son PID ou handle.
 3. Ouvrir uniquement une copie temporaire identifiée.
-4. Fermer le workbook de copie, appeler `Quit` sur l'instance possédée et libérer ses objets COM.
-5. En cas de timeout, arrêter uniquement le PID créé par le worker.
-6. Ne jamais utiliser une fermeture globale par nom de processus ou nom partiel de classeur.
+4. Fermer **uniquement le classeur de test possédé**, après vérification exacte de `Name` et `FullName` ; libérer les références COM. Appeler `Application.Quit` seulement si la possession exclusive de l’instance est certaine et qu’aucun classeur utilisateur n’y est attaché.
+5. En cas de timeout ou perte RPC, documenter et distinguer produit, harnais, fixture et session COM. Ne pas tuer Excel sur la seule base d’un PID créé ou associé au test ; ne jamais forcer la fermeture d’une instance d’ownership incertain.
+6. Interdire `taskkill`, `Stop-Process EXCEL` génériques et fermetures par nom partiel.
 7. Tout Excel utilisateur reste hors périmètre, même s'il ouvre un autre classeur.
 
 ## Choisir entre Public, Friend et Private

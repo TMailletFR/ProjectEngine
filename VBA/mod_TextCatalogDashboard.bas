@@ -2,7 +2,7 @@ Attribute VB_Name = "mod_TextCatalogDashboard"
 Option Explicit
 
 Public Function TextCatalogDashboard_Definitions() As Variant
-    Dim definitions(0 To 107) As Variant
+    Dim definitions(0 To 109) As Variant
     definitions(0) = Array("DASHBOARD.ERROR.COMPARISON", _
         "Error in Refresh_Dashboard_Comparison" & vbCrLf & "{Details}", _
         "Erreur dans Refresh_Dashboard_Comparison" & vbCrLf & "{Details}")
@@ -311,5 +311,7 @@ Public Function TextCatalogDashboard_Definitions() As Variant
     definitions(107) = Array("DASHBOARD.LABEL.FORECAST_ISSUE", _
         "Forecast", _
         "Prévision")
+    definitions(108) = Array("DASHBOARD.VALIDATION.SNAPSHOT.ERROR_TITLE", "Invalid snapshot selection", "Sélection d'instantané invalide")
+    definitions(109) = Array("DASHBOARD.VALIDATION.SNAPSHOT.ERROR", "Choose an existing snapshot from the drop-down list.", "Choisissez un instantané existant dans la liste déroulante.")
     TextCatalogDashboard_Definitions = definitions
 End Function

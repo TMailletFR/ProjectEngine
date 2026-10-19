@@ -32,6 +32,8 @@ Private Const CELL_INFO_ENABLED As String = "X9"
 Private Const CELL_CONSTRAINTS_LANGUAGE As String = "X10"
 Private Const CELL_DATE_DISPLAY_MODE As String = "X11"
 Private Const SETTINGS_STORAGE_VERSION As String = "SETTINGS_STORAGE_V2"
+Private Const TUTORIAL_STORAGE_VERSION As String = "TUTORIAL_PROGRESS_V1"
+Private mTutorialSession As Variant
 
 Private Const DATE_MODE_DMY As String = "DMY"
 Private Const DATE_MODE_MDY As String = "MDY"
@@ -114,8 +116,8 @@ End Sub
 Public Sub Settings_RemoveLegacyMigrationCommand()
     Dim ws As Worksheet, i As Long
     Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
-    For i = 1 To ws.Shapes.Count
-        If ws.Shapes(i).Name = "SET_BTN_MIGRATION" Then
+    For i = 1 To ws.Shapes.count
+        If ws.Shapes(i).name = "SET_BTN_MIGRATION" Then
             ws.Shapes(i).Delete
             Exit Sub
         End If
@@ -129,7 +131,7 @@ Public Function Settings_MigrationSnapshot(ByVal source As Workbook) As Object
     Dim i As Long, marker As String, defaults As String
     Set result = CreateObject("Scripting.Dictionary")
     For Each candidate In source.Worksheets
-        If candidate.Name = SETTINGS_SHEET Then Set ws = candidate
+        If candidate.name = SETTINGS_SHEET Then Set ws = candidate
     Next candidate
     For i = 1 To 10
         values(i, 1) = "EN"
@@ -138,15 +140,15 @@ Public Function Settings_MigrationSnapshot(ByVal source As Workbook) As Object
     If ws Is Nothing Then
         defaults = "GLOBAL=EN; languages=EN; GLOBAL activated=1; INFO=1; date=DMY"
         For Each candidate In source.Worksheets
-            If candidate.Name = "EVENT_HISTORY" Then
-                Dim bg As Shape, knob As Shape
+            If candidate.name = "EVENT_HISTORY" Then
+                Dim bg As shape, knob As shape
                 On Error Resume Next
                 Set bg = candidate.Shapes("btn_EventHistory_Language_BG")
                 Set knob = candidate.Shapes("btn_EventHistory_Language_Knob")
                 On Error GoTo 0
                 If Not bg Is Nothing And Not knob Is Nothing Then
                     values(7, 1) = "FR"
-                    If knob.Left + knob.Width / 2 >= bg.Left + bg.Width / 2 Then values(7, 1) = "EN"
+                    If knob.left + knob.width / 2 >= bg.left + bg.width / 2 Then values(7, 1) = "EN"
                 End If
                 Set bg = Nothing: Set knob = Nothing
                 On Error Resume Next
@@ -154,7 +156,7 @@ Public Function Settings_MigrationSnapshot(ByVal source As Workbook) As Object
                 Set knob = candidate.Shapes("btn_EventHistory_Info_Knob")
                 On Error GoTo 0
                 If Not bg Is Nothing And Not knob Is Nothing Then
-                    values(8, 1) = CLng(Abs(knob.Left + knob.Width / 2 >= bg.Left + bg.Width / 2))
+                    values(8, 1) = CLng(Abs(knob.left + knob.width / 2 >= bg.left + bg.width / 2))
                 End If
             End If
         Next candidate
@@ -207,13 +209,13 @@ Public Sub Settings_ApplyMigrationSnapshot(ByVal values As Variant)
     Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
     owners = Settings_LanguageOwnerKeys()
     For Each owner In owners
-        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).Row - 1
+        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).row - 1
         Settings_PreflightLanguageOwner CStr(owner)
         VisibleHeaders_PreflightOwner CStr(owner), CStr(values(index, 1))
     Next owner
     Set headers = VisibleHeaders_CaptureAllSnapshot()
     For Each owner In owners
-        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).Row - 1
+        index = ws.Range(Settings_ModuleStorageCell(CStr(owner))).row - 1
         VisibleHeaders_ApplyOwnerFromSnapshot headers, CStr(owner), CStr(values(index, 1))
     Next owner
     ThisWorkbook.Worksheets(SETTINGS_SHEET).Range("X2:X11").Value2 = values
@@ -225,7 +227,7 @@ Public Sub Settings_ApplyMigrationSnapshot(ByVal values As Variant)
     Schema_ClearPhysicalHeaderLanguageOverrides
     Exit Sub
 Failed:
-    errorNumber = Err.Number: errorSource = Err.Source: description = Err.Description
+    errorNumber = Err.number: errorSource = Err.source: description = Err.description
     Schema_ClearPhysicalHeaderLanguageOverrides
     Err.Raise errorNumber, errorSource, description
 End Sub
@@ -309,7 +311,7 @@ Public Sub Settings_MigrateLanguageStorageV2()
         ws.Range(CELL_CONSTRAINTS_LANGUAGE).Value2 = globalLanguage
     End If
     ws.Range("X1").Value2 = SETTINGS_STORAGE_VERSION
-    ws.Columns("X:Y").Hidden = True
+    ws.columns("X:Y").Hidden = True
 
 End Sub
 
@@ -358,6 +360,18 @@ Public Sub Settings_ToggleGlobalLanguage()
     Ribbon_InvalidateLanguage
 
 End Sub
+
+Public Function Settings_SelectGlobalLanguage(ByVal languageCode As String) As Boolean
+    Dim ws As Worksheet
+    languageCode = UCase$(Trim$(languageCode))
+    If languageCode <> "FR" And languageCode <> "EN" Then Err.Raise 5, "Settings_SelectGlobalLanguage", "Unsupported language"
+    If ThisWorkbook.ReadOnly Then Exit Function
+    If Not WorkbookSchema_UserActionAllowed() Then Exit Function
+    Set ws = Settings_EnsureSheet()
+    Settings_ApplyGlobalLanguageTransaction ws, languageCode, True, False
+    Ribbon_InvalidateLanguage
+    Settings_SelectGlobalLanguage = True
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Met a jour Settings Toggle Global Activated dans le contexte settings and language.
@@ -557,7 +571,7 @@ CleanExit:
     Exit Sub
 
 ApplyFailed:
-    errorDescription = Err.Source & ": " & Err.Description
+    errorDescription = Err.source & ": " & Err.description
     On Error Resume Next
     If headersApplied Then VisibleHeaders_RestoreSnapshot headerSnapshot
     If applyStarted Then Settings_ApplySingleModule moduleKey, oldLanguage
@@ -607,7 +621,8 @@ End Sub
 Private Sub Settings_ApplyGlobalLanguageTransaction( _
     ByVal ws As Worksheet, _
     ByVal requestedLanguage As String, _
-    ByVal persistGlobalLanguage As Boolean)
+    ByVal persistGlobalLanguage As Boolean, _
+    Optional ByVal reportFailureAsConsole As Boolean = True)
 
     Dim ownerKeys As Variant
     Dim oldLanguages(0 To 5) As String
@@ -674,7 +689,7 @@ CleanExit:
     Exit Sub
 
 ApplyFailed:
-    errorDescription = Err.Source & ": " & Err.Description
+    errorDescription = Err.source & ": " & Err.description
     On Error Resume Next
     If headersApplied Then VisibleHeaders_RestoreSnapshot headerSnapshot
     If applyStarted Then
@@ -694,6 +709,8 @@ ApplyFailed:
         Application.ScreenUpdating = oldScreenUpdating
         Application.EnableEvents = oldEvents
     End If
+    If Not reportFailureAsConsole Then _
+        Err.Raise vbObjectError + 5212, "Settings_ApplyGlobalLanguageTransaction", errorDescription
     CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.GLOBAL_LANGUAGE", _
         TextCatalog_Arguments("Owner", failedOwner, "Details", errorDescription)
 
@@ -757,12 +774,12 @@ Private Function Settings_EnsureSheet() As Worksheet
 
         If wsAfter Is Nothing Then
             Set ws = ThisWorkbook.Worksheets.Add( _
-                After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+                after:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
         Else
-            Set ws = ThisWorkbook.Worksheets.Add(After:=wsAfter)
+            Set ws = ThisWorkbook.Worksheets.Add(after:=wsAfter)
         End If
 
-        ws.Name = SETTINGS_SHEET
+        ws.name = SETTINGS_SHEET
     End If
 
     ws.Visible = xlSheetVisible
@@ -918,7 +935,7 @@ End Function
 Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
 
     Dim previousSheet As Object
-    Dim dateTitle As Shape
+    Dim dateTitle As shape
     Dim panelLeft As Double
     Dim panelTop As Double
     Dim settingsToggleCenterX As Double
@@ -940,8 +957,8 @@ Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
     Settings_DeleteGeneratedShapes ws
     Settings_PrepareCanvas ws
 
-    panelLeft = ws.Range("B4").Left
-    panelTop = ws.Range("B4").Top
+    panelLeft = ws.Range("B4").left
+    panelTop = ws.Range("B4").top
     settingsToggleCenterX = panelLeft + 28 + 310 + (SETTINGS_TRACK_WIDTH / 2)
     horizontalScale = SETTINGS_TRACK_WIDTH / GANTT_REFERENCE_TRACK_WIDTH
     dateTrackWidth = GANTT_THREE_POSITION_TRACK_WIDTH * horizontalScale
@@ -1001,13 +1018,11 @@ Private Sub Settings_BuildLayout(ByVal ws As Worksheet)
     Settings_RefreshVisuals ws
 
     Settings_RemoveLegacyMigrationCommand
-    Settings_AddTextShape ws, "SET_SCHEMA_VERSION", _
-        "ProjectEngine " & CStr(WorkbookSchema_Property(ThisWorkbook, PE_RELEASE_PROPERTY)) & _
-        " / " & CStr(WorkbookSchema_Version(ThisWorkbook)), panelLeft + 320, panelTop + 476, 300, 24, msoAlignLeft, 10, False
+
 
     On Error Resume Next
     ws.Activate
-    ActiveWindow.DisplayGridlines = False
+    activeWindow.DisplayGridlines = False
     If Not previousSheet Is Nothing Then previousSheet.Activate
     On Error GoTo 0
 
@@ -1023,11 +1038,11 @@ Private Sub Settings_AddInfoSwitch( _
     ByVal topPos As Double, _
     ByVal isEnabled As Boolean)
 
-    Dim labelShape As Shape
-    Dim offShape As Shape
-    Dim trackShape As Shape
-    Dim knobShape As Shape
-    Dim onShape As Shape
+    Dim labelShape As shape
+    Dim offShape As shape
+    Dim trackShape As shape
+    Dim knobShape As shape
+    Dim onShape As shape
     Dim trackLeft As Double
     Dim knobLeft As Double
 
@@ -1037,7 +1052,7 @@ Private Sub Settings_AddInfoSwitch( _
     Set offShape = Settings_AddTextShape(ws, "SET_INFO_OFF", TextCatalog_Get("SETTINGS.TOGGLE.OFF", Settings_GetGlobalDisplayLanguage()), trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, topPos + 4, 44, 16)
-    trackShape.Name = "SET_INFO_TRACK"
+    trackShape.name = "SET_INFO_TRACK"
     trackShape.Adjustments.item(1) = 0.5
     trackShape.Placement = xlFreeFloating
     trackShape.OnAction = "Settings_ToggleInfoMessages"
@@ -1045,10 +1060,10 @@ Private Sub Settings_AddInfoSwitch( _
     knobLeft = trackLeft + 2
     If isEnabled Then knobLeft = trackLeft + 28
     Set knobShape = ws.Shapes.AddShape(msoShapeOval, knobLeft, topPos + 6, 12, 12)
-    knobShape.Name = "SET_INFO_KNOB"
+    knobShape.name = "SET_INFO_KNOB"
     knobShape.Placement = xlFreeFloating
     knobShape.OnAction = "Settings_ToggleInfoMessages"
-    knobShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    knobShape.fill.ForeColor.RGB = RGB(255, 255, 255)
     knobShape.Line.Visible = msoFalse
 
     Set onShape = Settings_AddTextShape(ws, "SET_INFO_ON", TextCatalog_Get("SETTINGS.TOGGLE.ON", Settings_GetGlobalDisplayLanguage()), trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
@@ -1087,35 +1102,35 @@ End Function
 '------------------------------------------------------------------------------
 Private Sub Settings_PrepareCanvas(ByVal ws As Worksheet)
 
-    ws.cells.Interior.Color = RGB(242, 244, 247)
-    ws.cells.Font.Name = "Segoe UI"
-    ws.cells.Font.Color = RGB(35, 45, 58)
+    ws.cells.Interior.color = RGB(242, 244, 247)
+    ws.cells.font.name = "Segoe UI"
+    ws.cells.font.color = RGB(35, 45, 58)
 
     With ws.Range("A1:W30")
         .UnMerge
         .ClearContents
-        .Interior.Color = RGB(242, 244, 247)
-        .Font.Name = "Segoe UI"
-        .Font.Color = RGB(35, 45, 58)
+        .Interior.color = RGB(242, 244, 247)
+        .font.name = "Segoe UI"
+        .font.color = RGB(35, 45, 58)
     End With
 
-    ws.Columns("A").ColumnWidth = 2.5
-    ws.Columns("B:L").ColumnWidth = 12
+    ws.columns("A").ColumnWidth = 2.5
+    ws.columns("B:L").ColumnWidth = 12
     ws.rows("1:30").rowHeight = 22
     ws.rows("1:2").rowHeight = 28
 
     With ws.Range("B1:K2")
         .Merge
         .value = TextCatalog_Get("SETTINGS.PAGE.TITLE", Settings_ModuleDisplayLanguage(ws, "GLOBAL"))
-        .Font.Name = "Segoe UI Semibold"
-        .Font.Size = 22
-        .Font.Bold = True
-        .Font.Color = RGB(28, 42, 58)
+        .font.name = "Segoe UI Semibold"
+        .font.size = 22
+        .font.bold = True
+        .font.color = RGB(28, 42, 58)
         .HorizontalAlignment = xlLeft
         .VerticalAlignment = xlCenter
     End With
 
-    ws.Tab.Color = RGB(96, 111, 128)
+    ws.Tab.color = RGB(96, 111, 128)
 
 End Sub
 
@@ -1128,8 +1143,8 @@ Private Sub Settings_DeleteGeneratedShapes(ByVal ws As Worksheet)
 
     Dim i As Long
 
-    For i = ws.Shapes.Count To 1 Step -1
-        If Left$(CStr(ws.Shapes(i).Name), Len(SETTINGS_PREFIX)) = SETTINGS_PREFIX Then
+    For i = ws.Shapes.count To 1 Step -1
+        If left$(CStr(ws.Shapes(i).name), Len(SETTINGS_PREFIX)) = SETTINGS_PREFIX Then
             ws.Shapes(i).Delete
         End If
     Next i
@@ -1150,15 +1165,15 @@ Private Sub Settings_AddPanel( _
     ByVal fillColor As Long, _
     ByVal lineColor As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, widthVal, heightVal)
-    shp.Name = shapeName
+    shp.name = shapeName
     shp.Placement = xlFreeFloating
     shp.Adjustments.item(1) = 0.08
-    shp.Fill.ForeColor.RGB = fillColor
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.ForeColor.RGB = lineColor
-    shp.Line.Weight = 0.8
+    shp.Line.weight = 0.8
     shp.Shadow.Visible = msoFalse
     shp.ZOrder msoSendToBack
 
@@ -1178,20 +1193,20 @@ Private Sub Settings_AddCenteredTitle( _
     ByVal heightVal As Double, _
     ByVal fontSize As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, leftPos, topPos, widthVal, heightVal)
-    shp.Name = shapeName
+    shp.name = shapeName
     shp.Placement = xlFreeFloating
     shp.Line.Visible = msoFalse
-    shp.Fill.Visible = msoFalse
-    shp.TextFrame2.TextRange.Text = titleText
+    shp.fill.Visible = msoFalse
+    shp.TextFrame2.TextRange.text = titleText
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
     shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
-    shp.TextFrame2.TextRange.Font.Name = "Segoe UI Semibold"
-    shp.TextFrame2.TextRange.Font.Size = fontSize
-    shp.TextFrame2.TextRange.Font.Bold = msoTrue
-    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(35, 45, 58)
+    shp.TextFrame2.TextRange.font.name = "Segoe UI Semibold"
+    shp.TextFrame2.TextRange.font.size = fontSize
+    shp.TextFrame2.TextRange.font.bold = msoTrue
+    shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(35, 45, 58)
 
 End Sub
 
@@ -1209,11 +1224,11 @@ Private Sub Settings_AddLanguageSwitch( _
     ByVal macroName As String, _
     ByVal emphasize As Boolean)
 
-    Dim labelShape As Shape
-    Dim frShape As Shape
-    Dim trackShape As Shape
-    Dim knobShape As Shape
-    Dim enShape As Shape
+    Dim labelShape As shape
+    Dim frShape As shape
+    Dim trackShape As shape
+    Dim knobShape As shape
+    Dim enShape As shape
     Dim trackLeft As Double
     Dim knobLeft As Double
     Dim isEnglish As Boolean
@@ -1225,7 +1240,7 @@ Private Sub Settings_AddLanguageSwitch( _
     Set frShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_FR", TextCatalog_Get("SETTINGS.LANGUAGE.FR", Settings_GetGlobalDisplayLanguage()), trackLeft - 34, topPos, 28, 24, msoAlignCenter, 9.5, True)
 
     Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, topPos + 4, 44, 16)
-    trackShape.Name = "SET_LANG_" & keyName & "_TRACK"
+    trackShape.name = "SET_LANG_" & keyName & "_TRACK"
     trackShape.Adjustments.item(1) = 0.5
     trackShape.Placement = xlFreeFloating
     trackShape.OnAction = macroName
@@ -1233,10 +1248,10 @@ Private Sub Settings_AddLanguageSwitch( _
     knobLeft = trackLeft + 2
     If isEnglish Then knobLeft = trackLeft + 28
     Set knobShape = ws.Shapes.AddShape(msoShapeOval, knobLeft, topPos + 6, 12, 12)
-    knobShape.Name = "SET_LANG_" & keyName & "_KNOB"
+    knobShape.name = "SET_LANG_" & keyName & "_KNOB"
     knobShape.Placement = xlFreeFloating
     knobShape.OnAction = macroName
-    knobShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    knobShape.fill.ForeColor.RGB = RGB(255, 255, 255)
     knobShape.Line.Visible = msoFalse
 
     Set enShape = Settings_AddTextShape(ws, "SET_LANG_" & keyName & "_EN", TextCatalog_Get("SETTINGS.LANGUAGE.EN", Settings_GetGlobalDisplayLanguage()), trackLeft + 50, topPos, 30, 24, msoAlignCenter, 9.5, True)
@@ -1262,26 +1277,26 @@ Private Function Settings_AddTextShape( _
     ByVal heightVal As Double, _
     ByVal alignment As MsoParagraphAlignment, _
     ByVal fontSize As Double, _
-    ByVal isBold As Boolean) As Shape
+    ByVal isBold As Boolean) As shape
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, leftPos, topPos, widthVal, heightVal)
-    shp.Name = shapeName
+    shp.name = shapeName
     shp.Placement = xlFreeFloating
     shp.Line.Visible = msoFalse
-    shp.Fill.Visible = msoFalse
+    shp.fill.Visible = msoFalse
     shp.TextFrame2.MarginLeft = 0
     shp.TextFrame2.MarginRight = 0
     shp.TextFrame2.MarginTop = 0
     shp.TextFrame2.MarginBottom = 0
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
-    shp.TextFrame2.TextRange.Text = textValue
+    shp.TextFrame2.TextRange.text = textValue
     shp.TextFrame2.TextRange.ParagraphFormat.alignment = alignment
-    shp.TextFrame2.TextRange.Font.Name = "Segoe UI"
-    shp.TextFrame2.TextRange.Font.Size = fontSize
-    shp.TextFrame2.TextRange.Font.Bold = isBold
-    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(55, 67, 82)
+    shp.TextFrame2.TextRange.font.name = "Segoe UI"
+    shp.TextFrame2.TextRange.font.size = fontSize
+    shp.TextFrame2.TextRange.font.bold = isBold
+    shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(55, 67, 82)
 
     Set Settings_AddTextShape = shp
 
@@ -1292,19 +1307,19 @@ End Function
 ' EN: Normalizes shared Settings toggle geometry, including persisted shapes.
 '------------------------------------------------------------------------------
 Private Sub Settings_NormalizeToggleGeometry( _
-    ByVal trackShape As Shape, _
-    ByVal knobShape As Shape)
+    ByVal trackShape As shape, _
+    ByVal knobShape As shape)
 
     If trackShape Is Nothing Or knobShape Is Nothing Then Exit Sub
 
     trackShape.LockAspectRatio = msoFalse
-    trackShape.Width = 44
-    trackShape.Height = 16
+    trackShape.width = 44
+    trackShape.height = 16
     trackShape.Adjustments.item(1) = 0.5
 
     knobShape.LockAspectRatio = msoFalse
-    knobShape.Width = 12
-    knobShape.Height = 12
+    knobShape.width = 12
+    knobShape.height = 12
 
 End Sub
 
@@ -1313,26 +1328,26 @@ End Sub
 ' EN: Aligns left/right labels to the shared Settings toggle geometry.
 '------------------------------------------------------------------------------
 Private Sub Settings_NormalizeToggleLabels( _
-    ByVal leftShape As Shape, _
-    ByVal trackShape As Shape, _
-    ByVal rightShape As Shape)
+    ByVal leftShape As shape, _
+    ByVal trackShape As shape, _
+    ByVal rightShape As shape)
 
     If trackShape Is Nothing Then Exit Sub
 
     If Not leftShape Is Nothing Then
-        leftShape.Left = trackShape.Left - 34
-        leftShape.Top = trackShape.Top - 4
-        leftShape.Width = 28
-        leftShape.Height = 24
-        leftShape.TextFrame2.TextRange.Font.Size = 9.5
+        leftShape.left = trackShape.left - 34
+        leftShape.top = trackShape.top - 4
+        leftShape.width = 28
+        leftShape.height = 24
+        leftShape.TextFrame2.TextRange.font.size = 9.5
     End If
 
     If Not rightShape Is Nothing Then
-        rightShape.Left = trackShape.Left + 50
-        rightShape.Top = trackShape.Top - 4
-        rightShape.Width = 30
-        rightShape.Height = 24
-        rightShape.TextFrame2.TextRange.Font.Size = 9.5
+        rightShape.left = trackShape.left + 50
+        rightShape.top = trackShape.top - 4
+        rightShape.width = 30
+        rightShape.height = 24
+        rightShape.TextFrame2.TextRange.font.size = 9.5
     End If
 
 End Sub
@@ -1345,9 +1360,9 @@ Private Sub Settings_NormalizeAllToggleLabels(ByVal ws As Worksheet)
 
     Dim keys As Variant
     Dim keyName As Variant
-    Dim leftShape As Shape
-    Dim trackShape As Shape
-    Dim rightShape As Shape
+    Dim leftShape As shape
+    Dim trackShape As shape
+    Dim rightShape As shape
 
     If ws Is Nothing Then Exit Sub
 
@@ -1385,25 +1400,25 @@ End Sub
 '------------------------------------------------------------------------------
 
 Private Sub Settings_FormatToggle( _
-    ByVal trackShape As Shape, _
-    ByVal knobShape As Shape, _
+    ByVal trackShape As shape, _
+    ByVal knobShape As shape, _
     ByVal isRightActive As Boolean)
 
     If trackShape Is Nothing Or knobShape Is Nothing Then Exit Sub
     Settings_NormalizeToggleGeometry trackShape, knobShape
 
     If isRightActive Then
-        trackShape.Fill.ForeColor.RGB = RGB(68, 114, 196)
+        trackShape.fill.ForeColor.RGB = RGB(68, 114, 196)
         trackShape.Line.ForeColor.RGB = RGB(68, 114, 196)
-        knobShape.Left = trackShape.Left + trackShape.Width - knobShape.Width - 2
+        knobShape.left = trackShape.left + trackShape.width - knobShape.width - 2
     Else
-        trackShape.Fill.ForeColor.RGB = RGB(150, 160, 172)
+        trackShape.fill.ForeColor.RGB = RGB(150, 160, 172)
         trackShape.Line.ForeColor.RGB = RGB(150, 160, 172)
-        knobShape.Left = trackShape.Left + 2
+        knobShape.left = trackShape.left + 2
     End If
 
-    trackShape.Line.Weight = 0.75
-    knobShape.Top = trackShape.Top + ((trackShape.Height - knobShape.Height) / 2)
+    trackShape.Line.weight = 0.75
+    knobShape.top = trackShape.top + ((trackShape.height - knobShape.height) / 2)
 
 End Sub
 '------------------------------------------------------------------------------
@@ -1416,17 +1431,17 @@ Private Sub Settings_AddActivatedControl( _
     ByVal topPos As Double, _
     ByVal isActivated As Boolean)
 
-    Dim boxShape As Shape
-    Dim labelShape As Shape
+    Dim boxShape As shape
+    Dim labelShape As shape
 
     Set boxShape = ws.Shapes.AddShape(msoShapeRectangle, leftPos, topPos + 2, 18, 18)
-    boxShape.Name = "SET_GLOBAL_ACTIVATED_BOX"
+    boxShape.name = "SET_GLOBAL_ACTIVATED_BOX"
     boxShape.Placement = xlFreeFloating
     boxShape.OnAction = "Settings_ToggleGlobalActivated"
-    boxShape.TextFrame2.TextRange.Text = IIf(isActivated, ChrW$(&H2713), "")
-    boxShape.TextFrame2.TextRange.Font.Name = "Segoe UI Symbol"
-    boxShape.TextFrame2.TextRange.Font.Size = 11
-    boxShape.TextFrame2.TextRange.Font.Bold = msoTrue
+    boxShape.TextFrame2.TextRange.text = IIf(isActivated, ChrW$(&H2713), "")
+    boxShape.TextFrame2.TextRange.font.name = "Segoe UI Symbol"
+    boxShape.TextFrame2.TextRange.font.size = 11
+    boxShape.TextFrame2.TextRange.font.bold = msoTrue
     boxShape.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
     boxShape.TextFrame2.VerticalAnchor = msoAnchorMiddle
     boxShape.TextFrame2.MarginLeft = 0
@@ -1446,20 +1461,20 @@ End Sub
 ' EN: Updates Settings Format Activated Control in the settings and language context.
 '------------------------------------------------------------------------------
 Private Sub Settings_FormatActivatedControl( _
-    ByVal boxShape As Shape, _
+    ByVal boxShape As shape, _
     ByVal isActivated As Boolean)
 
     If boxShape Is Nothing Then Exit Sub
 
     If isActivated Then
-        boxShape.Fill.ForeColor.RGB = RGB(68, 114, 196)
+        boxShape.fill.ForeColor.RGB = RGB(68, 114, 196)
         boxShape.Line.ForeColor.RGB = RGB(68, 114, 196)
-        boxShape.TextFrame2.TextRange.Text = ChrW$(&H2713)
-        boxShape.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        boxShape.TextFrame2.TextRange.text = ChrW$(&H2713)
+        boxShape.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
     Else
-        boxShape.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        boxShape.fill.ForeColor.RGB = RGB(255, 255, 255)
         boxShape.Line.ForeColor.RGB = RGB(150, 160, 172)
-        boxShape.TextFrame2.TextRange.Text = ""
+        boxShape.TextFrame2.TextRange.text = ""
     End If
 
 End Sub
@@ -1480,23 +1495,23 @@ Private Sub Settings_AddCommandButton( _
     ByVal fillColor As Long, _
     ByVal textColor As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, widthVal, heightVal)
-    shp.Name = shapeName
+    shp.name = shapeName
     shp.Placement = xlFreeFloating
     shp.Adjustments.item(1) = 0.16
     shp.OnAction = macroName
-    shp.Fill.ForeColor.RGB = fillColor
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.Visible = msoFalse
     shp.Shadow.Visible = msoFalse
-    shp.TextFrame2.TextRange.Text = captionText
+    shp.TextFrame2.TextRange.text = captionText
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
     shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
-    shp.TextFrame2.TextRange.Font.Name = "Segoe UI Semibold"
-    shp.TextFrame2.TextRange.Font.Size = 10
-    shp.TextFrame2.TextRange.Font.Bold = msoTrue
-    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = textColor
+    shp.TextFrame2.TextRange.font.name = "Segoe UI Semibold"
+    shp.TextFrame2.TextRange.font.size = 10
+    shp.TextFrame2.TextRange.font.bold = msoTrue
+    shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = textColor
 
 End Sub
 
@@ -1572,7 +1587,7 @@ Private Sub Settings_SetShapeText( _
     ByVal captionText As String)
 
     On Error Resume Next
-    ws.Shapes(shapeName).TextFrame2.TextRange.Text = captionText
+    ws.Shapes(shapeName).TextFrame2.TextRange.text = captionText
     On Error GoTo 0
 
 End Sub
@@ -1585,8 +1600,8 @@ Private Sub Settings_RefreshInfoSwitch( _
     ByVal ws As Worksheet, _
     ByVal isEnabled As Boolean)
 
-    Dim trackShape As Shape
-    Dim knobShape As Shape
+    Dim trackShape As shape
+    Dim knobShape As shape
 
     On Error Resume Next
     Set trackShape = ws.Shapes("SET_INFO_TRACK")
@@ -1606,8 +1621,8 @@ Private Sub Settings_RefreshSwitch( _
     ByVal keyName As String, _
     ByVal languageCode As String)
 
-    Dim trackShape As Shape
-    Dim knobShape As Shape
+    Dim trackShape As shape
+    Dim knobShape As shape
 
     On Error Resume Next
     Set trackShape = ws.Shapes("SET_LANG_" & keyName & "_TRACK")
@@ -1684,7 +1699,7 @@ CleanExit:
     Exit Sub
 
 ApplyFailed:
-    errorDescription = Err.Description
+    errorDescription = Err.description
     On Error Resume Next
     If formattingStarted Then Settings_ApplyDateDisplayFormatsForMode oldMode
     If Not ws Is Nothing Then
@@ -1710,7 +1725,7 @@ Private Sub Settings_PreflightDateDisplaySurfaces()
 
     Dim tbl As ListObject
     Dim scurveTbl As ListObject
-    Dim ch As Chart
+    Dim ch As chart
 
     Set tbl = Settings_RequireTable("WBS", "tbl_WBS")
     Settings_RequireColumns tbl, VTS_TABLE_WBS, Array( _
@@ -1749,7 +1764,7 @@ Private Sub Settings_ApplyDateDisplayFormatsForMode(ByVal modeValue As String)
     Dim ws As Worksheet
     Dim tbl As ListObject
     Dim scurveTbl As ListObject
-    Dim ch As Chart
+    Dim ch As chart
     Dim dateFormat As String
     Dim dateTimeFormat As String
     Dim compactFormat As String
@@ -1767,15 +1782,15 @@ Private Sub Settings_ApplyDateDisplayFormatsForMode(ByVal modeValue As String)
         dateFormat
 
     Set ws = Settings_RequireWorksheet("GANTT")
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    lastRow = ws.cells(ws.rows.count, 1).End(xlUp).row
     If lastRow < 5 Then lastRow = 5
-    ws.Range(ws.Cells(5, 3), ws.Cells(lastRow, 6)).NumberFormat = dateFormat
+    ws.Range(ws.cells(5, 3), ws.cells(lastRow, 6)).numberFormat = dateFormat
 
     Set scurveTbl = Settings_RequireTable("SCURVE", "tbl_SCURVE")
     Settings_ApplyTableColumnFormats scurveTbl, VTS_TABLE_SCURVE, Array(VTS_COL_DATE), dateFormat
     Set ch = Settings_RequireVisibleDateChart( _
         "SCURVE", "cht_SCurve", scurveTbl, VTS_TABLE_SCURVE, VTS_COL_DATE)
-    If Not ch Is Nothing Then ch.Axes(xlCategory).TickLabels.NumberFormat = dateFormat
+    If Not ch Is Nothing Then ch.Axes(xlCategory).TickLabels.numberFormat = dateFormat
 
     Set tbl = Settings_RequireTable("CONSTRAINTS", "tbl_CONSTRAINTS")
     Settings_ApplyTableColumnFormats tbl, VTS_TABLE_CONSTRAINTS, Array( _
@@ -1789,7 +1804,7 @@ Private Sub Settings_ApplyDateDisplayFormatsForMode(ByVal modeValue As String)
 
     Set ch = Settings_RequireVisibleDateChart( _
         "DASHBOARD", "cht_Dashboard_SCurve", scurveTbl, VTS_TABLE_SCURVE, VTS_COL_DATE)
-    If Not ch Is Nothing Then ch.Axes(xlCategory).TickLabels.NumberFormat = compactFormat
+    If Not ch Is Nothing Then ch.Axes(xlCategory).TickLabels.numberFormat = compactFormat
 
 End Sub
 
@@ -1802,7 +1817,7 @@ Private Sub Settings_ApplyTableColumnFormats( _
     Dim columnKey As Variant
 
     For Each columnKey In columnKeys
-        SchemaListColumn(tbl, tableKey, CStr(columnKey)).Range.NumberFormat = numberFormat
+        SchemaListColumn(tbl, tableKey, CStr(columnKey)).Range.numberFormat = numberFormat
     Next columnKey
 
 End Sub
@@ -1844,20 +1859,20 @@ Private Function Settings_RequireVisibleDateChart( _
     ByVal chartName As String, _
     ByVal dateTable As ListObject, _
     ByVal tableKey As String, _
-    ByVal dateColumnKey As String) As Chart
+    ByVal dateColumnKey As String) As chart
 
     Dim ws As Worksheet
     Dim dateRange As Range
 
     Set ws = Settings_RequireWorksheet(sheetName)
     On Error Resume Next
-    Set Settings_RequireVisibleDateChart = ws.ChartObjects(chartName).Chart
+    Set Settings_RequireVisibleDateChart = ws.ChartObjects(chartName).chart
     On Error GoTo 0
 
     If Settings_RequireVisibleDateChart Is Nothing Then
         Set dateRange = SchemaListColumn(dateTable, tableKey, dateColumnKey).DataBodyRange
         If Not dateRange Is Nothing Then
-            If Application.Count(dateRange) > 0 Then
+            If Application.count(dateRange) > 0 Then
     Err.Raise vbObjectError + 5283, "Settings_RequireVisibleDateChart", _
         PlanningMessageText_Format("DIAG.TECH.REQUIRED_CHART_MISSING", _
             TextCatalog_Arguments("Object", sheetName & "!" & chartName), _
@@ -1882,7 +1897,7 @@ Private Sub Settings_RequireColumns( _
     ByVal columnKeys As Variant)
 
     Dim columnKey As Variant
-    Dim listColumn As ListColumn
+    Dim listColumn As listColumn
 
     For Each columnKey In columnKeys
         Set listColumn = Nothing
@@ -1892,8 +1907,8 @@ Private Sub Settings_RequireColumns( _
         If listColumn Is Nothing Then
             Err.Raise vbObjectError + 5285, "Settings_RequireColumns", _
                 PlanningMessageText_Format("DIAG.TECH.REQUIRED_COLUMN_MISSING", _
-                    TextCatalog_Arguments("Column", tbl.Name & "[" & CStr(columnKey) & "]"), _
-                    TextCatalog_Arguments("Column", tbl.Name & "[" & CStr(columnKey) & "]"))
+                    TextCatalog_Arguments("Column", tbl.name & "[" & CStr(columnKey) & "]"), _
+                    TextCatalog_Arguments("Column", tbl.name & "[" & CStr(columnKey) & "]"))
         End If
     Next columnKey
 
@@ -1972,3 +1987,102 @@ Private Function Settings_DateDisplayPosition(ByVal modeValue As String) As Long
     End Select
 
 End Function
+
+Public Function Settings_GetTutorialProgress(Optional ByVal mode As String = "DISCOVERY") As Variant
+    Dim ws As Worksheet
+    Dim values As Variant
+    Dim slot As Long
+    values = Settings_TutorialState()
+    slot = IIf(mode = "PRACTICE", 4, 2)
+    Settings_GetTutorialProgress = Array(CStr(values(0)), CStr(values(slot)), CStr(values(slot + 1)))
+End Function
+
+Private Function Settings_TutorialState() As Variant
+    Dim values As Variant, state As Variant
+    Dim i As Long
+    If IsArray(mTutorialSession) Then
+        Settings_TutorialState = mTutorialSession
+        Exit Function
+    End If
+    state = Array("", "", "", "", "", "")
+    On Error GoTo SessionOnly
+    values = ThisWorkbook.Worksheets(SETTINGS_SHEET).Range("X12:X18").Value2
+    If CStr(values(1, 1)) = "TUTORIAL_PROGRESS_V2" Then
+        For i = 0 To 5
+            state(i) = CStr(values(i + 2, 1))
+        Next i
+    ElseIf CStr(values(1, 1)) = TUTORIAL_STORAGE_VERSION Then
+        ' V1 was a passive visit. Keep its key for explicit mapping by the course owner.
+        state(0) = CStr(values(2, 1))
+        state(1) = "DISCOVERY"
+        state(2) = CStr(values(3, 1))
+        state(3) = CStr(values(4, 1))
+    End If
+SessionOnly:
+    mTutorialSession = state
+    Settings_TutorialState = state
+End Function
+
+Public Function Settings_GetTutorialMode() As String
+    Dim state As Variant
+    state = Settings_TutorialState()
+    Settings_GetTutorialMode = CStr(state(1))
+End Function
+
+Public Function Settings_TutorialConfigurationTarget() As Range
+    Dim ws As Worksheet
+    Dim panel As shape
+    On Error GoTo Missing
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    Set panel = ws.Shapes("SET_PANEL_LANGUAGE")
+    Set Settings_TutorialConfigurationTarget = ws.Range(panel.TopLeftCell, panel.BottomRightCell)
+Missing:
+End Function
+
+Public Function Settings_SetTutorialProgress(ByVal version As String, ByVal stepKey As String, _
+                                             ByVal state As String, Optional ByVal mode As String = "DISCOVERY") As Boolean
+    Dim ws As Worksheet
+    Dim values(1 To 7, 1 To 1) As Variant
+    Dim existing As Variant, session As Variant
+    Dim i As Long, slot As Long
+    If state <> "IN_PROGRESS" And state <> "COMPLETED" Then Err.Raise 5, "Settings_SetTutorialProgress", "Invalid tutorial state"
+    If mode <> "DISCOVERY" And mode <> "PRACTICE" Then Err.Raise 5, "Settings_SetTutorialProgress", "Invalid tutorial mode"
+    session = Settings_TutorialState()
+    slot = IIf(mode = "PRACTICE", 4, 2)
+    session(0) = version: session(1) = mode
+    session(slot) = stepKey: session(slot + 1) = state
+    mTutorialSession = session
+    If ThisWorkbook.ReadOnly Or Not WorkbookSchema_WritesAllowed() Then Exit Function
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    existing = ws.Range("X12:X18").Value2
+    If CStr(existing(1, 1)) = TUTORIAL_STORAGE_VERSION Then
+        For i = 5 To 7
+            If Not IsEmpty(existing(i, 1)) Then Exit Function
+        Next i
+    ElseIf CStr(existing(1, 1)) <> "TUTORIAL_PROGRESS_V2" Then
+        For i = 1 To 7
+            If Not IsEmpty(existing(i, 1)) Then Exit Function
+        Next i
+    End If
+    values(1, 1) = "TUTORIAL_PROGRESS_V2"
+    For i = 0 To 5
+        values(i + 2, 1) = session(i)
+    Next i
+    On Error GoTo SessionOnly
+    ws.Range("X12:X18").Value2 = values
+    Settings_SetTutorialProgress = True
+SessionOnly:
+End Function
+
+Public Sub Settings_ResetTutorialProgress()
+    Dim ws As Worksheet
+    mTutorialSession = Empty
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    If CStr(ws.Range("X12").Value2) = TUTORIAL_STORAGE_VERSION Then ws.Range("X12:X15").ClearContents
+    If CStr(ws.Range("X12").Value2) = "TUTORIAL_PROGRESS_V2" Then ws.Range("X12:X18").ClearContents
+End Sub
+
+
+
+
+

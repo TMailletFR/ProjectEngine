@@ -30,6 +30,28 @@ Private gDashboardLanguage As String
 Private gHotSpotHelper As String
 Private gHotSpotStep As String
 
+Public Function Dashboard_TutorialSnapshotTarget() As Range
+    Dim ws As Worksheet
+    Dim snapshots As ListObject
+    On Error GoTo Missing
+    Set snapshots = ThisWorkbook.Worksheets(DASHBOARD_SNAPSHOT_SHEET).ListObjects(DASHBOARD_SNAPSHOT_TABLE)
+    If snapshots.DataBodyRange Is Nothing Then Exit Function
+    Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
+    If Len(CStr(ws.Range(DASH_FROM_CELL).Value2)) = 0 Then Exit Function
+    Set Dashboard_TutorialSnapshotTarget = ws.Range(ws.Cells(ws.Range(DASH_FROM_CELL).Row, 2), ws.Shapes("btn_Dashboard_Refresh_Comparison").BottomRightCell)
+Missing:
+End Function
+
+Public Function Dashboard_TutorialNewSnapshotTarget() As Range
+    Dim ws As Worksheet
+    Dim button As Shape
+    On Error GoTo Missing
+    Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
+    Set button = ws.Shapes("btn_Update_Dashboard")
+    Set Dashboard_TutorialNewSnapshotTarget = ws.Range(button.TopLeftCell, button.BottomRightCell)
+Missing:
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Rafraichit Dashboard a partir de l'etat courant.
 ' EN: Refreshes Dashboard from the current state.
@@ -391,6 +413,32 @@ ErrHandler:
     CalcBridge_ShowSingleConsoleMessage "WARNING", "DASHBOARD.ERROR.COMPARISON", _
         TextCatalog_Arguments("Details", Err.Description)
 
+End Sub
+
+Public Sub Dashboard_HandleSnapshotSelectionChange(ByVal ws As Worksheet, ByVal target As Range)
+    Dim selected As Range, cell As Range
+    Dim oldEvents As Boolean
+    oldEvents = Application.EnableEvents
+    On Error GoTo Failed
+    If Not (ws.Parent Is ThisWorkbook) Then Exit Sub
+    Set selected = Application.Intersect(target, ws.Range(DASH_FROM_CELL & "," & DASH_TO_CELL))
+    If selected Is Nothing Then Exit Sub
+    For Each cell In selected.Cells
+        If cell.Validation.Type = xlValidateList Then
+            If Not cell.Validation.Value Then
+                Application.EnableEvents = False
+                Application.Undo
+                Application.EnableEvents = oldEvents
+                CalcBridge_ShowSingleConsoleMessage "STOP", "DASHBOARD.VALIDATION.SNAPSHOT.ERROR"
+                Exit Sub
+            End If
+        End If
+    Next cell
+    Exit Sub
+Failed:
+    Application.EnableEvents = oldEvents
+    CalcBridge_ShowSingleConsoleMessage "STOP", "DASHBOARD.ERROR.COMPARISON", _
+        TextCatalog_Arguments("Details", Err.Description)
 End Sub
 
 '------------------------------------------------------------------------------
@@ -1108,7 +1156,10 @@ Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selecte
         .Font.Color = RGB(20, 34, 51)
         .HorizontalAlignment = xlLeft
         .Validation.Delete
-        If Not tbl.DataBodyRange Is Nothing Then .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+        If Not tbl.DataBodyRange Is Nothing Then
+            .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+            .Validation.ShowError = False
+        End If
     End With
 
     With ws.Range("G4:H4")
@@ -1117,7 +1168,10 @@ Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selecte
         .Font.Color = RGB(20, 34, 51)
         .HorizontalAlignment = xlLeft
         .Validation.Delete
-        If Not tbl.DataBodyRange Is Nothing Then .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+        If Not tbl.DataBodyRange Is Nothing Then
+            .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+            .Validation.ShowError = False
+        End If
     End With
 
     If recreateButton Then Dashboard_AddRefreshComparisonButton ws, ws.Range("J4").Left, ws.Range("J4").Top - 1, 132, 22
