@@ -55,3 +55,15 @@ The site uses Cloudflare Web Analytics for aggregate audience and performance me
 
 The Cloudflare beacon is installed on `index.html`, `download.html`, `404.html` and `privacy.html`.
 
+
+
+## Release archive (added October 2026)
+
+- `releases/index.html` is the indexable release archive.
+- `releases/v*-*.html` are static, permanently linked summaries of significant releases.
+- GitHub remains the authoritative source for releases, full technical changelogs and downloads.
+- Release dates in structured data must only be added when their exact dates are verified.
+- When publishing a new version, add a curated HTML page, link it from `releases/index.html` and the homepage, and update `sitemap.xml`. Do not change old canonical URLs.
+- Publish a fresh `lastmod` only for genuinely updated pages.
+- Do not submit `download.html` to the sitemap: it is deliberately `noindex` and redirects to GitHub.
+- Pages are pure static HTML/CSS; no site generator or additional runtime dependency is needed.

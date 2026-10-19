@@ -2,12 +2,36 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/</loc>
-    <changefreq>monthly</changefreq>
-    <priority>1.0</priority>
   </url>
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/privacy.html</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.2</priority>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-4.html</loc>
+    <lastmod>2026-10-19</lastmod>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-3.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-2-7.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-2-6.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-2-5.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-2-0.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-1-0.html</loc>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-0-0.html</loc>
   </url>
 </urlset>
