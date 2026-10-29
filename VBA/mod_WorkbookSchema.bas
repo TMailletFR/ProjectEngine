@@ -1,15 +1,15 @@
 Attribute VB_Name = "mod_WorkbookSchema"
 Option Explicit
 
-Public Const CURRENT_SCHEMA_VERSION As Long = 1
+Public Const CURRENT_SCHEMA_VERSION As Long = 3
 Public Const PE_SCHEMA_PROPERTY As String = "ProjectEngine.SchemaVersion"
 Public Const PE_RELEASE_PROPERTY As String = "ProjectEngine.ReleaseId"
 
 Public Function WorkbookSchema_Property(ByVal wb As Workbook, ByVal key As String) As Variant
     Dim item As Object
     For Each item In wb.CustomDocumentProperties
-        If StrComp(item.Name, key, vbBinaryCompare) = 0 Then
-            WorkbookSchema_Property = item.Value
+        If StrComp(item.name, key, vbBinaryCompare) = 0 Then
+            WorkbookSchema_Property = item.value
             Exit Function
         End If
     Next item
@@ -18,8 +18,8 @@ End Function
 Public Sub WorkbookSchema_SetProperty(ByVal wb As Workbook, ByVal key As String, ByVal value As Variant)
     Dim item As Object
     For Each item In wb.CustomDocumentProperties
-        If StrComp(item.Name, key, vbBinaryCompare) = 0 Then
-            item.Value = value
+        If StrComp(item.name, key, vbBinaryCompare) = 0 Then
+            item.value = value
             Exit Sub
         End If
     Next item
@@ -33,7 +33,7 @@ End Sub
 Public Sub WorkbookSchema_DeleteProperty(ByVal wb As Workbook, ByVal key As String)
     Dim item As Object
     For Each item In wb.CustomDocumentProperties
-        If StrComp(item.Name, key, vbBinaryCompare) = 0 Then
+        If StrComp(item.name, key, vbBinaryCompare) = 0 Then
             item.Delete
             Exit Sub
         End If
@@ -88,3 +88,5 @@ Public Function WorkbookSchema_OpenAllowed() As Boolean
         MsgBox Migration_Text("MIGRATION.BLOCKED"), vbExclamation, Migration_Text("MIGRATION.TITLE")
     End If
 End Function
+
+

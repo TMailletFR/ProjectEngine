@@ -7,7 +7,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
-    Option Explicit
+Option Explicit
 
 '===============================================================================
 ' MODULE : clsAppEvents
@@ -33,14 +33,16 @@ Attribute App.VB_VarHelpID = -1
 ' FR: Relaye les changements de feuilles du classeur vers le dispatcher central.
 ' EN: Routes workbook sheet changes to the central dispatcher.
 '------------------------------------------------------------------------------
-    Private Sub App_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+    Private Sub App_SheetChange(ByVal Sh As Object, ByVal target As Range)
         If Sh Is Nothing Then Exit Sub
-        If Target Is Nothing Then Exit Sub
-        If Not (Sh.Parent Is ThisWorkbook) Then Exit Sub
+        If target Is Nothing Then Exit Sub
+        If Not (Sh.parent Is ThisWorkbook) Then Exit Sub
 
-        Handle_Worksheet_Change Sh, Target
+        Handle_Worksheet_Change Sh, target
     
     End Sub
+
     
     
+
 

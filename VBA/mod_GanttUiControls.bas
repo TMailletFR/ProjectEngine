@@ -140,8 +140,8 @@ End Sub
 '------------------------------------------------------------------------------
 Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
-    Dim x As Double
-    Dim y As Double
+    Dim X As Double
+    Dim Y As Double
 
     Dim groupGap As Double
     Dim trackGap As Double
@@ -157,8 +157,8 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
     Dim trackH As Double
     Dim knobSize As Double
 
-    x = ws.cells(TOGGLE_ROW_TOP, COL_WBS).Left + 5
-    y = ws.cells(TOGGLE_ROW_TOP, COL_WBS).Top + 3
+    X = ws.cells(TOGGLE_ROW_TOP, COL_WBS).left + 5
+    Y = ws.cells(TOGGLE_ROW_TOP, COL_WBS).top + 3
 
     trackGap = 7
     groupGap = 25
@@ -185,41 +185,41 @@ Private Sub BuildFixedHeaderToggles(ByVal ws As Worksheet)
 
     CreateFixedHeaderToggle ws, _
         BTN_VIEW_LEFT_NAME, BTN_VIEW_BG_NAME, BTN_VIEW_KNOB_NAME, _
-        x, y, labelW1, TextCatalog_Get("GANTT.CONTROL.VIEW", Gantt_CurrentLanguage()), _
-        x + labelW1 + trackGap, y + 2, trackW, trackH, knobSize, _
+        X, Y, labelW1, TextCatalog_Get("GANTT.CONTROL.VIEW", Gantt_CurrentLanguage()), _
+        X + labelW1 + trackGap, Y + 2, trackW, trackH, knobSize, _
         "Toggle_Gantt_View"
 
-    x = x + labelW1 + trackGap + trackW + groupGap
+    X = X + labelW1 + trackGap + trackW + groupGap
 
     ThreePositionControl_Ensure ws, _
         BTN_SCALE_LEFT_NAME, BTN_SCALE_BG_NAME, BTN_SCALE_KNOB_NAME, _
-        x, y, labelW3, TextCatalog_Get("GANTT.CONTROL.SCALE", Gantt_CurrentLanguage()), _
-        x + labelW3 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
+        X, Y, labelW3, TextCatalog_Get("GANTT.CONTROL.SCALE", Gantt_CurrentLanguage()), _
+        X + labelW3 + trackGap, Y + 2, analyticsTrackW, trackH, knobSize, _
         "Toggle_Gantt_Scale"
 
-    x = x + labelW3 + trackGap + analyticsTrackW + groupGap
+    X = X + labelW3 + trackGap + analyticsTrackW + groupGap
 
     CreateFixedHeaderToggle ws, _
         BTN_CONSTRAINT_LEFT_NAME, BTN_CONSTRAINT_BG_NAME, BTN_CONSTRAINT_KNOB_NAME, _
-        x, y, labelW5, TextCatalog_Get("GANTT.CONTROL.CONSTRAINT", Gantt_CurrentLanguage()), _
-        x + labelW5 + trackGap, y + 2, trackW, trackH, knobSize, _
+        X, Y, labelW5, TextCatalog_Get("GANTT.CONTROL.CONSTRAINT", Gantt_CurrentLanguage()), _
+        X + labelW5 + trackGap, Y + 2, trackW, trackH, knobSize, _
         "Toggle_Gantt_Constraints"
 
-    x = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Left + 5
-    y = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).Top + 3
+    X = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).left + 5
+    Y = ws.cells(TOGGLE_ROW_BOTTOM, COL_WBS).top + 3
 
     ThreePositionControl_Ensure ws, _
         BTN_CP_LEFT_NAME, BTN_CP_BG_NAME, BTN_CP_KNOB_NAME, _
-        x, y, labelW2, TextCatalog_Get("GANTT.CONTROL.PATH", Gantt_CurrentLanguage()), _
-        x + labelW2 + trackGap, y + 2, analyticsTrackW, trackH, knobSize, _
+        X, Y, labelW2, TextCatalog_Get("GANTT.CONTROL.PATH", Gantt_CurrentLanguage()), _
+        X + labelW2 + trackGap, Y + 2, analyticsTrackW, trackH, knobSize, _
         "Toggle_Gantt_CriticalPath"
 
-    x = x + labelW2 + trackGap + analyticsTrackW + groupGap
+    X = X + labelW2 + trackGap + analyticsTrackW + groupGap
 
     CreateFixedHeaderToggle ws, _
         BTN_CP_MULTI_LEFT_NAME, BTN_CP_MULTI_BG_NAME, BTN_CP_MULTI_KNOB_NAME, _
-        x, y, labelW4, TextCatalog_Get("GANTT.CONTROL.MULTI_PROJECT", Gantt_CurrentLanguage()), _
-        x + labelW4 + trackGap, y + 2, trackW, trackH, knobSize, _
+        X, Y, labelW4, TextCatalog_Get("GANTT.CONTROL.MULTI_PROJECT", Gantt_CurrentLanguage()), _
+        X + labelW4 + trackGap, Y + 2, trackW, trackH, knobSize, _
         "Toggle_CriticalPathMode_FromGantt"
 
 End Sub
@@ -228,7 +228,7 @@ End Sub
 ' FR: Met en forme ou met a jour un element UI/shape du GANTT.
 ' EN: Formats or updates a GANTT UI/shape element.
 '------------------------------------------------------------------------------
-Private Sub CreateFixedHeaderToggle( _
+Public Sub CreateFixedHeaderToggle( _
     ByVal ws As Worksheet, _
     ByVal labelName As String, _
     ByVal bgName As String, _
@@ -244,9 +244,9 @@ Private Sub CreateFixedHeaderToggle( _
     ByVal knobSize As Double, _
     ByVal macroName As String)
 
-    Dim shpLabel As Shape
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
+    Dim shpLabel As shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
     Dim knobTop As Double
     Dim labelCreated As Boolean
 
@@ -256,7 +256,7 @@ Private Sub CreateFixedHeaderToggle( _
 
     If shpLabel Is Nothing Then
         Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
-        shpLabel.Name = labelName
+        shpLabel.name = labelName
         labelCreated = True
     End If
 
@@ -264,7 +264,7 @@ Private Sub CreateFixedHeaderToggle( _
         GanttUiControls_SetShapeGeometry shpLabel, labelLeft, labelTop, labelWidth, trackHeight + 4
         If .Visible <> msoTrue Then .Visible = msoTrue
         If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
-        If .Fill.Visible <> msoFalse Then .Fill.Visible = msoFalse
+        If .fill.Visible <> msoFalse Then .fill.Visible = msoFalse
         If CStr(.OnAction) <> "" Then .OnAction = ""
         If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
         If .TextFrame2.VerticalAnchor <> msoAnchorMiddle Then .TextFrame2.VerticalAnchor = msoAnchorMiddle
@@ -272,16 +272,16 @@ Private Sub CreateFixedHeaderToggle( _
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginRight, 0) Then .TextFrame2.MarginRight = 0
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginTop, 0) Then .TextFrame2.MarginTop = 0
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginBottom, 0) Then .TextFrame2.MarginBottom = 0
-        If labelCreated Then .TextFrame2.TextRange.Text = labelText
-        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.Font.Size, 9.5) Then .TextFrame2.TextRange.Font.Size = 9.5
-        If .TextFrame2.TextRange.Font.Bold <> msoTrue Then .TextFrame2.TextRange.Font.Bold = msoTrue
-        If .TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+        If labelCreated Then .TextFrame2.TextRange.text = labelText
+        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.font.size, 9.5) Then .TextFrame2.TextRange.font.size = 9.5
+        If .TextFrame2.TextRange.font.bold <> msoTrue Then .TextFrame2.TextRange.font.bold = msoTrue
+        If .TextFrame2.TextRange.font.fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(0, 0, 0)
         If .TextFrame2.TextRange.ParagraphFormat.alignment <> msoAlignLeft Then .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     If shpBg Is Nothing Then
         Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
-        shpBg.Name = bgName
+        shpBg.name = bgName
     End If
 
     With shpBg
@@ -290,7 +290,7 @@ Private Sub CreateFixedHeaderToggle( _
         If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.5) Then .Adjustments.item(1) = 0.5
         If CStr(.OnAction) <> macroName Then .OnAction = macroName
         If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
-        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .fill.Visible <> msoTrue Then .fill.Visible = msoTrue
         If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
@@ -298,15 +298,15 @@ Private Sub CreateFixedHeaderToggle( _
 
     If shpKnob Is Nothing Then
         Set shpKnob = ws.Shapes.AddShape(msoShapeOval, trackLeft + 2, knobTop, knobSize, knobSize)
-        shpKnob.Name = knobName
+        shpKnob.name = knobName
     End If
 
     With shpKnob
-        GanttUiControls_SetShapeGeometry shpKnob, .Left, knobTop, knobSize, knobSize
+        GanttUiControls_SetShapeGeometry shpKnob, .left, knobTop, knobSize, knobSize
         If .Visible <> msoTrue Then .Visible = msoTrue
         If CStr(.OnAction) <> macroName Then .OnAction = macroName
         If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
-        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .fill.Visible <> msoTrue Then .fill.Visible = msoTrue
         If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
@@ -333,9 +333,9 @@ Public Sub ThreePositionControl_Ensure( _
     ByVal macroName As String, _
     Optional ByVal shapePlacement As XlPlacement = xlMoveAndSize)
 
-    Dim shpLabel As Shape
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
+    Dim shpLabel As shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
     Dim knobTop As Double
     Dim labelCreated As Boolean
 
@@ -345,7 +345,7 @@ Public Sub ThreePositionControl_Ensure( _
 
     If shpLabel Is Nothing Then
         Set shpLabel = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, labelLeft, labelTop, labelWidth, trackHeight + 4)
-        shpLabel.Name = labelName
+        shpLabel.name = labelName
         labelCreated = True
     End If
 
@@ -353,7 +353,7 @@ Public Sub ThreePositionControl_Ensure( _
         GanttUiControls_SetShapeGeometry shpLabel, labelLeft, labelTop, labelWidth, trackHeight + 4
         If .Visible <> msoTrue Then .Visible = msoTrue
         If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
-        If .Fill.Visible <> msoFalse Then .Fill.Visible = msoFalse
+        If .fill.Visible <> msoFalse Then .fill.Visible = msoFalse
         If CStr(.OnAction) <> "" Then .OnAction = ""
         If .Placement <> shapePlacement Then .Placement = shapePlacement
         If .TextFrame2.VerticalAnchor <> msoAnchorMiddle Then .TextFrame2.VerticalAnchor = msoAnchorMiddle
@@ -361,16 +361,16 @@ Public Sub ThreePositionControl_Ensure( _
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginRight, 0) Then .TextFrame2.MarginRight = 0
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginTop, 0) Then .TextFrame2.MarginTop = 0
         If GanttUiControls_DoubleDiffers(.TextFrame2.MarginBottom, 0) Then .TextFrame2.MarginBottom = 0
-        If labelCreated Then .TextFrame2.TextRange.Text = labelText
-        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.Font.Size, 9) Then .TextFrame2.TextRange.Font.Size = 9
-        If .TextFrame2.TextRange.Font.Bold <> msoTrue Then .TextFrame2.TextRange.Font.Bold = msoTrue
-        If .TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(0, 0, 0)
+        If labelCreated Then .TextFrame2.TextRange.text = labelText
+        If GanttUiControls_DoubleDiffers(.TextFrame2.TextRange.font.size, 9) Then .TextFrame2.TextRange.font.size = 9
+        If .TextFrame2.TextRange.font.bold <> msoTrue Then .TextFrame2.TextRange.font.bold = msoTrue
+        If .TextFrame2.TextRange.font.fill.ForeColor.RGB <> RGB(0, 0, 0) Then .TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(0, 0, 0)
         If .TextFrame2.TextRange.ParagraphFormat.alignment <> msoAlignLeft Then .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     If shpBg Is Nothing Then
         Set shpBg = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, trackTop, trackWidth, trackHeight)
-        shpBg.Name = bgName
+        shpBg.name = bgName
     End If
 
     With shpBg
@@ -379,7 +379,7 @@ Public Sub ThreePositionControl_Ensure( _
         If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.5) Then .Adjustments.item(1) = 0.5
         If CStr(.OnAction) <> macroName Then .OnAction = macroName
         If .Placement <> shapePlacement Then .Placement = shapePlacement
-        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .fill.Visible <> msoTrue Then .fill.Visible = msoTrue
         If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
@@ -387,15 +387,15 @@ Public Sub ThreePositionControl_Ensure( _
 
     If shpKnob Is Nothing Then
         Set shpKnob = ws.Shapes.AddShape(msoShapeOval, trackLeft + 2, knobTop, knobSize, knobSize)
-        shpKnob.Name = knobName
+        shpKnob.name = knobName
     End If
 
     With shpKnob
-        GanttUiControls_SetShapeGeometry shpKnob, .Left, knobTop, knobSize, knobSize
+        GanttUiControls_SetShapeGeometry shpKnob, .left, knobTop, knobSize, knobSize
         If .Visible <> msoTrue Then .Visible = msoTrue
         If CStr(.OnAction) <> macroName Then .OnAction = macroName
         If .Placement <> shapePlacement Then .Placement = shapePlacement
-        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .fill.Visible <> msoTrue Then .fill.Visible = msoTrue
         If .Line.Visible <> msoTrue Then .Line.Visible = msoTrue
     End With
 
@@ -447,14 +447,14 @@ End Sub
 ' FR: Met en forme ou met a jour un element UI/shape du GANTT.
 ' EN: Formats or updates a GANTT UI/shape element.
 '------------------------------------------------------------------------------
-Private Sub RefreshFixedHeaderToggleVisual( _
+Public Sub RefreshFixedHeaderToggleVisual( _
     ByVal ws As Worksheet, _
     ByVal bgName As String, _
     ByVal knobName As String, _
     ByVal isOn As Boolean)
 
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
     Dim knobLeft As Double
     Dim knobTop As Double
     Dim onColor As Long
@@ -470,24 +470,24 @@ Private Sub RefreshFixedHeaderToggleVisual( _
     If shpKnob Is Nothing Then Exit Sub
 
     If isOn Then
-        If shpBg.Fill.ForeColor.RGB <> onColor Then shpBg.Fill.ForeColor.RGB = onColor
+        If shpBg.fill.ForeColor.RGB <> onColor Then shpBg.fill.ForeColor.RGB = onColor
         If shpBg.Line.ForeColor.RGB <> onColor Then shpBg.Line.ForeColor.RGB = onColor
-        knobLeft = shpBg.Left + shpBg.Width - shpKnob.Width - 2
+        knobLeft = shpBg.left + shpBg.width - shpKnob.width - 2
     Else
-        If shpBg.Fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        If shpBg.fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.fill.ForeColor.RGB = RGB(230, 230, 230)
         If shpBg.Line.ForeColor.RGB <> RGB(170, 170, 170) Then shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
-        knobLeft = shpBg.Left + 2
+        knobLeft = shpBg.left + 2
     End If
 
-    If GanttUiControls_DoubleDiffers(shpBg.Line.Weight, 1) Then shpBg.Line.Weight = 1
+    If GanttUiControls_DoubleDiffers(shpBg.Line.weight, 1) Then shpBg.Line.weight = 1
     If shpBg.Shadow.Visible <> msoFalse Then shpBg.Shadow.Visible = msoFalse
-    If shpKnob.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    If shpKnob.fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.fill.ForeColor.RGB = RGB(255, 255, 255)
     If shpKnob.Line.ForeColor.RGB <> RGB(150, 150, 150) Then shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
-    If GanttUiControls_DoubleDiffers(shpKnob.Line.Weight, 0.75) Then shpKnob.Line.Weight = 0.75
+    If GanttUiControls_DoubleDiffers(shpKnob.Line.weight, 0.75) Then shpKnob.Line.weight = 0.75
     If shpKnob.Shadow.Visible <> msoFalse Then shpKnob.Shadow.Visible = msoFalse
-    If GanttUiControls_DoubleDiffers(shpKnob.Left, knobLeft) Then shpKnob.Left = knobLeft
-    knobTop = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
-    If GanttUiControls_DoubleDiffers(shpKnob.Top, knobTop) Then shpKnob.Top = knobTop
+    If GanttUiControls_DoubleDiffers(shpKnob.left, knobLeft) Then shpKnob.left = knobLeft
+    knobTop = shpBg.top + ((shpBg.height - shpKnob.height) / 2)
+    If GanttUiControls_DoubleDiffers(shpKnob.top, knobTop) Then shpKnob.top = knobTop
 
 End Sub
 
@@ -538,8 +538,8 @@ Public Sub ThreePositionControl_Refresh( _
     ByVal knobName As String, _
     ByVal positionIndex As Long)
 
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
     Dim knobLeft As Double
     Dim knobTop As Double
     Dim onColor As Long
@@ -559,30 +559,30 @@ Public Sub ThreePositionControl_Refresh( _
 
     Select Case positionIndex
         Case 2
-            knobLeft = shpBg.Left + shpBg.Width - shpKnob.Width - 2
+            knobLeft = shpBg.left + shpBg.width - shpKnob.width - 2
         Case 1
-            knobLeft = shpBg.Left + ((shpBg.Width - shpKnob.Width) / 2)
+            knobLeft = shpBg.left + ((shpBg.width - shpKnob.width) / 2)
         Case Else
-            knobLeft = shpBg.Left + 2
+            knobLeft = shpBg.left + 2
     End Select
 
     If positionIndex = 0 Then
-        If shpBg.Fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.Fill.ForeColor.RGB = RGB(230, 230, 230)
+        If shpBg.fill.ForeColor.RGB <> RGB(230, 230, 230) Then shpBg.fill.ForeColor.RGB = RGB(230, 230, 230)
         If shpBg.Line.ForeColor.RGB <> RGB(170, 170, 170) Then shpBg.Line.ForeColor.RGB = RGB(170, 170, 170)
     Else
-        If shpBg.Fill.ForeColor.RGB <> onColor Then shpBg.Fill.ForeColor.RGB = onColor
+        If shpBg.fill.ForeColor.RGB <> onColor Then shpBg.fill.ForeColor.RGB = onColor
         If shpBg.Line.ForeColor.RGB <> onColor Then shpBg.Line.ForeColor.RGB = onColor
     End If
 
-    If GanttUiControls_DoubleDiffers(shpBg.Line.Weight, 1) Then shpBg.Line.Weight = 1
+    If GanttUiControls_DoubleDiffers(shpBg.Line.weight, 1) Then shpBg.Line.weight = 1
     If shpBg.Shadow.Visible <> msoFalse Then shpBg.Shadow.Visible = msoFalse
-    If shpKnob.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    If shpKnob.fill.ForeColor.RGB <> RGB(255, 255, 255) Then shpKnob.fill.ForeColor.RGB = RGB(255, 255, 255)
     If shpKnob.Line.ForeColor.RGB <> RGB(150, 150, 150) Then shpKnob.Line.ForeColor.RGB = RGB(150, 150, 150)
-    If GanttUiControls_DoubleDiffers(shpKnob.Line.Weight, 0.75) Then shpKnob.Line.Weight = 0.75
+    If GanttUiControls_DoubleDiffers(shpKnob.Line.weight, 0.75) Then shpKnob.Line.weight = 0.75
     If shpKnob.Shadow.Visible <> msoFalse Then shpKnob.Shadow.Visible = msoFalse
-    If GanttUiControls_DoubleDiffers(shpKnob.Left, knobLeft) Then shpKnob.Left = knobLeft
-    knobTop = shpBg.Top + ((shpBg.Height - shpKnob.Height) / 2)
-    If GanttUiControls_DoubleDiffers(shpKnob.Top, knobTop) Then shpKnob.Top = knobTop
+    If GanttUiControls_DoubleDiffers(shpKnob.left, knobLeft) Then shpKnob.left = knobLeft
+    knobTop = shpBg.top + ((shpBg.height - shpKnob.height) / 2)
+    If GanttUiControls_DoubleDiffers(shpKnob.top, knobTop) Then shpKnob.top = knobTop
 
 End Sub
 
@@ -592,7 +592,7 @@ End Sub
 '------------------------------------------------------------------------------
 Private Sub DeleteShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     On Error Resume Next
     Set shp = ws.Shapes(shapeName)
@@ -616,7 +616,7 @@ Private Sub CreateOrUpdateGanttButton( _
     ByVal widthVal As Double, _
     ByVal heightVal As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
     Dim shapeCreated As Boolean
 
     Set shp = GetShapeIfExists(ws, shpName)
@@ -625,7 +625,7 @@ Private Sub CreateOrUpdateGanttButton( _
 
     If shp Is Nothing Then
         Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, leftPos, topPos, widthVal, heightVal)
-        shp.Name = shpName
+        shp.name = shpName
         shapeCreated = True
     End If
 
@@ -636,7 +636,7 @@ Private Sub CreateOrUpdateGanttButton( _
     With shp
         If GanttUiControls_DoubleDiffers(.Adjustments.item(1), 0.25) Then .Adjustments.item(1) = 0.25
         If .Placement <> xlMoveAndSize Then .Placement = xlMoveAndSize
-        If .Fill.Visible <> msoTrue Then .Fill.Visible = msoTrue
+        If .fill.Visible <> msoTrue Then .fill.Visible = msoTrue
         If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
         If .Shadow.Visible <> msoTrue Then .Shadow.Visible = msoTrue
         If GanttUiControls_DoubleDiffers(.Shadow.Blur, 6) Then .Shadow.Blur = 6
@@ -646,9 +646,9 @@ Private Sub CreateOrUpdateGanttButton( _
     End With
 
     With shp.TextFrame2
-        If shapeCreated Then .TextRange.Text = captionText
-        If GanttUiControls_DoubleDiffers(.TextRange.Font.Size, 10) Then .TextRange.Font.Size = 10
-        If .TextRange.Font.Bold <> msoTrue Then .TextRange.Font.Bold = msoTrue
+        If shapeCreated Then .TextRange.text = captionText
+        If GanttUiControls_DoubleDiffers(.TextRange.font.size, 10) Then .TextRange.font.size = 10
+        If .TextRange.font.bold <> msoTrue Then .TextRange.font.bold = msoTrue
         If .VerticalAnchor <> msoAnchorMiddle Then .VerticalAnchor = msoAnchorMiddle
         If GanttUiControls_DoubleDiffers(.MarginLeft, 0) Then .MarginLeft = 0
         If GanttUiControls_DoubleDiffers(.MarginRight, 0) Then .MarginRight = 0
@@ -659,16 +659,16 @@ Private Sub CreateOrUpdateGanttButton( _
 
     Select Case shpName
         Case BTN_RESET_NAME
-            If shp.Fill.ForeColor.RGB <> RGB(96, 111, 128) Then shp.Fill.ForeColor.RGB = RGB(96, 111, 128)
-            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+            If shp.fill.ForeColor.RGB <> RGB(96, 111, 128) Then shp.fill.ForeColor.RGB = RGB(96, 111, 128)
+            If shp.TextFrame2.TextRange.font.fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
 
         Case BTN_SCENARIO_NAME, BTN_LOCK_NAME
-            If shp.Fill.ForeColor.RGB <> RGB(192, 0, 0) Then shp.Fill.ForeColor.RGB = RGB(192, 0, 0)
-            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+            If shp.fill.ForeColor.RGB <> RGB(192, 0, 0) Then shp.fill.ForeColor.RGB = RGB(192, 0, 0)
+            If shp.TextFrame2.TextRange.font.fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
 
         Case BTN_TEST_NAME
-            If shp.Fill.ForeColor.RGB <> RGB(112, 173, 71) Then shp.Fill.ForeColor.RGB = RGB(112, 173, 71)
-            If shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+            If shp.fill.ForeColor.RGB <> RGB(112, 173, 71) Then shp.fill.ForeColor.RGB = RGB(112, 173, 71)
+            If shp.TextFrame2.TextRange.font.fill.ForeColor.RGB <> RGB(255, 255, 255) Then shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
     End Select
 
 End Sub
@@ -678,7 +678,7 @@ End Sub
 ' EN: Corrects only shape dimensions that differ from the contract.
 '------------------------------------------------------------------------------
 Private Sub GanttUiControls_SetShapeGeometry( _
-    ByVal shp As Shape, _
+    ByVal shp As shape, _
     ByVal expectedLeft As Double, _
     ByVal expectedTop As Double, _
     ByVal expectedWidth As Double, _
@@ -686,10 +686,10 @@ Private Sub GanttUiControls_SetShapeGeometry( _
 
     If shp Is Nothing Then Exit Sub
 
-    If GanttUiControls_DoubleDiffers(shp.Left, expectedLeft) Then shp.Left = expectedLeft
-    If GanttUiControls_DoubleDiffers(shp.Top, expectedTop) Then shp.Top = expectedTop
-    If GanttUiControls_DoubleDiffers(shp.Width, expectedWidth) Then shp.Width = expectedWidth
-    If GanttUiControls_DoubleDiffers(shp.Height, expectedHeight) Then shp.Height = expectedHeight
+    If GanttUiControls_DoubleDiffers(shp.left, expectedLeft) Then shp.left = expectedLeft
+    If GanttUiControls_DoubleDiffers(shp.top, expectedTop) Then shp.top = expectedTop
+    If GanttUiControls_DoubleDiffers(shp.width, expectedWidth) Then shp.width = expectedWidth
+    If GanttUiControls_DoubleDiffers(shp.height, expectedHeight) Then shp.height = expectedHeight
 
 End Sub
 
@@ -722,9 +722,9 @@ Private Sub EnsureOrUpdateCompactToggleSwitch( _
     ByVal isOn As Boolean, _
     ByVal macroName As String)
 
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
-    Dim shpLeft As Shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
+    Dim shpLeft As shape
 
     Dim groupLeft As Double
     Dim groupTop As Double
@@ -751,10 +751,10 @@ Private Sub EnsureOrUpdateCompactToggleSwitch( _
     trackHeight = 14
     knobSize = 9
 
-    groupLeft = leftCell.Left + 4
-    groupTop = leftCell.Top + 2
-    groupWidth = (rightCell.Left + rightCell.Width) - groupLeft - 2
-    groupHeight = leftCell.Height - 4
+    groupLeft = leftCell.left + 4
+    groupTop = leftCell.top + 2
+    groupWidth = (rightCell.left + rightCell.width) - groupLeft - 2
+    groupHeight = leftCell.height - 4
 
     gapBeforeTrack = 4
     leftLabelWidth = groupWidth - trackWidth - gapBeforeTrack
@@ -782,44 +782,44 @@ Private Sub EnsureOrUpdateCompactToggleSwitch( _
         Set shpLeft = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, groupLeft, groupTop, leftLabelWidth, groupHeight)
     End If
 
-    shpBg.Name = bgName
-    shpKnob.Name = knobName
-    shpLeft.Name = leftName
+    shpBg.name = bgName
+    shpKnob.name = knobName
+    shpLeft.name = leftName
 
     With shpBg
-        .Left = trackLeft
-        .Top = trackTop
-        .Width = trackWidth
-        .Height = trackHeight
+        .left = trackLeft
+        .top = trackTop
+        .width = trackWidth
+        .height = trackHeight
         .Adjustments.item(1) = 0.5
         .OnAction = macroName
         .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(230, 230, 230)
+        .fill.ForeColor.RGB = RGB(230, 230, 230)
         .Line.ForeColor.RGB = RGB(170, 170, 170)
-        .Line.Weight = 0.75
+        .Line.weight = 0.75
         .Shadow.Visible = msoFalse
     End With
 
     With shpKnob
-        .Left = knobLeft
-        .Top = knobTop
-        .Width = knobSize
-        .Height = knobSize
+        .left = knobLeft
+        .top = knobTop
+        .width = knobSize
+        .height = knobSize
         .OnAction = macroName
         .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(150, 150, 150)
-        .Line.Weight = 0.5
+        .Line.weight = 0.5
         .Shadow.Visible = msoFalse
     End With
 
     With shpLeft
-        .Left = groupLeft
-        .Top = groupTop
-        .Width = leftLabelWidth
-        .Height = groupHeight
+        .left = groupLeft
+        .top = groupTop
+        .width = leftLabelWidth
+        .height = groupHeight
         .Line.Visible = msoFalse
-        .Fill.Visible = msoFalse
+        .fill.Visible = msoFalse
         .OnAction = macroName
         .Placement = xlMoveAndSize
         .TextFrame2.VerticalAnchor = msoAnchorMiddle
@@ -827,16 +827,16 @@ Private Sub EnsureOrUpdateCompactToggleSwitch( _
         .TextFrame2.MarginRight = 0
         .TextFrame2.MarginTop = 0
         .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = leftText
-        .TextFrame2.TextRange.Font.Size = 8.5
-        .TextFrame2.TextRange.Font.Bold = msoTrue
+        .TextFrame2.TextRange.text = leftText
+        .TextFrame2.TextRange.font.size = 8.5
+        .TextFrame2.TextRange.font.bold = msoTrue
         .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
     End With
 
     If isOn Then
-        shpLeft.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(90, 90, 90)
+        shpLeft.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(90, 90, 90)
     Else
-        shpLeft.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(68, 114, 196)
+        shpLeft.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(68, 114, 196)
     End If
 
 End Sub
@@ -845,7 +845,7 @@ End Sub
 ' FR: Retourne une valeur d'etat ou une reference utilisee par le rendu GANTT.
 ' EN: Returns a state value or reference used by GANTT rendering.
 '------------------------------------------------------------------------------
-Private Function GetShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String) As Shape
+Private Function GetShapeIfExists(ByVal ws As Worksheet, ByVal shapeName As String) As shape
 
     On Error Resume Next
     Set GetShapeIfExists = ws.Shapes(shapeName)
@@ -871,10 +871,10 @@ Private Sub EnsureOrUpdateToggleSwitch( _
     ByVal isOn As Boolean, _
     ByVal macroName As String)
 
-    Dim shpBg As Shape
-    Dim shpKnob As Shape
-    Dim shpLeft As Shape
-    Dim shpRight As Shape
+    Dim shpBg As shape
+    Dim shpKnob As shape
+    Dim shpLeft As shape
+    Dim shpRight As shape
 
     Dim groupLeft As Double
     Dim groupTop As Double
@@ -904,29 +904,29 @@ Private Sub EnsureOrUpdateToggleSwitch( _
     knobSize = 14
 
     If bgName = BTN_CP_BG_NAME Then
-        groupLeft = leftCell.Left + 20
+        groupLeft = leftCell.left + 20
         leftLabelWidth = 88
         rightLabelWidth = 24
         gapBeforeTrack = 10
         gapAfterTrack = 8
 
     ElseIf bgName = BTN_SCALE_BG_NAME Then
-        groupLeft = leftCell.Left + 80
+        groupLeft = leftCell.left + 80
         leftLabelWidth = 26
         rightLabelWidth = 40
         gapBeforeTrack = 10
         gapAfterTrack = 8
 
     Else
-        groupLeft = leftCell.Left + 10
+        groupLeft = leftCell.left + 10
         leftLabelWidth = 34
         rightLabelWidth = 42
         gapBeforeTrack = 8
         gapAfterTrack = 8
     End If
 
-    groupTop = leftCell.Top + 2
-    groupHeight = leftCell.Height - 4
+    groupTop = leftCell.top + 2
+    groupHeight = leftCell.height - 4
 
     trackLeft = groupLeft + leftLabelWidth + gapBeforeTrack
     trackTop = groupTop + ((groupHeight - trackHeight) / 2)
@@ -954,10 +954,10 @@ Private Sub EnsureOrUpdateToggleSwitch( _
         Set shpRight = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, trackLeft + trackWidth + gapAfterTrack, groupTop, rightLabelWidth, groupHeight)
     End If
 
-    shpBg.Name = bgName
-    shpKnob.Name = knobName
-    shpLeft.Name = leftName
-    shpRight.Name = rightName
+    shpBg.name = bgName
+    shpKnob.name = knobName
+    shpLeft.name = leftName
+    shpRight.name = rightName
 
     FormatToggleTrack shpBg, trackLeft, trackTop, macroName
     FormatToggleKnob shpKnob, knobLeft, knobTop, macroName
@@ -965,11 +965,11 @@ Private Sub EnsureOrUpdateToggleSwitch( _
     FormatToggleLabel shpRight, trackLeft + trackWidth + gapAfterTrack, groupTop, rightLabelWidth, groupHeight, rightText, macroName
 
     If isOn Then
-        shpRight.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(68, 114, 196)
-        shpLeft.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(90, 90, 90)
+        shpRight.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(68, 114, 196)
+        shpLeft.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(90, 90, 90)
     Else
-        shpLeft.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(68, 114, 196)
-        shpRight.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(90, 90, 90)
+        shpLeft.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(68, 114, 196)
+        shpRight.TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(90, 90, 90)
     End If
 
 End Sub
@@ -979,22 +979,22 @@ End Sub
 ' EN: Formats or updates a GANTT UI/shape element.
 '------------------------------------------------------------------------------
 Private Sub FormatToggleTrack( _
-    ByVal shp As Shape, _
+    ByVal shp As shape, _
     ByVal leftPos As Double, _
     ByVal topPos As Double, _
     ByVal macroName As String)
 
     With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = 42
-        .Height = 20
+        .left = leftPos
+        .top = topPos
+        .width = 42
+        .height = 20
         .Adjustments.item(1) = 0.5
         .OnAction = macroName
         .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(230, 230, 230)
+        .fill.ForeColor.RGB = RGB(230, 230, 230)
         .Line.ForeColor.RGB = RGB(170, 170, 170)
-        .Line.Weight = 1
+        .Line.weight = 1
         .Shadow.Visible = msoFalse
     End With
 
@@ -1005,21 +1005,21 @@ End Sub
 ' EN: Formats or updates a GANTT UI/shape element.
 '------------------------------------------------------------------------------
 Private Sub FormatToggleKnob( _
-    ByVal shp As Shape, _
+    ByVal shp As shape, _
     ByVal leftPos As Double, _
     ByVal topPos As Double, _
     ByVal macroName As String)
 
     With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = 14
-        .Height = 14
+        .left = leftPos
+        .top = topPos
+        .width = 14
+        .height = 14
         .OnAction = macroName
         .Placement = xlMoveAndSize
-        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(150, 150, 150)
-        .Line.Weight = 0.75
+        .Line.weight = 0.75
         .Shadow.Visible = msoTrue
         .Shadow.Blur = 4
         .Shadow.OffsetX = 0
@@ -1034,7 +1034,7 @@ End Sub
 ' EN: Formats or updates a GANTT UI/shape element.
 '------------------------------------------------------------------------------
 Private Sub FormatToggleLabel( _
-    ByVal shp As Shape, _
+    ByVal shp As shape, _
     ByVal leftPos As Double, _
     ByVal topPos As Double, _
     ByVal widthVal As Double, _
@@ -1043,12 +1043,12 @@ Private Sub FormatToggleLabel( _
     ByVal macroName As String)
 
     With shp
-        .Left = leftPos
-        .Top = topPos
-        .Width = widthVal
-        .Height = heightVal
+        .left = leftPos
+        .top = topPos
+        .width = widthVal
+        .height = heightVal
         .Line.Visible = msoFalse
-        .Fill.Visible = msoFalse
+        .fill.Visible = msoFalse
         .OnAction = macroName
         .Placement = xlMoveAndSize
         .TextFrame2.VerticalAnchor = msoAnchorMiddle
@@ -1056,10 +1056,12 @@ Private Sub FormatToggleLabel( _
         .TextFrame2.MarginRight = 0
         .TextFrame2.MarginTop = 0
         .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = labelText
-        .TextFrame2.TextRange.Font.Size = 9.5
-        .TextFrame2.TextRange.Font.Bold = msoTrue
+        .TextFrame2.TextRange.text = labelText
+        .TextFrame2.TextRange.font.size = 9.5
+        .TextFrame2.TextRange.font.bold = msoTrue
         .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
     End With
 
 End Sub
+
+

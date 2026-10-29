@@ -62,8 +62,8 @@ Public Sub VisibleHeaders_RestoreSnapshot(ByVal snapshot As Object)
         Set tableObject = VisibleHeaders_FindTable(CStr(tableKey))
         keys = tableSnapshot("ColumnKeys")
         For i = LBound(keys) To UBound(keys)
-            If tableObject.ListColumns(i + 1).Name <> CStr(tableSnapshot("Header:" & CStr(i + 1))) Then
-                tableObject.ListColumns(i + 1).Name = CStr(tableSnapshot("Header:" & CStr(i + 1)))
+            If tableObject.ListColumns(i + 1).name <> CStr(tableSnapshot("Header:" & CStr(i + 1))) Then
+                tableObject.ListColumns(i + 1).name = CStr(tableSnapshot("Header:" & CStr(i + 1)))
             End If
         Next i
         Schema_SetPhysicalHeaderLanguageOverride CStr(tableKey), CStr(tableSnapshot("PhysicalLanguage"))
@@ -100,8 +100,8 @@ Public Function VisibleHeaders_HeaderHash(ByVal tableKey As String) As String
     Dim textValue As String
 
     Set tableObject = VisibleHeaders_FindTable(tableKey)
-    For i = 1 To tableObject.ListColumns.Count
-        textValue = textValue & "|" & tableObject.ListColumns(i).Name
+    For i = 1 To tableObject.ListColumns.count
+        textValue = textValue & "|" & tableObject.ListColumns(i).name
     Next i
     VisibleHeaders_HeaderHash = CStr(Len(textValue)) & ":" & CStr(VisibleHeaders_TextChecksum(textValue))
 End Function
@@ -135,11 +135,11 @@ Private Sub VisibleHeaders_PreflightTables( _
     Call VisibleHeaders_NormalizeLanguage(targetLanguage)
     For Each tableKey In tables
         Set tableObject = VisibleHeaders_FindTable(CStr(tableKey))
-        If tableObject.Parent.ProtectContents Then
+        If tableObject.parent.ProtectContents Then
             Err.Raise VHL_ERROR_BASE + 15, "VisibleHeaders_PreflightTables", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.PROTECTED_SHEET", _
-                    TextCatalog_Arguments("Sheet", tableObject.Parent.Name, "Table", CStr(tableKey)), _
-                    TextCatalog_Arguments("Sheet", tableObject.Parent.Name, "Table", CStr(tableKey)))
+                    TextCatalog_Arguments("Sheet", tableObject.parent.name, "Table", CStr(tableKey)), _
+                    TextCatalog_Arguments("Sheet", tableObject.parent.name, "Table", CStr(tableKey)))
         End If
         detectedLanguage = VisibleHeaders_DetectTableLanguage(tableObject, CStr(tableKey))
         If requirePersistedMatch Then
@@ -184,7 +184,7 @@ Private Sub VisibleHeaders_ApplyTablesFromSnapshot( _
         Set tableSnapshot = snapshot(CStr(tableKey))
         keys = tableSnapshot("ColumnKeys")
         For i = LBound(keys) To UBound(keys)
-            tableObject.ListColumns(i + 1).Name = VisibleHeaders_TemporaryTitle( _
+            tableObject.ListColumns(i + 1).name = VisibleHeaders_TemporaryTitle( _
                 CStr(tableKey), CStr(tableSnapshot("Key:" & CStr(i + 1))), transactionId)
         Next i
     Next tableKey
@@ -194,7 +194,7 @@ Private Sub VisibleHeaders_ApplyTablesFromSnapshot( _
         Set tableSnapshot = snapshot(CStr(tableKey))
         keys = tableSnapshot("ColumnKeys")
         For i = LBound(keys) To UBound(keys)
-            tableObject.ListColumns(i + 1).Name = SchemaColumnTitle( _
+            tableObject.ListColumns(i + 1).name = SchemaColumnTitle( _
                 CStr(tableKey), CStr(tableSnapshot("Key:" & CStr(i + 1))), normalizedLanguage)
         Next i
         Schema_SetPhysicalHeaderLanguageOverride CStr(tableKey), normalizedLanguage
@@ -206,7 +206,7 @@ Private Sub VisibleHeaders_ApplyTablesFromSnapshot( _
 
 Failed:
     VisibleHeaders_RestoreSnapshot snapshot
-    Err.Raise Err.Number, "VisibleHeaders_ApplyTablesFromSnapshot", Err.Description
+    Err.Raise Err.number, "VisibleHeaders_ApplyTablesFromSnapshot", Err.description
 End Sub
 
 Private Function VisibleHeaders_SnapshotAlreadyInLanguage( _
@@ -253,11 +253,11 @@ Private Function VisibleHeaders_CaptureTablesSnapshot(ByVal tables As Variant) A
     For Each tableKey In tables
         Set tableObject = VisibleHeaders_FindTable(CStr(tableKey))
         keys = SchemaColumnKeys(CStr(tableKey))
-        If tableObject.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
+        If tableObject.ListColumns.count <> UBound(keys) - LBound(keys) + 1 Then
             Err.Raise VHL_ERROR_BASE + 3, "VisibleHeaders_CaptureTablesSnapshot", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.COLUMN_COUNT", _
-                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
-                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
+                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
+                    TextCatalog_Arguments("Table", CStr(tableKey), "Actual", CStr(tableObject.ListColumns.count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
         End If
 
         Set tableSnapshot = CreateObject("Scripting.Dictionary")
@@ -267,7 +267,7 @@ Private Function VisibleHeaders_CaptureTablesSnapshot(ByVal tables As Variant) A
         tableSnapshot.Add "ColumnKeys", physicalKeys
         For i = LBound(keys) To UBound(keys)
             tableSnapshot.Add "Key:" & CStr(i + 1), CStr(physicalKeys(i))
-            tableSnapshot.Add "Header:" & CStr(i + 1), tableObject.ListColumns(i + 1).Name
+            tableSnapshot.Add "Header:" & CStr(i + 1), tableObject.ListColumns(i + 1).name
         Next i
         result.Add CStr(tableKey), tableSnapshot
     Next tableKey
@@ -292,11 +292,11 @@ Private Function VisibleHeaders_DetectTableLanguage( _
     Dim matchedLanguage As String
 
     keys = SchemaColumnKeys(tableKey)
-    If tableObject.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
+    If tableObject.ListColumns.count <> UBound(keys) - LBound(keys) + 1 Then
         Err.Raise VHL_ERROR_BASE + 4, "VisibleHeaders_DetectTableLanguage", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.COLUMN_COUNT", _
-                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
-                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.Count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)), _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tableObject.ListColumns.count), "Expected", CStr(UBound(keys) - LBound(keys) + 1)))
     End If
 
     Set seenTitles = CreateObject("Scripting.Dictionary")
@@ -305,8 +305,8 @@ Private Function VisibleHeaders_DetectTableLanguage( _
     seenKeys.CompareMode = vbBinaryCompare
 
     For i = LBound(keys) To UBound(keys)
-        physicalTitle = tableObject.ListColumns(i + 1).Name
-        If seenTitles.Exists(physicalTitle) Then
+        physicalTitle = tableObject.ListColumns(i + 1).name
+        If seenTitles.exists(physicalTitle) Then
             Err.Raise VHL_ERROR_BASE + 5, "VisibleHeaders_DetectTableLanguage", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.DUPLICATE_PHYSICAL_HEADER", _
                     TextCatalog_Arguments("Header", physicalTitle, "Table", tableKey), _
@@ -329,7 +329,7 @@ Private Function VisibleHeaders_DetectTableLanguage( _
                     TextCatalog_Arguments("Table", tableKey, "Column", CStr(i + 1), "Observed", physicalTitle, "English", enTitle, "French", frTitle), _
                     TextCatalog_Arguments("Table", tableKey, "Column", CStr(i + 1), "Observed", physicalTitle, "English", enTitle, "French", frTitle))
         End If
-        If seenKeys.Exists(matchedKey) Then
+        If seenKeys.exists(matchedKey) Then
             Err.Raise VHL_ERROR_BASE + 12, "VisibleHeaders_DetectTableLanguage", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.DUPLICATE_SCHEMA_KEY", _
                     TextCatalog_Arguments("Key", matchedKey, "Table", tableKey), _
@@ -349,7 +349,7 @@ Private Function VisibleHeaders_DetectTableLanguage( _
     Next i
 
     For i = LBound(keys) To UBound(keys)
-        If Not seenKeys.Exists(CStr(keys(i))) Then
+        If Not seenKeys.exists(CStr(keys(i))) Then
             Err.Raise VHL_ERROR_BASE + 13, "VisibleHeaders_DetectTableLanguage", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.MISSING_SCHEMA_KEY", _
                     TextCatalog_Arguments("Key", CStr(keys(i)), "Table", tableKey), _
@@ -382,7 +382,7 @@ Private Function VisibleHeaders_PhysicalColumnKeys( _
     keys = SchemaColumnKeys(tableKey)
     ReDim physicalKeys(LBound(keys) To UBound(keys))
     For i = LBound(keys) To UBound(keys)
-        physicalTitle = tableObject.ListColumns(i + 1).Name
+        physicalTitle = tableObject.ListColumns(i + 1).name
         physicalKeys(i) = VisibleHeaders_MatchColumnKey( _
             tableKey, physicalTitle, matchedLanguage)
         If Len(physicalKeys(i)) = 0 Then
@@ -481,7 +481,7 @@ Private Function VisibleHeaders_FindTable(ByVal tableKey As String) As ListObjec
 
     For Each worksheetObject In ThisWorkbook.Worksheets
         For Each tableObject In worksheetObject.ListObjects
-            If StrComp(tableObject.Name, tableKey, vbBinaryCompare) = 0 Then
+            If StrComp(tableObject.name, tableKey, vbBinaryCompare) = 0 Then
                 Set VisibleHeaders_FindTable = tableObject
                 Exit Function
             End If
@@ -503,7 +503,7 @@ Private Function VisibleHeaders_TablesForOwner(ByVal ownerKey As String) As Vari
             VisibleHeaders_TablesForOwner = Array(VTS_TABLE_CONSTRAINTS)
         Case "EVENT", "EVENT_HISTORY"
             VisibleHeaders_TablesForOwner = Array(VTS_TABLE_EVENT_HISTORY, VTS_TABLE_EVENT_ACK)
-        Case "DASHBOARD", "GANTT"
+        Case "DASHBOARD", "GANTT", "FINANCE"
             VisibleHeaders_TablesForOwner = Array()
         Case Else
             Err.Raise VHL_ERROR_BASE + 9, "VisibleHeaders_TablesForOwner", _
@@ -543,22 +543,43 @@ End Function
 Private Sub VisibleHeaders_AssertNoTemporaryResiduals()
     Dim worksheetObject As Worksheet
     Dim tableObject As ListObject
-    Dim columnObject As ListColumn
+    Dim columnObject As listColumn
 
     For Each worksheetObject In ThisWorkbook.Worksheets
         For Each tableObject In worksheetObject.ListObjects
-            If SchemaIsVisibleTable(tableObject.Name) Then
+            If SchemaIsVisibleTable(tableObject.name) Then
                 For Each columnObject In tableObject.ListColumns
-                    If Left$(columnObject.Name, Len(TMP_PREFIX)) = TMP_PREFIX Then
+                    If left$(columnObject.name, Len(TMP_PREFIX)) = TMP_PREFIX Then
                         Err.Raise VHL_ERROR_BASE + 11, "VisibleHeaders_AssertNoTemporaryResiduals", _
                             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.TEMPORARY_RESIDUAL", _
-                                TextCatalog_Arguments("Header", columnObject.Name, "Table", tableObject.Name), _
-                                TextCatalog_Arguments("Header", columnObject.Name, "Table", tableObject.Name))
+                                TextCatalog_Arguments("Header", columnObject.name, "Table", tableObject.name), _
+                                TextCatalog_Arguments("Header", columnObject.name, "Table", tableObject.name))
                     End If
                 Next columnObject
             End If
         Next tableObject
     Next worksheetObject
+End Sub
+
+Public Sub VisibleHeaders_ApplyReadOnlyStyle(ByVal tbl As ListObject, ByVal automaticColumns As Range)
+    Dim headers As Range, body As Range
+    ' WBS input formatting belongs to the PM; only the headers and outputs are projected.
+    If tbl.name = VTS_TABLE_WBS Then
+        tbl.HeaderRowRange.Interior.Pattern = xlNone
+    Else
+        tbl.Range.Interior.Pattern = xlNone
+    End If
+    tbl.HeaderRowRange.font.color = vbWhite
+    If automaticColumns Is Nothing Then Exit Sub
+    Set headers = Application.Intersect(tbl.HeaderRowRange, automaticColumns)
+    If Not headers Is Nothing Then
+        headers.Interior.color = RGB(208, 208, 208)
+        headers.font.color = vbBlack
+    End If
+    If Not tbl.DataBodyRange Is Nothing Then
+        Set body = Application.Intersect(tbl.DataBodyRange, automaticColumns)
+        If Not body Is Nothing Then body.Interior.color = RGB(232, 232, 232)
+    End If
 End Sub
 
 Public Sub VisibleHeaders_MigrateLegacyLocalizedTitleRows()
@@ -599,9 +620,9 @@ CleanExit:
     Exit Sub
 
 Failed:
-    errorNumber = Err.Number
-    errorSource = Err.Source
-    errorDescription = Err.Description
+    errorNumber = Err.number
+    errorSource = Err.source
+    errorDescription = Err.description
     On Error Resume Next
     Application.Calculation = oldCalculation
     Application.ScreenUpdating = oldScreenUpdating
@@ -622,58 +643,61 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
     Dim candidate As Range
     Dim usedLastColumn As Long
     Dim i As Long
-    Dim shapeObject As Shape
+    Dim shapeObject As shape
     Dim cellText As String
     Dim keys As Variant
 
     Set ws = ThisWorkbook.Worksheets(worksheetName)
     Set tbl = ws.ListObjects(tableKey)
 
-    If tbl.HeaderRowRange.Row = migratedHeaderRow Then Exit Sub
-    If tbl.HeaderRowRange.Row <> legacyHeaderRow Then
+    If tableKey = VTS_TABLE_CONSTRAINTS Then
+        If Constraints_HasHelpRow(tbl) Then Exit Sub
+    End If
+    If tbl.HeaderRowRange.row = migratedHeaderRow Then Exit Sub
+    If tbl.HeaderRowRange.row <> legacyHeaderRow Then
         Err.Raise VHL_ERROR_BASE + 20, "VisibleHeaders_PreflightLegacyRow", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.UNEXPECTED_HEADER_ROW", _
-                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.Row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)), _
-                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.Row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)))
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)), _
+                TextCatalog_Arguments("Table", tableKey, "Actual", CStr(tbl.HeaderRowRange.row), "Legacy", CStr(legacyHeaderRow), "Migrated", CStr(migratedHeaderRow)))
     End If
-    If legacyRow <> tbl.HeaderRowRange.Row - 1 Then
+    If legacyRow <> tbl.HeaderRowRange.row - 1 Then
         Err.Raise VHL_ERROR_BASE + 21, "VisibleHeaders_PreflightLegacyRow", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_ROW_POSITION", _
                 TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
     keys = SchemaColumnKeys(tableKey)
-    If tbl.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
+    If tbl.ListColumns.count <> UBound(keys) - LBound(keys) + 1 Then
         Err.Raise VHL_ERROR_BASE + 22, "VisibleHeaders_PreflightLegacyRow", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_COLUMN_COUNT", _
                 TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
 
-    Set candidate = ws.Cells(legacyRow, tbl.Range.Column).Resize(1, tbl.ListColumns.Count)
+    Set candidate = ws.cells(legacyRow, tbl.Range.column).Resize(1, tbl.ListColumns.count)
     If CBool(candidate.MergeCells) Then
         Err.Raise VHL_ERROR_BASE + 23, "VisibleHeaders_PreflightLegacyRow", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_MERGED_CELLS", _
                 TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
-    If Application.WorksheetFunction.CountA(candidate) <> tbl.ListColumns.Count Then
+    If Application.WorksheetFunction.CountA(candidate) <> tbl.ListColumns.count Then
         Err.Raise VHL_ERROR_BASE + 24, "VisibleHeaders_PreflightLegacyRow", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_LABEL_COUNT", _
                 TextCatalog_Arguments("Table", tableKey), TextCatalog_Arguments("Table", tableKey))
     End If
 
-    usedLastColumn = ws.UsedRange.Column + ws.UsedRange.Columns.Count - 1
-    If tbl.Range.Column > 1 Then
+    usedLastColumn = ws.UsedRange.column + ws.UsedRange.columns.count - 1
+    If tbl.Range.column > 1 Then
         If Application.WorksheetFunction.CountA( _
-                ws.Cells(legacyRow, 1).Resize(1, tbl.Range.Column - 1)) > 0 Then
+                ws.cells(legacyRow, 1).Resize(1, tbl.Range.column - 1)) > 0 Then
             Err.Raise VHL_ERROR_BASE + 25, "VisibleHeaders_PreflightLegacyRow", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_OUTSIDE_DATA", _
                     TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.BEFORE", TEXT_LANGUAGE_EN), "Sheet", worksheetName), _
                     TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.BEFORE", TEXT_LANGUAGE_FR), "Sheet", worksheetName))
         End If
     End If
-    If usedLastColumn > tbl.Range.Column + tbl.ListColumns.Count - 1 Then
-        If Application.WorksheetFunction.CountA(ws.Cells(legacyRow, _
-                tbl.Range.Column + tbl.ListColumns.Count).Resize(1, _
-                usedLastColumn - tbl.Range.Column - tbl.ListColumns.Count + 1)) > 0 Then
+    If usedLastColumn > tbl.Range.column + tbl.ListColumns.count - 1 Then
+        If Application.WorksheetFunction.CountA(ws.cells(legacyRow, _
+                tbl.Range.column + tbl.ListColumns.count).Resize(1, _
+                usedLastColumn - tbl.Range.column - tbl.ListColumns.count + 1)) > 0 Then
             Err.Raise VHL_ERROR_BASE + 26, "VisibleHeaders_PreflightLegacyRow", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_OUTSIDE_DATA", _
                     TextCatalog_Arguments("Position", TextCatalog_Get("COMMON.POSITION.AFTER", TEXT_LANGUAGE_EN), "Sheet", worksheetName), _
@@ -681,8 +705,8 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
         End If
     End If
 
-    For i = 1 To tbl.ListColumns.Count
-        cellText = Trim$(CStr(candidate.Cells(1, i).Value2))
+    For i = 1 To tbl.ListColumns.count
+        cellText = Trim$(CStr(candidate.cells(1, i).Value2))
         If Not VisibleHeaders_IsKnownLocalizedTitle(tableKey, cellText) Then
             Err.Raise VHL_ERROR_BASE + 27, "VisibleHeaders_PreflightLegacyRow", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_UNKNOWN_CONTENT", _
@@ -692,12 +716,12 @@ Private Sub VisibleHeaders_PreflightLegacyRow( _
     Next i
 
     For Each shapeObject In ws.Shapes
-        If shapeObject.TopLeftCell.Row <= legacyRow And _
-           shapeObject.BottomRightCell.Row >= legacyRow Then
+        If shapeObject.TopLeftCell.row <= legacyRow And _
+           shapeObject.BottomRightCell.row >= legacyRow Then
             Err.Raise VHL_ERROR_BASE + 28, "VisibleHeaders_PreflightLegacyRow", _
                 PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.LEGACY_SHAPE_INTERSECTION", _
-                    TextCatalog_Arguments("Shape", shapeObject.Name, "Sheet", worksheetName), _
-                    TextCatalog_Arguments("Shape", shapeObject.Name, "Sheet", worksheetName))
+                    TextCatalog_Arguments("Shape", shapeObject.name, "Sheet", worksheetName), _
+                    TextCatalog_Arguments("Shape", shapeObject.name, "Sheet", worksheetName))
         End If
     Next shapeObject
 End Sub
@@ -717,17 +741,20 @@ Private Sub VisibleHeaders_DeleteLegacyRowIfPresent( _
 
     Set ws = ThisWorkbook.Worksheets(worksheetName)
     Set tbl = ws.ListObjects(tableKey)
-    If tbl.HeaderRowRange.Row = migratedHeaderRow Then Exit Sub
+    If tableKey = VTS_TABLE_CONSTRAINTS Then
+        If Constraints_HasHelpRow(tbl) Then Exit Sub
+    End If
+    If tbl.HeaderRowRange.row = migratedHeaderRow Then Exit Sub
 
-    columnCount = tbl.ListColumns.Count
-    rowCount = tbl.ListRows.Count
+    columnCount = tbl.ListColumns.count
+    rowCount = tbl.ListRows.count
     headerText = VisibleHeaders_HeaderText(tbl)
-    ws.Rows(legacyRow).Delete Shift:=xlUp
+    ws.rows(legacyRow).Delete Shift:=xlUp
 
     Set tbl = ws.ListObjects(tableKey)
-    If tbl.HeaderRowRange.Row <> migratedHeaderRow Or _
-       tbl.ListColumns.Count <> columnCount Or _
-       tbl.ListRows.Count <> rowCount Or _
+    If tbl.HeaderRowRange.row <> migratedHeaderRow Or _
+       tbl.ListColumns.count <> columnCount Or _
+       tbl.ListRows.count <> rowCount Or _
        VisibleHeaders_HeaderText(tbl) <> headerText Then
         Err.Raise VHL_ERROR_BASE + 29, "VisibleHeaders_DeleteLegacyRowIfPresent", _
             PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.POST_DELETE_VALIDATION", _
@@ -738,9 +765,9 @@ End Sub
 Private Function VisibleHeaders_HeaderText(ByVal tableObject As ListObject) As String
     Dim i As Long
 
-    For i = 1 To tableObject.ListColumns.Count
+    For i = 1 To tableObject.ListColumns.count
         VisibleHeaders_HeaderText = VisibleHeaders_HeaderText & ChrW$(30) & _
-            tableObject.ListColumns(i).Name
+            tableObject.ListColumns(i).name
     Next i
 End Function
 
@@ -772,3 +799,5 @@ Private Function VisibleHeaders_TextChecksum(ByVal textValue As String) As Long
     Next i
     VisibleHeaders_TextChecksum = checksum
 End Function
+
+

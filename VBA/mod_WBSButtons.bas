@@ -59,6 +59,7 @@ Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
     End If
 
     If Not ProjectTutorial_StopForReset() Then Exit Sub
+    Finance_Reset True
     Set ws = ThisWorkbook.Worksheets("WBS")
     Set tbl = ws.ListObjects("tbl_WBS")
 
@@ -68,10 +69,11 @@ Public Sub Armageddon(Optional ByVal skipConfirmation As Boolean = False)
     Application.ScreenUpdating = oldScreenUpdating
     Application.EnableEvents = oldEvents
 
-    Run_Full_Update
+    Run_Full_Update True
     Reset_Dashboard
     ClearPlanningWarningAcknowledgements
     ClearPlanningEventHistory
+    Migration_ResetMetadata
     Settings_ResetTutorialProgress
     ProjectWelcome_ResetTutorialVisit
     ProjectWelcome_ShowIfNeeded
@@ -85,7 +87,7 @@ ErrHandler:
 
     WBSButtons_ShowConsoleError _
         "WBS.ERROR.FULL_RESET", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", Err.description)
 
 End Sub
 
@@ -139,7 +141,7 @@ ErrHandler:
 
     WBSButtons_ShowConsoleError _
         "WBS.ERROR.RESET_PLANNING", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", Err.description)
 
 End Sub
 
@@ -157,16 +159,18 @@ Private Sub ResetPlanning_PrepareEmptyWBS( _
     If ws Is Nothing Then Exit Sub
     If tbl Is Nothing Then Exit Sub
 
-    Do While tbl.ListRows.Count > RESET_PLANNING_EMPTY_WBS_ROWS
-        tbl.ListRows(tbl.ListRows.Count).Delete
+    Do While tbl.ListRows.count > RESET_PLANNING_EMPTY_WBS_ROWS
+        tbl.ListRows(tbl.ListRows.count).Delete
     Loop
 
-    Do While tbl.ListRows.Count < RESET_PLANNING_EMPTY_WBS_ROWS
+    Do While tbl.ListRows.count < RESET_PLANNING_EMPTY_WBS_ROWS
         tbl.ListRows.Add
     Loop
 
     If Not tbl.DataBodyRange Is Nothing Then
         tbl.DataBodyRange.ClearContents
+        tbl.DataBodyRange.ClearComments
+        tbl.DataBodyRange.ClearHyperlinks
         RestoreWBSFormulaColumns tbl
         ResetPlanning_ApplyWBSInputSetup tbl
     End If
@@ -196,11 +200,6 @@ Private Sub WBS_ApplyLocalizedInputValidations(ByVal tbl As ListObject)
 
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
-
-    ' Calendar is user input: remove the inherited calculated-column fill.
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_CAL) Then
-        SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_CAL).DataBodyRange.Interior.Pattern = xlNone
-    End If
 
     ResetPlanning_ApplyListValidation tbl, VTS_COL_TASK_TYPE, _
         TextCatalog_Get("WBS.VALIDATION.TASK_TYPE.LIST", WBS_CurrentLanguage()), _
@@ -247,8 +246,8 @@ Private Sub ResetPlanning_ApplyListValidation( _
     Set rng = SchemaListColumn(tbl, VTS_TABLE_WBS, columnKey).DataBodyRange
     If rng Is Nothing Then Exit Sub
 
-    rng.NumberFormat = "@"
-    With rng.Validation
+    rng.numberFormat = "@"
+    With rng.validation
         .Delete
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertStop, _
@@ -256,9 +255,9 @@ Private Sub ResetPlanning_ApplyListValidation( _
              Formula1:=listFormula
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = inputTitle
-        .InputMessage = inputMessage
-        .ErrorTitle = errorTitle
+        .inputTitle = inputTitle
+        .inputMessage = inputMessage
+        .errorTitle = errorTitle
         .errorMessage = errorMessage
         .ShowInput = True
         ' The WBS change owner rejects invalid inputs through the house console.
@@ -278,17 +277,17 @@ Private Sub ResetPlanning_ApplyWBSFormats(ByVal tbl As ListObject)
 
     dateFormat = Settings_GetDateNumberFormat()
 
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_WBS) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.NumberFormat = "@"
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ID) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.NumberFormat = "0"
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_START).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_FINISH).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_START).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_FINISH).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_FORECAST_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_FORECAST_START).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_FORECAST_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_FORECAST_FINISH).DataBodyRange.NumberFormat = dateFormat
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_DURATION).DataBodyRange.NumberFormat = "0"
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_DURATION).DataBodyRange.NumberFormat = "0"
-    If WBS_TableHasSchemaColumn(tbl, VTS_COL_CALCULATED_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_CALCULATED_DURATION).DataBodyRange.NumberFormat = "0"
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_WBS) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.numberFormat = "@"
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ID) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.numberFormat = "0"
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_START).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_FINISH).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_START).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_FINISH).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_FORECAST_START) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_FORECAST_START).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_FORECAST_FINISH) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_FORECAST_FINISH).DataBodyRange.numberFormat = dateFormat
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_BASELINE_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_BASELINE_DURATION).DataBodyRange.numberFormat = "0"
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_ACTUAL_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ACTUAL_DURATION).DataBodyRange.numberFormat = "0"
+    If WBS_TableHasSchemaColumn(tbl, VTS_COL_CALCULATED_DURATION) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_CALCULATED_DURATION).DataBodyRange.numberFormat = "0"
 
 End Sub
 
@@ -299,7 +298,7 @@ End Sub
 '
 ' Console routing:
 ' - confirmation utilisateur autorisee pour Reset Planning
-' - les erreurs sont envoyÃ©es vers frmPlanningMessages
+' - les erreurs sont envoyées vers frmPlanningMessages
 '=====================================================
 
 '------------------------------------------------------------------------------
@@ -355,7 +354,7 @@ Private Sub Ensure_WBS_Onboarding_Guide( _
             PlanningMessageText_Format("WBS.ERROR.AMBIGUOUS_SCHEMA")
     End If
 
-    For Each key In statuses.Keys
+    For Each key In statuses.keys
         If Not WBS_TableHasSchemaColumn(tbl, CStr(key)) Then
             If CStr(key) <> VTS_COL_PROJECT Or Not WBS_TableHasPhysicalColumn(tbl, "Package") Then
                 If missingColumns <> "" Then missingColumns = missingColumns & ", "
@@ -370,7 +369,7 @@ Private Sub Ensure_WBS_Onboarding_Guide( _
                 TextCatalog_Arguments("Columns", missingColumns), TextCatalog_Arguments("Columns", missingColumns))
     End If
 
-    headerRow = tbl.HeaderRowRange.Row
+    headerRow = tbl.HeaderRowRange.row
     If headerRow <= 1 Then
         Err.Raise vbObjectError + 2331, "Ensure_WBS_Onboarding_Guide", _
             PlanningMessageText_Format("WBS.ERROR.NO_ONBOARDING_ROW")
@@ -387,7 +386,7 @@ Private Sub Ensure_WBS_Onboarding_Guide( _
         Application.ScreenUpdating = False
 
         If Not WBS_TableHasSchemaColumn(tbl, VTS_COL_PROJECT) Then
-            tbl.ListColumns("Package").Name = SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_PROJECT)
+            tbl.ListColumns("Package").name = SchemaCurrentColumnTitle(VTS_TABLE_WBS, VTS_COL_PROJECT)
             renamedLegacyProjectColumn = True
         End If
 
@@ -398,8 +397,8 @@ Private Sub Ensure_WBS_Onboarding_Guide( _
     End If
 
     If Not tbl.DataBodyRange Is Nothing Then
-        firstDataRow = tbl.DataBodyRange.Row
-        If firstDataRow <> tbl.HeaderRowRange.Row + 1 Then
+        firstDataRow = tbl.DataBodyRange.row
+        If firstDataRow <> tbl.HeaderRowRange.row + 1 Then
             Err.Raise vbObjectError + 2333, "Ensure_WBS_Onboarding_Guide", _
                 PlanningMessageText_Format("WBS.ERROR.UNEXPECTED_FIRST_DATA_ROW", _
                     TextCatalog_Arguments("Row", CStr(firstDataRow)), TextCatalog_Arguments("Row", CStr(firstDataRow)))
@@ -416,15 +415,15 @@ Private Sub Ensure_WBS_Onboarding_Guide( _
     Exit Sub
 
 ErrHandler:
-    errorNumber = Err.Number
-    errorSource = Err.Source
-    errorDescription = Err.Description
+    errorNumber = Err.number
+    errorSource = Err.source
+    errorDescription = Err.description
 
     On Error Resume Next
     Application.EnableEvents = False
     If renamedLegacyProjectColumn Then
         Set tbl = ws.ListObjects("tbl_WBS")
-        If WBS_TableHasSchemaColumn(tbl, VTS_COL_PROJECT) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_PROJECT).Name = "Package"
+        If WBS_TableHasSchemaColumn(tbl, VTS_COL_PROJECT) Then SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_PROJECT).name = "Package"
     End If
     Application.ScreenUpdating = oldScreenUpdating
     Application.EnableEvents = oldEvents
@@ -440,11 +439,11 @@ End Sub
 '------------------------------------------------------------------------------
 Private Function WBS_OnboardingHelpRow(ByVal tbl As ListObject) As Long
 
-    If tbl Is Nothing Or tbl.HeaderRowRange.Row <= 1 Then
+    If tbl Is Nothing Or tbl.HeaderRowRange.row <= 1 Then
         Err.Raise vbObjectError + 2334, "WBS_OnboardingHelpRow", _
             PlanningMessageText_Format("WBS.ERROR.INVALID_ONBOARDING_ROW")
     End If
-    WBS_OnboardingHelpRow = tbl.HeaderRowRange.Row - 1
+    WBS_OnboardingHelpRow = tbl.HeaderRowRange.row - 1
 
 End Function
 
@@ -501,31 +500,31 @@ Private Function WBS_Onboarding_StructureIsCurrent( _
     On Error GoTo NotCurrent
 
     If ws Is Nothing Or tbl Is Nothing Or statuses Is Nothing Then Exit Function
-    If tbl.HeaderRowRange.Row <= 1 Then Exit Function
+    If tbl.HeaderRowRange.row <= 1 Then Exit Function
     If Not tbl.DataBodyRange Is Nothing Then
-        If tbl.DataBodyRange.Row <> tbl.HeaderRowRange.Row + 1 Then Exit Function
+        If tbl.DataBodyRange.row <> tbl.HeaderRowRange.row + 1 Then Exit Function
     End If
-    If Abs(CDbl(ws.Rows(WBS_OnboardingHelpRow(tbl)).RowHeight) - _
+    If Abs(CDbl(ws.rows(WBS_OnboardingHelpRow(tbl)).rowHeight) - _
         WBS_ONBOARDING_ROW_HEIGHT) > 0.05 Then Exit Function
 
-    For Each key In statuses.Keys
-        Set cell = ws.Cells(WBS_OnboardingHelpRow(tbl), _
-            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.Column)
+    For Each key In statuses.keys
+        Set cell = ws.cells(WBS_OnboardingHelpRow(tbl), _
+            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.column)
 
 
-        If CStr(cell.Font.Name) <> WBS_ONBOARDING_FONT_NAME Then Exit Function
-        If Abs(CDbl(cell.Font.Size) - WBS_ONBOARDING_FONT_SIZE) > 0.01 Then Exit Function
-        If Not CBool(cell.Font.Bold) Then Exit Function
-        If CBool(cell.Font.Italic) Then Exit Function
+        If CStr(cell.font.name) <> WBS_ONBOARDING_FONT_NAME Then Exit Function
+        If Abs(CDbl(cell.font.size) - WBS_ONBOARDING_FONT_SIZE) > 0.01 Then Exit Function
+        If Not CBool(cell.font.bold) Then Exit Function
+        If CBool(cell.font.italic) Then Exit Function
         If cell.Interior.Pattern <> xlSolid Then Exit Function
-        If cell.Interior.Color <> RGB(255, 255, 255) Then Exit Function
+        If cell.Interior.color <> RGB(255, 255, 255) Then Exit Function
         If cell.HorizontalAlignment <> xlCenter Then Exit Function
         If cell.VerticalAlignment <> xlCenter Then Exit Function
         If Not CBool(cell.WrapText) Then Exit Function
         If CBool(cell.ShrinkToFit) Then Exit Function
         If cell.Borders(xlEdgeBottom).LineStyle <> xlContinuous Then Exit Function
-        If cell.Borders(xlEdgeBottom).Color <> RGB(0, 0, 0) Then Exit Function
-        If cell.Borders(xlEdgeBottom).Weight <> xlThin Then Exit Function
+        If cell.Borders(xlEdgeBottom).color <> RGB(0, 0, 0) Then Exit Function
+        If cell.Borders(xlEdgeBottom).weight <> xlThin Then Exit Function
 
 
     Next key
@@ -552,36 +551,36 @@ Private Sub WBS_Onboarding_ApplyStructure( _
     Dim cell As Range
 
     Set helpRange = ws.Range( _
-        ws.Cells(WBS_OnboardingHelpRow(tbl), tbl.Range.Column), _
-        ws.Cells(WBS_OnboardingHelpRow(tbl), _
-            tbl.Range.Column + tbl.ListColumns.Count - 1))
+        ws.cells(WBS_OnboardingHelpRow(tbl), tbl.Range.column), _
+        ws.cells(WBS_OnboardingHelpRow(tbl), _
+            tbl.Range.column + tbl.ListColumns.count - 1))
 
     helpRange.ClearContents
     With helpRange
-        .Font.Name = WBS_ONBOARDING_FONT_NAME
-        .Font.Size = WBS_ONBOARDING_FONT_SIZE
-        .Font.Bold = True
-        .Font.Italic = False
-        .Font.Color = RGB(0, 0, 0)
+        .font.name = WBS_ONBOARDING_FONT_NAME
+        .font.size = WBS_ONBOARDING_FONT_SIZE
+        .font.bold = True
+        .font.italic = False
+        .font.color = RGB(0, 0, 0)
         .Interior.Pattern = xlSolid
-        .Interior.Color = RGB(255, 255, 255)
+        .Interior.color = RGB(255, 255, 255)
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
         .WrapText = True
         .ShrinkToFit = False
         With .Borders(xlEdgeBottom)
             .LineStyle = xlContinuous
-            .Color = RGB(0, 0, 0)
-            .Weight = xlThin
+            .color = RGB(0, 0, 0)
+            .weight = xlThin
         End With
     End With
 
-    ws.Rows(WBS_OnboardingHelpRow(tbl)).RowHeight = WBS_ONBOARDING_ROW_HEIGHT
+    ws.rows(WBS_OnboardingHelpRow(tbl)).rowHeight = WBS_ONBOARDING_ROW_HEIGHT
 
-    For Each key In statuses.Keys
-        Set cell = ws.Cells(WBS_OnboardingHelpRow(tbl), _
-            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.Column)
-        cell.Value = CStr(statuses(key))
+    For Each key In statuses.keys
+        Set cell = ws.cells(WBS_OnboardingHelpRow(tbl), _
+            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.column)
+        cell.value = CStr(statuses(key))
         WBS_Onboarding_FormatStatusCell cell
     Next key
 
@@ -599,7 +598,8 @@ Private Sub WBS_Onboarding_ApplyLocalizedContent( _
     Dim statuses As Object
     Dim key As Variant
     Dim statusCell As Range
-    Dim listColumn As ListColumn
+    Dim automaticColumns As Range
+    Dim listColumn As listColumn
     Dim helpCell As Range
     Dim headerCell As Range
     Dim localizedPair As Variant
@@ -633,47 +633,29 @@ Private Sub WBS_Onboarding_ApplyLocalizedContent( _
     gWBSOnboardingLocalizedRebuildCount = _
         gWBSOnboardingLocalizedRebuildCount + 1
 
-    For Each key In statuses.Keys
-        Set statusCell = ws.Cells(WBS_OnboardingHelpRow(tbl), _
-            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.Column)
+    For Each key In statuses.keys
+        Set statusCell = ws.cells(WBS_OnboardingHelpRow(tbl), _
+            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.column)
         If CStr(statusCell.Value2) <> CStr(statuses(key)) Then
-            statusCell.Value = CStr(statuses(key))
+            statusCell.value = CStr(statuses(key))
         End If
         WBS_Onboarding_FormatStatusCell statusCell
     Next key
+    WBS_Onboarding_ApplyReadOnlyStyle tbl
 
     For Each key In columnKeys
         Set listColumn = SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key))
-        Set helpCell = ws.Cells(WBS_OnboardingHelpRow(tbl), listColumn.Range.Column)
-        Set headerCell = listColumn.Range.Cells(1, 1)
+        Set helpCell = ws.cells(WBS_OnboardingHelpRow(tbl), listColumn.Range.column)
+        Set headerCell = listColumn.Range.cells(1, 1)
 
         If WBS_Onboarding_CellHasAnyComment(headerCell) Then
             WBS_Onboarding_ClearCellComments headerCell
         End If
 
-        If comments.Exists(CStr(key)) Then
+        If comments.exists(CStr(key)) Then
             localizedPair = comments(CStr(key))
             expectedText = CStr(localizedPair(languageIndex))
-            If threadedCommentsSupported Then
-                actualText = WBS_Onboarding_ThreadedCommentText( _
-                    helpCell, hasThreadedComment)
-                If WBS_Onboarding_CellHasLegacyComment(helpCell) Or _
-                   Not hasThreadedComment Or _
-                   WBS_Onboarding_NormalizeComparisonText(actualText) <> _
-                        WBS_Onboarding_NormalizeComparisonText(expectedText) Then
-                    WBS_Onboarding_ClearCellComments helpCell
-                    WBS_Onboarding_AddThreadedComment helpCell, expectedText
-                End If
-            Else
-                actualText = WBS_Onboarding_LegacyCommentText( _
-                    helpCell, hasThreadedComment)
-                If Not hasThreadedComment Or _
-                   WBS_Onboarding_NormalizeComparisonText(actualText) <> _
-                        WBS_Onboarding_NormalizeComparisonText(expectedText) Then
-                    WBS_Onboarding_ClearCellComments helpCell
-                    WBS_Onboarding_AddLegacyComment helpCell, expectedText
-                End If
-            End If
+            WBS_Onboarding_ApplyHelpCell helpCell, expectedText
         ElseIf WBS_Onboarding_CellHasAnyComment(helpCell) Then
             WBS_Onboarding_ClearCellComments helpCell
         End If
@@ -686,9 +668,9 @@ Private Sub WBS_Onboarding_ApplyLocalizedContent( _
     Exit Sub
 
 ErrHandler:
-    errorNumber = Err.Number
-    errorSource = Err.Source
-    errorDescription = Err.Description
+    errorNumber = Err.number
+    errorSource = Err.source
+    errorDescription = Err.description
 
     On Error Resume Next
     Application.ScreenUpdating = oldScreenUpdating
@@ -711,10 +693,10 @@ Private Function WBS_Onboarding_LocalizedContentIsCurrent( _
     Dim statuses As Object
     Dim key As Variant
     Dim statusCell As Range
-    Dim requiredFont As Font
-    Dim suffixFont As Font
+    Dim requiredFont As font
+    Dim suffixFont As font
     Dim requiredLabel As String
-    Dim listColumn As ListColumn
+    Dim listColumn As listColumn
     Dim helpCell As Range
     Dim headerCell As Range
     Dim noteArea As Range
@@ -737,50 +719,50 @@ Private Function WBS_Onboarding_LocalizedContentIsCurrent( _
     Set statuses = WBS_Onboarding_BuildStatusMap()
     threadedCommentsSupported = ExcelCompatibility_SupportsThreadedComments()
     requiredLabel = WBS_Onboarding_RequiredLabel()
-    If comments.Count <> 37 Then Exit Function
-    If Not comments.Exists(VTS_COL_PROJECT) Then Exit Function
-    If Not comments.Exists(VTS_COL_LONGEST_PATH) Then Exit Function
-    If Not comments.Exists(VTS_COL_LONGEST_PATH_REX) Then Exit Function
-    If Not comments.Exists(VTS_COL_DEADLINE_FLOAT) Then Exit Function
+    If comments.count <> 37 Then Exit Function
+    If Not comments.exists(VTS_COL_PROJECT) Then Exit Function
+    If Not comments.exists(VTS_COL_LONGEST_PATH) Then Exit Function
+    If Not comments.exists(VTS_COL_LONGEST_PATH_REX) Then Exit Function
+    If Not comments.exists(VTS_COL_DEADLINE_FLOAT) Then Exit Function
 
     languageIndex = IIf(WBS_CurrentLanguage() = "FR", 0, 1)
     columnKeys = SchemaColumnKeys(VTS_TABLE_WBS)
     Set noteArea = ws.Range("O1:R2")
 
     If Not CBool(noteArea.MergeCells) Then Exit Function
-    If ws.Range("O1").MergeArea.Address(False, False) <> "O1:R2" Then Exit Function
+    If ws.Range("O1").MergeArea.address(False, False) <> "O1:R2" Then Exit Function
     If WBS_Onboarding_NormalizeComparisonText(CStr(ws.Range("O1").Value2)) <> _
         WBS_Onboarding_NormalizeComparisonText(WBS_Onboarding_QuickStartText()) Then Exit Function
     If noteArea.HorizontalAlignment <> xlLeft Then Exit Function
     If noteArea.VerticalAlignment <> xlTop Then Exit Function
     If Not CBool(noteArea.WrapText) Then Exit Function
 
-    For Each key In statuses.Keys
-        Set statusCell = ws.Cells(WBS_OnboardingHelpRow(tbl), _
-            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.Column)
+    For Each key In statuses.keys
+        Set statusCell = ws.cells(WBS_OnboardingHelpRow(tbl), _
+            SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range.column)
         actualText = CStr(statusCell.Value2)
         If actualText <> CStr(statuses(key)) Then Exit Function
 
-        If Left$(actualText, Len(requiredLabel)) = requiredLabel Then
-            Set requiredFont = statusCell.Characters(1, Len(requiredLabel)).Font
-            If requiredFont.Color <> RGB(192, 0, 0) Then Exit Function
-            If Not CBool(requiredFont.Bold) Then Exit Function
+        If left$(actualText, Len(requiredLabel)) = requiredLabel Then
+            Set requiredFont = statusCell.characters(1, Len(requiredLabel)).font
+            If requiredFont.color <> RGB(192, 0, 0) Then Exit Function
+            If Not CBool(requiredFont.bold) Then Exit Function
 
             If Len(actualText) > Len(requiredLabel) Then
-                Set suffixFont = statusCell.Characters( _
+                Set suffixFont = statusCell.characters( _
                     Len(requiredLabel) + 1, _
-                    Len(actualText) - Len(requiredLabel)).Font
-                If suffixFont.Color <> RGB(0, 0, 0) Then Exit Function
+                    Len(actualText) - Len(requiredLabel)).font
+                If suffixFont.color <> RGB(0, 0, 0) Then Exit Function
             End If
-        ElseIf statusCell.Font.Color <> RGB(0, 0, 0) Then
+        ElseIf statusCell.font.color <> RGB(0, 0, 0) Then
             Exit Function
         End If
     Next key
 
     For Each key In columnKeys
         Set listColumn = SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key))
-        Set helpCell = ws.Cells(WBS_OnboardingHelpRow(tbl), listColumn.Range.Column)
-        Set headerCell = listColumn.Range.Cells(1, 1)
+        Set helpCell = ws.cells(WBS_OnboardingHelpRow(tbl), listColumn.Range.column)
+        Set headerCell = listColumn.Range.cells(1, 1)
 
         If WBS_Onboarding_CellHasAnyComment(headerCell) Then Exit Function
 
@@ -793,7 +775,7 @@ Private Function WBS_Onboarding_LocalizedContentIsCurrent( _
                 helpCell, hasThreadedComment)
         End If
 
-        If comments.Exists(CStr(key)) Then
+        If comments.exists(CStr(key)) Then
             If Not hasThreadedComment Then Exit Function
             localizedPair = comments(CStr(key))
             expectedText = CStr(localizedPair(languageIndex))
@@ -811,6 +793,21 @@ NotCurrent:
     WBS_Onboarding_LocalizedContentIsCurrent = False
 
 End Function
+
+Private Sub WBS_Onboarding_ApplyReadOnlyStyle(ByVal tbl As ListObject)
+    Dim statuses As Object, key As Variant, automaticColumns As Range
+    Set statuses = WBS_Onboarding_BuildStatusMap()
+    For Each key In statuses.keys
+        If CStr(statuses(key)) = TextCatalog_Get("WBS.ONBOARDING.CALCULATED", WBS_CurrentLanguage()) Then
+            If automaticColumns Is Nothing Then
+                Set automaticColumns = SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range
+            Else
+                Set automaticColumns = Application.Union(automaticColumns, SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).Range)
+            End If
+        End If
+    Next key
+    VisibleHeaders_ApplyReadOnlyStyle tbl, automaticColumns
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Retourne le Quick Start canonique dans la langue runtime WBS.
@@ -845,7 +842,7 @@ Private Function WBS_Onboarding_CellHasLegacyComment( _
     Dim legacyComment As Object
 
     On Error Resume Next
-    Set legacyComment = cell.Comment
+    Set legacyComment = cell.comment
     On Error GoTo 0
     WBS_Onboarding_CellHasLegacyComment = Not legacyComment Is Nothing
 
@@ -863,7 +860,7 @@ Private Function WBS_Onboarding_LegacyCommentText( _
 
     commentExists = False
     On Error Resume Next
-    Set legacyComment = cell.Comment
+    Set legacyComment = cell.comment
     On Error GoTo 0
     If legacyComment Is Nothing Then Exit Function
 
@@ -877,7 +874,7 @@ End Function
 ' FR: Lit un commentaire threaded sans modifier la cellule.
 ' EN: Reads a threaded comment without mutating the cell.
 '------------------------------------------------------------------------------
-Private Function WBS_Onboarding_ThreadedCommentText( _
+Public Function WBS_Onboarding_ThreadedCommentText( _
     ByVal cell As Range, _
     ByRef commentExists As Boolean) As String
 
@@ -918,13 +915,13 @@ End Function
 ' FR: Supprime les commentaires d'une cellule uniquement lorsqu'une reparation est requise.
 ' EN: Clears cell comments only when a repair is required.
 '------------------------------------------------------------------------------
-Private Sub WBS_Onboarding_ClearCellComments(ByVal cell As Range)
+Public Sub WBS_Onboarding_ClearCellComments(ByVal cell As Range)
 
     Dim legacyComment As Object
     Dim threadedComment As Object
 
     On Error Resume Next
-    Set legacyComment = cell.Comment
+    Set legacyComment = cell.comment
     If Not legacyComment Is Nothing Then legacyComment.Delete
     If ExcelCompatibility_SupportsThreadedComments() Then
         Set threadedComment = cell.CommentThreaded
@@ -941,7 +938,7 @@ End Sub
 ' FR: Ajoute un commentaire threaded uniquement lorsque l'API Excel est disponible.
 ' EN: Adds a threaded comment only when the Excel API is available.
 '------------------------------------------------------------------------------
-Private Sub WBS_Onboarding_AddThreadedComment( _
+Public Sub WBS_Onboarding_AddThreadedComment( _
     ByVal cell As Range, _
     ByVal commentText As String)
 
@@ -956,11 +953,62 @@ End Sub
 ' FR: Ajoute une Note Excel classique sur les versions sans commentaires threaded.
 ' EN: Adds a classic Excel Note on versions without threaded comments.
 '------------------------------------------------------------------------------
-Private Sub WBS_Onboarding_AddLegacyComment( _
-    ByVal cell As Range, _
-    ByVal commentText As String)
+Public Sub WBS_Onboarding_ApplyHelpCell(ByVal cell As Range, ByVal text As String, Optional ByVal titleLength As Long = 0)
+    Dim actual As String, exists As Boolean, modern As Boolean
+    Dim phase As String
+    On Error GoTo Failed
+    phase = "read"
+    modern = ExcelCompatibility_SupportsThreadedComments()
+    If modern Then
+        actual = WBS_Onboarding_ThreadedCommentText(cell, exists)
+        If exists And cell.comment Is Nothing Then
+            If WBS_Onboarding_NormalizeComparisonText(actual) = WBS_Onboarding_NormalizeComparisonText(text) Then Exit Sub
+            phase = "update text"
+            CallByName cell.CommentThreaded, "Text", VbMethod, text, 1, True
+            Exit Sub
+        End If
+    Else
+        actual = WBS_Onboarding_LegacyCommentText(cell, exists)
+        If exists Then
+            If WBS_Onboarding_NormalizeComparisonText(actual) = WBS_Onboarding_NormalizeComparisonText(text) And cell.comment.Author = "ProjectEngine" Then Exit Sub
+        End If
+    End If
+    phase = "clear"
+    WBS_Onboarding_ClearCellComments cell
+    phase = "add"
+    If modern Then
+        WBS_Onboarding_AddThreadedComment cell, text
+    Else
+        WBS_Onboarding_AddLegacyComment cell, text, True
+        With cell.comment.shape
+            .width = 360: .height = 200
+            .fill.ForeColor.RGB = RGB(255, 255, 225)
+            .TextFrame.characters.font.size = 10
+            If titleLength > 0 Then .TextFrame.characters(1, titleLength).font.bold = True
+        End With
+    End If
+    Exit Sub
+Failed:
+    Err.Raise Err.number, "WBS_Onboarding_ApplyHelpCell", cell.address & ": " & phase & ": " & Err.description
+End Sub
 
+Public Sub WBS_Onboarding_AddLegacyComment( _
+    ByVal cell As Range, _
+    ByVal commentText As String, _
+    Optional ByVal anonymous As Boolean = True)
+
+    Dim oldUser As String, errorNumber As Long, description As String
+    oldUser = Application.UserName
+    On Error GoTo Failed
+    If anonymous Then Application.UserName = "ProjectEngine"
     cell.AddComment commentText
+CleanExit:
+    If anonymous Then Application.UserName = oldUser
+    If errorNumber <> 0 Then On Error GoTo 0: Err.Raise errorNumber, "WBS_Onboarding_AddLegacyComment", description
+    Exit Sub
+Failed:
+    errorNumber = Err.number: description = Err.description
+    Resume CleanExit
 
 End Sub
 
@@ -1072,21 +1120,21 @@ Private Sub WBS_Onboarding_FormatStatusCell(ByVal cell As Range)
     If cell Is Nothing Then Exit Sub
     requiredLabel = WBS_Onboarding_RequiredLabel()
 
-    cell.Font.Color = RGB(0, 0, 0)
-    cell.Font.Bold = True
+    cell.font.color = RGB(0, 0, 0)
+    cell.font.bold = True
 
     requiredStart = InStr(1, CStr(cell.Value2), requiredLabel, vbTextCompare)
     If requiredStart > 0 Then
-        With cell.Characters(requiredStart, Len(requiredLabel)).Font
-            .Color = RGB(192, 0, 0)
-            .Bold = True
+        With cell.characters(requiredStart, Len(requiredLabel)).font
+            .color = RGB(192, 0, 0)
+            .bold = True
         End With
     End If
 
 End Sub
 
 '------------------------------------------------------------------------------
-' FR: Affiche le guide gÃ©nÃ©ral WBS dans O1:R2 en respectant la langue active.
+' FR: Affiche le guide général WBS dans O1:R2 en respectant la langue active.
 ' EN: Displays the general WBS guide in O1:R2 using the active language.
 '------------------------------------------------------------------------------
 Private Sub WBS_Onboarding_WriteQuickStart(ByVal ws As Worksheet)
@@ -1103,7 +1151,7 @@ Private Sub WBS_Onboarding_WriteQuickStart(ByVal ws As Worksheet)
     requiredLabel = WBS_Onboarding_RequiredLabel()
 
     If Not CBool(noteArea.MergeCells) Or _
-        ws.Range("O1").MergeArea.Address(False, False) <> "O1:R2" Then
+        ws.Range("O1").MergeArea.address(False, False) <> "O1:R2" Then
         noteArea.UnMerge
         noteArea.ClearContents
         noteArea.Merge
@@ -1112,7 +1160,7 @@ Private Sub WBS_Onboarding_WriteQuickStart(ByVal ws As Worksheet)
 
     If WBS_Onboarding_NormalizeComparisonText(CStr(ws.Range("O1").Value2)) <> _
         WBS_Onboarding_NormalizeComparisonText(noteText) Then
-        noteArea.Value = noteText
+        noteArea.value = noteText
         textChanged = True
     End If
 
@@ -1126,9 +1174,9 @@ Private Sub WBS_Onboarding_WriteQuickStart(ByVal ws As Worksheet)
     If textChanged Then
         requiredStart = InStr(1, noteText, requiredLabel, vbTextCompare)
         If requiredStart > 0 Then
-            With noteArea.Characters(requiredStart, Len(requiredLabel)).Font
-                .Color = RGB(192, 0, 0)
-                .Bold = True
+            With noteArea.characters(requiredStart, Len(requiredLabel)).font
+                .color = RGB(192, 0, 0)
+                .bold = True
             End With
         End If
     End If
@@ -1153,11 +1201,12 @@ Public Sub Ensure_WBS_Main_Buttons()
     On Error GoTo 0
 
     Ensure_WBS_TaskType_Input_Setup ws
+    WBS_Onboarding_ApplyReadOnlyStyle ws.ListObjects("tbl_WBS")
     Ensure_CriticalPathMode_Toggle
 
     'Sheet command buttons are presented exclusively by the Ribbon.
     Dim commandName As Variant
-    Dim commandShape As Shape
+    Dim commandShape As shape
     For Each commandName In Array("btn_WBS_Planning", "btn_WBS_Gantt", "btn_WBS_SCurve", "btn_WBS_ForcedPlanning", "btn_WBS_Full", "btn_WBS_ResetPlanning")
         Set commandShape = Nothing
         On Error Resume Next
@@ -1213,12 +1262,15 @@ Public Sub WBS_ApplyLanguage(Optional ByVal languageCode As String = "")
     WBS_ApplyLocalizedInputValidations tbl
     If Not WBS_Onboarding_LocalizedContentIsCurrent(ws, tbl) Then
         WBS_Onboarding_ApplyLocalizedContent ws, tbl
+    Else
+        ' The guide may be current while a reset/import has replaced its data rows.
+        WBS_Onboarding_ApplyReadOnlyStyle tbl
     End If
 
     Exit Sub
 
 ErrHandler:
-    Err.Raise Err.Number, "WBS_ApplyLanguage", Err.Description
+    Err.Raise Err.number, "WBS_ApplyLanguage", Err.description
 
 End Sub
 
@@ -1263,7 +1315,7 @@ Private Sub WBS_SetCellValueIfDifferent( _
     ByVal expectedValue As String)
 
     If target Is Nothing Then Exit Sub
-    If CStr(target.Value2) <> expectedValue Then target.Value = expectedValue
+    If CStr(target.Value2) <> expectedValue Then target.value = expectedValue
 
 End Sub
 
@@ -1327,7 +1379,7 @@ Private Sub WBS_SetShapeText( _
     ByVal shapeName As String, _
     ByVal captionText As String)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     If ws Is Nothing Then Exit Sub
 
@@ -1337,8 +1389,8 @@ Private Sub WBS_SetShapeText( _
 
     If shp Is Nothing Then Exit Sub
 
-    If CStr(shp.TextFrame2.TextRange.Text) <> captionText Then
-        shp.TextFrame2.TextRange.Text = captionText
+    If CStr(shp.TextFrame2.TextRange.text) <> captionText Then
+        shp.TextFrame2.TextRange.text = captionText
     End If
 
 End Sub
@@ -1357,7 +1409,7 @@ Private Sub CreateOrUpdateWBSFloatingButton( _
     ByVal btnHeight As Double, _
     ByVal fillColor As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     On Error Resume Next
     Set shp = ws.Shapes(shpName)
@@ -1370,32 +1422,32 @@ Private Sub CreateOrUpdateWBSFloatingButton( _
             topPos, _
             btnWidth, _
             btnHeight)
-        shp.Name = shpName
+        shp.name = shpName
     End If
 
-    shp.Left = leftPos
-    shp.Top = topPos
-    shp.Width = btnWidth
-    shp.Height = btnHeight
+    shp.left = leftPos
+    shp.top = topPos
+    shp.width = btnWidth
+    shp.height = btnHeight
     shp.OnAction = macroName
     shp.Placement = xlFreeFloating
 
     With shp.TextFrame2
-        .TextRange.Text = captionText
-        .TextRange.Font.Size = 10
-        .TextRange.Font.Bold = msoTrue
-        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .TextRange.text = captionText
+        .TextRange.font.size = 10
+        .TextRange.font.bold = msoTrue
+        .TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
         .VerticalAnchor = msoAnchorMiddle
-        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextRange.ParagraphFormat.alignment = msoAlignCenter
         .MarginLeft = 6
         .MarginRight = 6
         .MarginTop = 2
         .MarginBottom = 2
     End With
 
-    shp.Fill.ForeColor.RGB = fillColor
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.ForeColor.RGB = RGB(150, 150, 150)
-    shp.Line.Weight = 1
+    shp.Line.weight = 1
 
 End Sub
 
@@ -1433,9 +1485,9 @@ Private Sub Ensure_WBS_TaskType_Input_Setup(ByVal ws As Worksheet)
     oldEvents = Application.EnableEvents
     Application.EnableEvents = False
 
-    For Each cell In rng.Cells
+    For Each cell In rng.cells
 
-        rowIndex = cell.Row - rng.Row + 1
+        rowIndex = cell.row - rng.row + 1
 
         If Not WBSButtons_RowHasTaskIdentity(tbl, rowIndex) Then
             If Trim$(CStr(cell.value)) <> "" Then cell.ClearContents
@@ -1453,15 +1505,15 @@ Private Sub Ensure_WBS_TaskType_Input_Setup(ByVal ws As Worksheet)
 
     WBS_ApplyLocalizedInputValidations tbl
 
-    rng.NumberFormat = "@"
+    rng.numberFormat = "@"
 
 SafeExit:
     Application.EnableEvents = oldEvents
 
-    If Err.Number <> 0 Then
+    If Err.number <> 0 Then
         WBSButtons_ShowConsoleError _
             "WBS.ERROR.TASK_TYPE_SETUP", _
-            TextCatalog_Arguments("Details", Err.Description)
+            TextCatalog_Arguments("Details", Err.description)
     End If
 
 End Sub
@@ -1510,14 +1562,14 @@ Private Function WBSButtons_RowHasTaskIdentity( _
 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If rowIndex < 1 Or rowIndex > tbl.ListRows.Count Then Exit Function
+    If rowIndex < 1 Or rowIndex > tbl.ListRows.count Then Exit Function
 
     If WBS_TableHasSchemaColumn(tbl, VTS_COL_ID) Then
-        idVal = Trim$(CStr(SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.Cells(rowIndex, 1).value))
+        idVal = Trim$(CStr(SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_ID).DataBodyRange.cells(rowIndex, 1).value))
     End If
 
     If WBS_TableHasSchemaColumn(tbl, VTS_COL_WBS) Then
-        wbsVal = Trim$(CStr(SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.Cells(rowIndex, 1).value))
+        wbsVal = Trim$(CStr(SchemaListColumn(tbl, VTS_TABLE_WBS, VTS_COL_WBS).DataBodyRange.cells(rowIndex, 1).value))
     End If
 
     wbsVal = Replace$(wbsVal, ",", ".")
@@ -1539,7 +1591,7 @@ End Function
 
 Private Function WBS_TableHasPhysicalColumn(ByVal tbl As ListObject, ByVal columnName As String) As Boolean
 
-    Dim col As ListColumn
+    Dim col As listColumn
 
     On Error Resume Next
     Set col = tbl.ListColumns(columnName)
@@ -1569,6 +1621,10 @@ Private Sub WBSButtons_ShowConsoleError( _
     CalcBridge_ShowPlanningConsole consoleMessages
 
 End Sub
+
+
+
+
 
 
 

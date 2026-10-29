@@ -65,3 +65,21 @@ Utiliser le terme le plus étroit qui décrit une responsabilité possédée. Si
 | **PEButton** | Adaptateur visuel et d’interaction commun aux UserForms avec fallback classique. | Les handlers et responsabilités métier existants restent propriétaires. |
 | **Console ajustée au contenu** | Fenêtre de messages dimensionnée une fois sur le texte réellement préparé. | `frmPlanningMessages` ; sélection/scroll, pagination stable et owner EventHistory/ACK maintenus. |
 | **Confidentialité d’import** | Métadonnées d’import sans chemin absolu de provenance ni exception brute persistée. | Owners Migration ; gate après dernière sauvegarde publique et revue volontaire des ACK toujours nécessaires. |
+
+## Compléments de vocabulaire v1.5.0 — Finance
+
+| Terme | Définition | Propriétaire / invariant |
+|---|---|---|
+| **FINANCE_DATA** | Domaine financier canonique persistant, masqué VeryHidden, avec cinq tables techniques. | Finance et FinanceStore ; les feuilles visibles sont des vues. |
+| **FINANCE / FINANCE SUMMARY** | Projection des activités, dépenses et synthèses mensuelles/cumulées du projet financier sélectionné. | `mod_Finance` ; un changement de projet ne détruit pas les autres données. |
+| **FINANCE INPUT** | Tableau temporaire natif de préparation des dépenses. | Brouillon uniquement ; `Finance_Commit` reste autorité de validation et d'écriture. |
+| **Projet financier** | Contexte de rattachement de fiches et écritures, distinct du simple champ Project de la WBS. | Finance ; les identités doivent rester explicites entre projets. |
+| **Shared / Duplicate** | Relation de partage d'une même fiche financière entre projets. | Global ne compte la même contribution partagée qu'une fois. |
+| **Copy / Independent** | Fiche copiée puis indépendante, ou entièrement autonome. | Ses coûts sont additionnés séparément dans Global. |
+| **Global Finance** | Consolidation de plusieurs projets financiers. | Dédupliquer seulement les fiches réellement partagées ; ne pas construire un second moteur. |
+| **Budget / Actual / ETC / EAC / Variance** | Budget, dépenses enregistrées, reste à dépenser prévu, coût final estimé et écart. | Finance ; ne pas substituer l'avancement S-Curve au réalisé financier. |
+| **START / END / LINEAR** | Répartition du budget prévue au début, à la fin ou uniformément sur la durée. | Finance, pas le moteur S-Curve physique. |
+| **Expense / Credit** | Écriture de dépense datée, positive ou négative (avoir). | Journal Finance : conserver dates, signes, centimes et occurrences distinctes. |
+| **Finance Refresh** | Calcul explicite des projections et totaux à une date de référence. | `Finance_Refresh` ; ni l'ouverture ni Planning Update ne le déclenchent implicitement. |
+| **Financial Extract** | Capture indépendante de la projection financière sélectionnée. | Owner Finance ; ne modifie pas l'autorité des fiches et dépenses. |
+| **SchemaVersion 3** | Version de stockage ajoutant le domaine Finance multiprojet. | Migration versionnée, distincte de ReleaseId et de v1.5.0. |

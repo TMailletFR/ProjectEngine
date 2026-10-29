@@ -1,3 +1,12 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "ThisWorkbook"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = True
 Option Explicit
 
 '===============================================================================
@@ -39,6 +48,7 @@ Private Sub Workbook_Open()
     startedAt = Timer
     Settings_HydrateRuntimeState
     Settings_RemoveLegacyMigrationCommand
+    Finance_BindSavedView
     GanttOpenLifecycle_Record "Workbook_Open.Settings_HydrateRuntimeState", "", ThisWorkbook_ActiveSheetName(), ThisWorkbook_ActiveSheetName(), ThisWorkbook_MsSince(startedAt)
 
     startedAt = Timer
@@ -94,7 +104,7 @@ Private Sub Workbook_SheetActivate(ByVal Sh As Object)
     End If
     Init_AppEvents
     If Not Sh Is Nothing Then
-        If CStr(Sh.Name) = "GANTT" Then
+        If CStr(Sh.name) = "GANTT" Then
             GanttDrag_EnsureArmed
             If GanttDeferredRender_IsPending() Then
                 GanttDeferredRender_FinishIfPending "Workbook_SheetActivate"
@@ -111,7 +121,7 @@ End Sub
 '------------------------------------------------------------------------------
 Private Sub Workbook_SheetDeactivate(ByVal Sh As Object)
     If Sh Is Nothing Then Exit Sub
-    If CStr(Sh.Name) = "GANTT" Then GanttDrag_PauseForLifecycle
+    If CStr(Sh.name) = "GANTT" Then GanttDrag_PauseForLifecycle
 End Sub
 
 '------------------------------------------------------------------------------
@@ -128,11 +138,18 @@ End Sub
 ' EN: Stops the drag watcher before the workbook closes.
 '------------------------------------------------------------------------------
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    If Finance_ExpenseSheetActive() Then
+        Cancel = True
+        MsgBox Finance_Text("DRAFT_PENDING"), vbExclamation, "ProjectEngine Finance"
+        Exit Sub
+    End If
     If Not ProjectTutorial_BeforeClose() Then
         Cancel = True
         CalcBridge_ShowSingleConsoleMessage "WARNING", "TUTORIAL.CLOSE.RETRY"
         Exit Sub
     End If
+    ' Excel retains its native Save / Don't save / Cancel choice.
+    ' BeforeSave persists and validates the view only when saving is requested.
     GanttDrag_StopWatch False
 End Sub
 
@@ -140,7 +157,14 @@ Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
     If Not ProjectTutorial_BeforeSave() Then
         Cancel = True
         CalcBridge_ShowSingleConsoleMessage "STOP", "TUTORIAL.SAVE.BLOCKED"
+        Exit Sub
     End If
+    On Error GoTo FinanceBlocked
+    Finance_Flush
+    Exit Sub
+FinanceBlocked:
+    Cancel = True
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", TextCatalog_Arguments("Procedure", "Finance", "Details", Err.description)
 End Sub
 
 Private Sub Workbook_AfterSave(ByVal Success As Boolean)
@@ -157,8 +181,8 @@ Private Sub StartGanttDragWatchIfActive()
     On Error GoTo SafeExit
 
     If Application.ActiveSheet Is Nothing Then Exit Sub
-    If Not (Application.ActiveSheet.Parent Is Me) Then Exit Sub
-    If CStr(Application.ActiveSheet.Name) <> "GANTT" Then Exit Sub
+    If Not (Application.ActiveSheet.parent Is Me) Then Exit Sub
+    If CStr(Application.ActiveSheet.name) <> "GANTT" Then Exit Sub
 
     GanttDrag_EnsureArmed
 
@@ -170,8 +194,8 @@ Private Function ThisWorkbook_ActiveSheetName() As String
 
     On Error Resume Next
     If Not Application.ActiveSheet Is Nothing Then
-        If Application.ActiveSheet.Parent Is Me Then
-            ThisWorkbook_ActiveSheetName = CStr(Application.ActiveSheet.Name)
+        If Application.ActiveSheet.parent Is Me Then
+            ThisWorkbook_ActiveSheetName = CStr(Application.ActiveSheet.name)
         End If
     End If
     On Error GoTo 0
@@ -204,6 +228,7 @@ Public Sub Init_AppEvents()
     End If
 
 End Sub
+
 
 
 

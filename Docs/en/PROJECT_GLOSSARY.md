@@ -65,3 +65,21 @@ Use the narrowest term that describes an owned responsibility. If a new componen
 | **PEButton** | Shared visual/interaction adapter for approved UserForm controls with classic fallback. | Existing UserForms retain handlers and business ownership; presentation is not a new message engine. |
 | **Content-aware console** | Planning message window sized once from prepared real text before showing. | `frmPlanningMessages`; preserve text selection, scroll, stable pagination and EventHistory/ACK ownership. |
 | **Import privacy boundary** | Import metadata omits source absolute paths and raw persisted exceptions. | Migration owners; final distributed artifacts still require post-save metadata scan and voluntary ACK review. |
+
+## v1.5.0 terminology additions — Finance
+
+| Term | Definition | Owner / invariant |
+|---|---|---|
+| **FINANCE_DATA** | Canonical persistent Finance domain, VeryHidden, with five technical tables. | Finance / FinanceStore; visible worksheets are projections. |
+| **FINANCE / FINANCE SUMMARY** | Current financial-project activities, expenses, and monthly/cumulative reporting views. | `mod_Finance`; switching views does not discard hidden projects. |
+| **FINANCE INPUT** | Temporary native Excel expense-entry draft table. | Draft only; `Finance_Commit` owns validated persistence. |
+| **Financial project** | Context for financial records and associations, distinct from a WBS Project label alone. | Finance; preserve explicit persistent project identities. |
+| **Shared / Duplicate** | Multiple financial projects reference the same underlying record. | Global counts shared contributions once. |
+| **Copy / Independent** | Copied-then-independent or independently created financial record. | Global adds its distinct costs normally. |
+| **Global Finance** | Consolidated view across multiple financial projects. | Deduplicate only genuinely shared records, with no second engine. |
+| **Budget / Actual / ETC / EAC / Variance** | Planned cost, recorded expenses, estimate to complete, estimate at completion, and financial difference. | Finance; not interchangeable with S-Curve physical progress. |
+| **START / END / LINEAR** | Allocate planned budget at start, end or evenly over an activity. | Finance cost profile, not a progress S-Curve shape. |
+| **Expense / Credit** | Dated signed transaction including negative credit adjustments. | Finance ledger retains date, cents, sign and distinct occurrences. |
+| **Finance Refresh** | Explicit financial calculations and reporting at a known reference date. | `Finance_Refresh`; no implicit launch from Open or Planning Update. |
+| **Financial Extract** | Independent snapshot of the selected financial reporting projection. | Finance owner; no canonical financial record mutation. |
+| **SchemaVersion 3** | Persistent schema introducing the multi-project Finance domain. | Versioned migration, distinct from ReleaseId and v1.5.0. |

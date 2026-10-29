@@ -11,10 +11,10 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
-
 Option Explicit
 Private mPE As PEConsolePresentation
 Private mHomeSizing As Boolean
+Private mAutoSizing As Boolean
 Private mStep As Long, mResume As Long
 Private mChoosing As Boolean, mBusy As Boolean, mReady As Boolean, mLanguageUpdating As Boolean
 Private mSizing As Boolean, mGripX As Single, mGripY As Single
@@ -72,7 +72,7 @@ Public Sub Prepare()
     Set mGrip = Me.Controls.Add("Forms.Label.1", "tutorialGrip", True)
     mGrip.caption = "/": mGrip.ForeColor = RGB(85, 85, 85)
     mGrip.ControlTipText = ProjectTutorial_Text("RESIZE")
-    cmdClose.Cancel = True
+    cmdClose.cancel = True
     mReady = True
     ShowHome
 End Sub
@@ -86,7 +86,7 @@ Private Sub Localize()
     cmdClose.caption = ProjectTutorial_Text("CLOSE")
     mLanguageUpdating = True
     mLanguage.ListIndex = IIf(Settings_GetGlobalDisplayLanguage() = "FR", 0, 1)
-    mLanguage.Enabled = Not ThisWorkbook.ReadOnly
+    mLanguage.enabled = Not ThisWorkbook.ReadOnly
     mLanguageUpdating = False
     mModeLabel.caption = ProjectTutorial_Text(IIf(Len(ProjectTutorial_Mode()) = 0, "HOME", ProjectTutorial_Mode() & ".LABEL"))
     mModeLabel.Visible = False
@@ -120,7 +120,7 @@ Private Sub ChooseMode(ByVal mode As String)
         lblTitle.caption = ProjectTutorial_Text("RESUME")
         mBody = ProjectTutorial_Text("RESUME.MESSAGE")
         cmdPrevious.caption = ProjectTutorial_Text("RESTART"): cmdNext.caption = ProjectTutorial_Text("RESUME")
-        cmdPrevious.Visible = True: cmdNext.Visible = True: cmdPrevious.Enabled = True
+        cmdPrevious.Visible = True: cmdNext.Visible = True: cmdPrevious.enabled = True
         mStatus.caption = ProjectTutorial_Text("RESUME.POLICY")
         LayoutConsole
     Else
@@ -159,11 +159,11 @@ Private Sub RenderPage(ByVal navigate As Boolean)
         mStatus.caption = ProjectTutorial_Text("DISCOVERY.STATUS")
     End If
     If Not live And Len(ProjectTutorial_Operation(mStep)) = 0 Then mStatus.caption = mStatus.caption & " " & ProjectTutorial_Text("EMPTY.STATUS")
-    cmdPrevious.Visible = True: cmdPrevious.Enabled = (mStep > 1)
-    cmdNext.Visible = True: cmdNext.Enabled = True
+    cmdPrevious.Visible = True: cmdPrevious.enabled = (mStep > 1)
+    cmdNext.Visible = True: cmdNext.enabled = True
     cmdPrevious.caption = ProjectTutorial_Text("PREVIOUS")
     cmdNext.caption = ProjectTutorial_Text(IIf(mStep = ProjectTutorial_StepCount(), "FINISH", "NEXT"))
-    LayoutConsole
+    LayoutConsole True
     mBusy = False
     Exit Sub
 Failed:
@@ -177,14 +177,17 @@ Public Sub RefreshCurrentPage()
     If mStep > 0 And Not mChoosing Then RenderPage False
 End Sub
 
-Private Sub LayoutConsole()
+Private Sub LayoutConsole(Optional ByVal fitContent As Boolean = False)
     Dim sections As Variant, separator As Long, i As Long
     Dim text As String, Y As Double, height As Double, heading As Object, body As Object
+    Dim maximum As Double, wanted As Double, failure As Long, description As String
+    Dim buttonLabels As Object
     If Not mReady Then Exit Sub
     If mStep = 0 And Not mChoosing Then
         LayoutHome
         Exit Sub
     End If
+    On Error GoTo Failed
     Me.ScrollBars = fmScrollBarsNone: Me.ScrollTop = 0
     mStatus.Visible = True
     mHome.left = 16: mHome.top = 12: mHome.width = 76: mHome.height = 24
@@ -206,6 +209,7 @@ Private Sub LayoutConsole()
     If height < 18 Then height = 18
     mContent.height = height
     sections = Split(mBody, vbCrLf & vbCrLf)
+    Set buttonLabels = ProjectTutorial_ButtonLabels()
     Y = 0
     For i = 0 To 3
         Set heading = mContent.Controls("heading" & CStr(i)): Set body = mContent.Controls("body" & CStr(i))
@@ -213,17 +217,56 @@ Private Sub LayoutConsole()
         If i <= UBound(sections) Then
             text = CStr(sections(i)): separator = InStr(text, vbCrLf)
             If separator > 0 Then
+                heading.AutoSize = False
                 heading.left = 4: heading.top = Y: heading.width = mContent.width - 28
-                heading.caption = left$(text, separator - 1): heading.WordWrap = True
-                heading.AutoSize = True: heading.Visible = True
+                heading.height = 12
+                heading.caption = left$(text, separator - 1)
+                If buttonLabels.exists(UCase$(heading.caption)) Then heading.caption = ProjectTutorial_Text("BUTTON_PREFIX") & heading.caption
+                heading.WordWrap = True
+                heading.AutoSize = True: heading.width = mContent.width - 28: height = heading.height
+                heading.AutoSize = False: heading.height = height + heading.font.size * 1.5 + 4
+                heading.Visible = True
                 Y = heading.top + heading.height + 8: text = Mid$(text, separator + 2)
             End If
             body.AutoSize = False: body.left = 4: body.top = Y: body.width = mContent.width - 28
-            body.caption = text: body.AutoSize = True: body.Visible = True
+            body.height = 12
+            body.caption = text
+            body.AutoSize = True: body.width = mContent.width - 28: height = body.height
+            ' Reserve a wrapped line for native Label layout differences at the current DPI.
+            body.AutoSize = False: body.height = height + body.font.size * 1.5 + 4
+            body.Visible = True
             Y = body.top + body.height + 20
         End If
     Next i
     mContent.ScrollHeight = Y
+    maximum = Application.height - 32
+    If maximum < 300 Then maximum = 300
+    If Me.height > maximum Then
+        mAutoSizing = True
+        Me.height = maximum
+        mAutoSizing = False
+        mContent.height = Me.InsideHeight - mContent.top - 104
+    End If
+    If Not mSizing And (fitContent Or (Y > mContent.InsideHeight And Me.height < maximum)) Then
+        wanted = Me.height + Y - mContent.InsideHeight + 4
+        If wanted < 370 Then wanted = 370
+        If wanted > maximum Then wanted = maximum
+        If Abs(Me.height - wanted) > 0.5 Then
+            mAutoSizing = True
+            Me.height = wanted
+            mAutoSizing = False
+        End If
+        mContent.height = Me.InsideHeight - mContent.top - 104
+    End If
+    If Me.top + Me.height > Application.top + Application.height - 16 Then
+        Me.top = Application.top + Application.height - Me.height - 16
+    End If
+    mContent.ScrollTop = 0
+    If Y <= mContent.InsideHeight Then
+        mContent.ScrollBars = fmScrollBarsNone
+    Else
+        mContent.ScrollBars = fmScrollBarsVertical
+    End If
     mStatus.left = 18: mStatus.top = Me.InsideHeight - 94
     mStatus.width = Me.InsideWidth - 36: mStatus.height = 40: mStatus.WordWrap = True
     mStatus.font.size = 9: mStatus.ForeColor = RGB(70, 85, 95)
@@ -235,9 +278,15 @@ Private Sub LayoutConsole()
     mGrip.left = Me.InsideWidth - 16: mGrip.top = Me.InsideHeight - 16: mGrip.width = 14: mGrip.height = 14
     PESync
     Me.Repaint
+    Exit Sub
+Failed:
+    failure = Err.number: description = Err.description
+    mAutoSizing = False
+    Err.Raise failure, , description
 End Sub
 
 Private Sub UserForm_Resize()
+    If mAutoSizing Then Exit Sub
     PEBegin
     LayoutConsole
 End Sub
@@ -254,7 +303,7 @@ Private Sub mGrip_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByV
     If width < 390 Then width = 390
     If height < 370 Then height = 370
     If width > 1000 Then width = 1000
-    If height > 900 Then height = 900
+    If height > Application.height - 32 Then height = Application.height - 32
     Me.width = width: Me.height = height
 End Sub
 
@@ -326,10 +375,11 @@ Private Sub cmdClose_Click()
     If Not mBusy Then CloseConsole
 End Sub
 
-Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+Private Sub UserForm_QueryClose(cancel As Integer, CloseMode As Integer)
+    PEConsole_WheelDetach Me
     If CloseMode <> vbFormControlMenu Then PEEnd
     If CloseMode = vbFormControlMenu Then
-        Cancel = True
+        cancel = True
         If Not mBusy Then CloseConsole
     End If
 End Sub
@@ -347,8 +397,12 @@ Private Sub PESync()
     mPE.Sync
 End Sub
 Private Sub PEEnd()
+    PEConsole_WheelDetach Me
     If Not mPE Is Nothing Then mPE.Detach
     Set mPE = Nothing
+End Sub
+Private Sub UserForm_Terminate()
+    PEConsole_WheelDetach Me
 End Sub
 Public Sub PEHover(ByVal name As String)
     If Not mPE Is Nothing Then mPE.Hover name
@@ -376,42 +430,42 @@ End Sub
 Private Sub peFocus_cmdPrevious_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdPrevious", True
 End Sub
-Private Sub peFocus_cmdPrevious_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_cmdPrevious_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdPrevious", False
 End Sub
 
 Private Sub peFocus_cmdNext_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdNext", True
 End Sub
-Private Sub peFocus_cmdNext_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_cmdNext_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdNext", False
 End Sub
 
 Private Sub peFocus_cmdClose_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdClose", True
 End Sub
-Private Sub peFocus_cmdClose_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_cmdClose_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "cmdClose", False
 End Sub
 
 Private Sub peFocus_tutorialHome_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialHome", True
 End Sub
-Private Sub peFocus_tutorialHome_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_tutorialHome_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialHome", False
 End Sub
 
 Private Sub peFocus_tutorialDiscovery_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialDiscovery", True
 End Sub
-Private Sub peFocus_tutorialDiscovery_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_tutorialDiscovery_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialDiscovery", False
 End Sub
 
 Private Sub peFocus_tutorialPractice_Enter()
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialPractice", True
 End Sub
-Private Sub peFocus_tutorialPractice_Exit(ByVal Cancel As MSForms.ReturnBoolean)
+Private Sub peFocus_tutorialPractice_Exit(ByVal cancel As MSForms.ReturnBoolean)
     If Not mPE Is Nothing Then mPE.FocusChanged "tutorialPractice", False
 End Sub
 
@@ -470,3 +524,5 @@ Failed:
     mHomeSizing = False
     Err.Raise failure, , description
 End Sub
+
+

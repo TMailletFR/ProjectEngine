@@ -143,7 +143,7 @@ Public Sub DrawGanttShapes( _
 
     If useRows Then
         rowKeys = affectedRows.keys
-        Profiler_RecordOperation "GanttProjectedRowsFromChangeSet", affectedRows.Count, 0#
+        Profiler_RecordOperation "GanttProjectedRowsFromChangeSet", affectedRows.count, 0#
         For loopIndex = LBound(rowKeys) To UBound(rowKeys)
             r = CLng(rowKeys(loopIndex))
             If r >= 1 And r <= rowCount Then
@@ -197,7 +197,7 @@ Private Sub DrawGanttShapeRow( _
     idVal = Trim$(CStr(dataArr(r, mapWBS(VTS_COL_ID))))
 
     If IsObject(affectedIds) Then
-        If Not affectedIds.Exists(idVal) Then Exit Sub
+        If Not affectedIds.exists(idVal) Then Exit Sub
         filteredRows = filteredRows + 1
     End If
 
@@ -207,7 +207,7 @@ Private Sub DrawGanttShapeRow( _
     renderStartVal = GetRenderStartForCurrentScale(rawStartVal)
     renderFinishVal = GetRenderFinishForCurrentScale(rawFinishVal)
 
-    isParent = hasChildren.Exists(wbs)
+    isParent = hasChildren.exists(wbs)
     isMilestone = TaskTypeRules_IsMilestoneRow(dataArr, mapWBS, r, VTS_COL_TASK_TYPE)
     isLoE = TaskTypeRules_IsLevelOfEffortRow(dataArr, mapWBS, r, VTS_COL_TASK_TYPE)
 
@@ -290,7 +290,7 @@ Public Function GanttRenderer_ApplyAnalyticsStyleOnlyRecords( _
         If r < 1 Or r > UBound(dataArr, 1) Then GoTo NextPreflightRow
 
         wbs = NormalizeWBS(CStr(dataArr(r, mapWBS(VTS_COL_WBS))))
-        isParent = hasChildren.Exists(wbs)
+        isParent = hasChildren.exists(wbs)
         isMilestone = TaskTypeRules_IsMilestoneRow(dataArr, mapWBS, r, VTS_COL_TASK_TYPE)
 
         If isParent Then
@@ -362,7 +362,7 @@ NextPreflightRow:
 
         wbs = NormalizeWBS(CStr(dataArr(r, mapWBS(VTS_COL_WBS))))
         idVal = Trim$(CStr(dataArr(r, mapWBS(VTS_COL_ID))))
-        isParent = hasChildren.Exists(wbs)
+        isParent = hasChildren.exists(wbs)
         isMilestone = TaskTypeRules_IsMilestoneRow(dataArr, mapWBS, r, VTS_COL_TASK_TYPE)
         isCritical = ShouldHighlightGanttAnalyticsPath(dataArr, mapWBS, r, idVal, testById, isTestMode)
 
@@ -596,7 +596,7 @@ Public Function ShouldHighlightGanttAnalyticsPath( _
         pathValue = UCase$(Trim$(GanttLive_GetDisplayAnalyticsPath(idVal, testById, True, pathColumnKey)))
     Else
         If mapWBS Is Nothing Then Exit Function
-        If Not mapWBS.Exists(pathColumnKey) Then Exit Function
+        If Not mapWBS.exists(pathColumnKey) Then Exit Function
         pathValue = UCase$(Trim$(CStr(dataArr(dataRow, mapWBS(pathColumnKey)))))
     End If
 
@@ -667,7 +667,7 @@ Private Function IsParentWBS(ByVal wbs As String, ByRef dataArr As Variant, ByVa
 
     For i = 1 To UBound(dataArr, 1)
         otherWBS = NormalizeWBS(CStr(dataArr(i, mapWBS(VTS_COL_WBS))))
-        If Left$(otherWBS, Len(prefix)) = prefix Then
+        If left$(otherWBS, Len(prefix)) = prefix Then
             IsParentWBS = True
             Exit Function
         End If
@@ -682,16 +682,19 @@ End Function
 Public Function GetProgressFillColor( _
     ByVal startVal As Variant, _
     ByVal finishVal As Variant, _
-    ByVal progressVal As Double) As Variant
+    ByVal progressVal As Double, _
+    Optional ByRef coveredThrough As Variant) As Variant
 
     Dim durationVal As Double
     Dim coveredDays As Long
     Dim progressFinish As Double
     Dim todayVal As Double
 
+    coveredThrough = Empty
     If progressVal <= 0 Then Exit Function
 
     If progressVal >= 1 Then
+        If HasValue(finishVal) Then coveredThrough = finishVal
         GetProgressFillColor = COLOR_PROGRESS_GREEN
         Exit Function
     End If
@@ -706,6 +709,7 @@ Public Function GetProgressFillColor( _
     If coveredDays < 1 Then coveredDays = 1
 
     progressFinish = CDbl(startVal) + coveredDays - 1
+    coveredThrough = progressFinish
     todayVal = CDbl(Date)
 
     ' Tolérance : on considère "à jour" si le progress couvre aujourd'hui - 1
@@ -764,7 +768,7 @@ Public Function GanttHierarchy_BuildLeafCompletionByAncestorForRows( _
                 End If
             End If
         Next key
-        Profiler_RecordOperation "GanttHierarchyTargetParents", targetParents.Count, 0#
+        Profiler_RecordOperation "GanttHierarchyTargetParents", targetParents.count, 0#
     End If
 
     For i = 1 To rowCount
@@ -773,7 +777,7 @@ Public Function GanttHierarchy_BuildLeafCompletionByAncestorForRows( _
 
         nextWbs = vbNullString
         If i < rowCount Then nextWbs = NormalizeWBS(CStr(dataArr(i + 1, mapWBS(VTS_COL_WBS))))
-        isLeaf = Not (nextWbs <> "" And Left$(nextWbs, Len(wbsVal) + 1) = wbsVal & ".")
+        isLeaf = Not (nextWbs <> "" And left$(nextWbs, Len(wbsVal) + 1) = wbsVal & ".")
         If Not isLeaf Then GoTo NextI
 
         If HasValue(dataArr(i, mapWBS(VTS_COL_PROGRESS_PERCENT))) Then
@@ -784,8 +788,8 @@ Public Function GanttHierarchy_BuildLeafCompletionByAncestorForRows( _
 
         parentWbs = GetParentWBS(wbsVal)
         Do While parentWbs <> ""
-            If Not useTargets Or targetParents.Exists(parentWbs) Then
-                If Not parentMap.Exists(parentWbs) Then parentMap(parentWbs) = True
+            If Not useTargets Or targetParents.exists(parentWbs) Then
+                If Not parentMap.exists(parentWbs) Then parentMap(parentWbs) = True
                 If progressVal < 1 Then parentMap(parentWbs) = False
             End If
             parentWbs = GetParentWBS(parentWbs)
@@ -806,7 +810,7 @@ Private Function ParentIsCompleteFromMap(ByVal parentWbs As String, ByVal parent
     If parentCompleteMap Is Nothing Then Exit Function
     If parentWbs = "" Then Exit Function
 
-    If parentCompleteMap.Exists(parentWbs) Then
+    If parentCompleteMap.exists(parentWbs) Then
         ParentIsCompleteFromMap = CBool(parentCompleteMap(parentWbs))
     End If
 
@@ -978,7 +982,7 @@ Private Sub DrawSummaryBar( _
     Dim yBottom As Double
     Dim displayText As String
     Dim maxLen As Long
-    Dim txtShape As Shape
+    Dim txtShape As shape
     Dim textLeft As Double
     Dim textTop As Double
     Dim lineColor As Long
@@ -1012,7 +1016,7 @@ Private Sub DrawSummaryBar( _
 
     displayText = Trim$(labelText)
     If Len(displayText) > maxLen Then
-        displayText = Left$(displayText, maxLen) & "..."
+        displayText = left$(displayText, maxLen) & "..."
     End If
 
     textLeft = x2 + 8
@@ -1027,27 +1031,27 @@ Private Sub DrawSummaryBar( _
     If txtShape Is Nothing Then
         Set txtShape = ws.Shapes.AddTextbox( _
             msoTextOrientationHorizontal, textLeft, textTop, 220, GetGanttRowHeight(ws, ganttRow))
-        txtShape.Name = shapeKey & "_TXT"
+        txtShape.name = shapeKey & "_TXT"
         ApplyGanttRenderShapePlacement txtShape
         Profiler_RecordOperation "GanttDiffShapesCreated", 1, 0#
     Else
         Profiler_RecordOperation "GanttDiffShapesInspected", 1, 0#
     End If
 
-    If Abs(txtShape.Left - textLeft) > 0.1 Or _
-       Abs(txtShape.Top - textTop) > 0.1 Or _
-       Abs(txtShape.Width - 220) > 0.1 Or _
-       Abs(txtShape.Height - GetGanttRowHeight(ws, ganttRow)) > 0.1 Then
-        txtShape.Left = textLeft
-        txtShape.Top = textTop
-        txtShape.Width = 220
-        txtShape.Height = GetGanttRowHeight(ws, ganttRow)
+    If Abs(txtShape.left - textLeft) > 0.1 Or _
+       Abs(txtShape.top - textTop) > 0.1 Or _
+       Abs(txtShape.width - 220) > 0.1 Or _
+       Abs(txtShape.height - GetGanttRowHeight(ws, ganttRow)) > 0.1 Then
+        txtShape.left = textLeft
+        txtShape.top = textTop
+        txtShape.width = 220
+        txtShape.height = GetGanttRowHeight(ws, ganttRow)
         Profiler_RecordOperation "GanttDiffGeometriesUpdated", 1, 0#
     End If
 
     With txtShape
         If .Line.Visible <> msoFalse Then .Line.Visible = msoFalse
-        If .Fill.Visible <> msoFalse Then .Fill.Visible = msoFalse
+        If .fill.Visible <> msoFalse Then .fill.Visible = msoFalse
         .TextFrame2.VerticalAnchor = msoAnchorMiddle
         .TextFrame2.MarginLeft = 0
         .TextFrame2.MarginRight = 0
@@ -1056,9 +1060,9 @@ Private Sub DrawSummaryBar( _
     End With
 
     With txtShape.TextFrame2.TextRange
-        If .Text <> displayText Then .Text = displayText
-        .Font.Size = 10.5
-        .Font.Fill.ForeColor.RGB = RGB(80, 80, 80)
+        If .text <> displayText Then .text = displayText
+        .font.size = 10.5
+        .font.fill.ForeColor.RGB = RGB(80, 80, 80)
     End With
 
 End Sub
@@ -1133,3 +1137,7 @@ Public Function GetLoEProgressFromToday( _
     End If
 
 End Function
+
+
+
+

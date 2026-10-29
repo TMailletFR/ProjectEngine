@@ -15,27 +15,46 @@ Lire les éléments suivants dans cet ordre pour comprendre les frontières du p
 9. `mod_MessageEngine`, `mod_EventHistory`, `frmPlanningMessages` : chemin des diagnostics jusqu'à l'utilisateur.
 10. `PROJECT_GLOSSARY.md` et `MAINTENANCE_GUIDE.md` : vocabulaire et règles de modification.
 
-## Entrées Ribbon et accueil (v1.4.0)
+## Entrées Ribbon et accueil (v1.5.0)
 
-`customUI.xml` est embarqué dans chaque `.xlsm` avec dix-neuf commandes illustrées. `mod_RibbonCallbacks` est un **adaptateur UI mince**, pas un propriétaire de calcul. Il valide le classeur d'origine et la fenêtre active avant d'appeler les entrées publiques existantes. Les Updates sont contextuelles sur WBS ; Test/Scenario/Lock/Reset sur GANTT ; Settings, Navigation, Reset et Import suivent leur périmètre global. `ThisWorkbook` orchestre les événements du classeur et l'activation rafraîchit le Ribbon. **Ne pas invalider les contrôles Ribbon dans `Workbook_Deactivate`** (coexistence de plusieurs fichiers ProjectEngine).
+`customUI.xml` est embarqué dans chaque `.xlsm` avec des commandes illustrées, dont quatre actions Finance. `mod_RibbonCallbacks` est un **adaptateur UI mince**, pas un propriétaire de calcul. Il valide le classeur d'origine et la fenêtre active avant d'appeler les entrées publiques existantes. Les Updates sont contextuelles sur WBS ; Test/Scenario/Lock/Reset sur GANTT ; Settings, Navigation, Reset et Import suivent leur périmètre global. `ThisWorkbook` orchestre les événements du classeur et l'activation rafraîchit le Ribbon. **Ne pas invalider les contrôles Ribbon dans `Workbook_Deactivate`** (coexistence de plusieurs fichiers ProjectEngine).
 
 Sur un classeur vide et modifiable, `mod_ProjectWelcome` affiche `frmProjectWelcome` via `ProjectWelcome_ShowIfNeeded`. Start New acquitte l'accueil via le propriétaire EventHistory/ACK existant ; Import réutilise la même entrée que le Ribbon. Fermeture, annulation ou échec n'enregistrent pas un accueil réussi. Full Reset rend l'accueil à nouveau éligible. Le formulaire est une vue dédiée, sans nouveau store de messages, moteur de planning ou catalogue de traduction.
 
-## Tutoriel interactif et reçus de commandes (v1.4.0)
+## Tutoriel interactif et reçus de commandes (v1.5.0)
 
-La 19e commande Ribbon (`peTutorial`) et **Discover ProjectEngine** depuis l’accueil délèguent à `mod_ProjectTutorial` ; `frmProjectTutorial` est une **vue non modale**, pas un propriétaire du planning. Le catalogue TextCatalog commun fournit le FR/EN et Settings possède la progression persistante. Découverte et Pratique partagent **29 StepKeys sémantiques**, avec des repères de reprise indépendants. La navigation passive résout et surligne les cibles réelles sans calcul, réparation Gantt, injection de données ni watcher permanent.
+La commande Ribbon de tutoriel (`peTutorial`) et **Discover ProjectEngine** depuis l’accueil délèguent à `mod_ProjectTutorial` ; `frmProjectTutorial` est une **vue non modale**, pas un propriétaire du planning. Le catalogue TextCatalog commun fournit le FR/EN et Settings possède la progression persistante. Découverte et Pratique partagent **29 StepKeys sémantiques**, avec des repères de reprise indépendants. La navigation passive résout et surligne les cibles réelles sans calcul, réparation Gantt, injection de données ni watcher permanent.
 
 La pratique conserve la vraie saisie Excel et propose explicitement les commandes normales par le **dispatcher Ribbon et les owners métier existants**. `mod_RuntimeWorkflow` fournit l’identité d'exécution et le résultat terminal ; le tutoriel exige un reçu frais et des entrées toujours valides. STOP, échec, annulation et refus de guard n’autorisent pas une progression comme succès. L’état vide n'est une réussite que si l’owner confirme une opération safe-empty accomplie : pas de second moteur ni validateur pédagogique.
 
 Le surlignage est une unique Shape temporaire identifiée (`PE_TUTORIAL_HIGHLIGHT`), retirée pour Save/SaveAs/Close et sans mutation de valeurs, formats ou Shapes métier. Le formulaire non modal vérifie son classeur et sa fenêtre, puis ferme proprement à la perte d’ownership. Les bookmarks résident dans Settings, pas dans ACK ; Full Reset remet à zéro les deux modes ; un import conserve la progression de destination.
 
-## Fenêtres modernisées et frontière de présentation (v1.4.0)
+## Fenêtres modernisées et frontière de présentation (v1.5.0)
 
 `frmPlanningMessages` est **modale**, `frmProjectWelcome` est **modale**, `frmProjectTutorial` est **non modale**. Elles utilisent l’infrastructure visuelle commune (`PEButton`, `PEConsoleButton`, `PEConsolePresentation`, `mod_PEPaint`, `mod_PEPresentation`, `mod_PEConsoleStyle`), sans nouveaux owners métier ni installation externe. MessageEngine/EventHistory/ACK et les handlers Welcome/Tutorial font autorité. Les vrais CommandButtons MSForms restent le fallback, notamment pour les légendes incompatibles avec le renderer vectoriel. La console mesure son texte natif avant Show et garde une géométrie stable entre pages. Préserver clavier, focus, Échap, Default/Cancel et édition Excel derrière le tutoriel.
 
-## Confidentialité de l'import et des artefacts publiés (v1.4.0)
+## Confidentialité de l'import et des artefacts publiés (v1.5.0)
 
 `mod_MigrationData` et `mod_Migration` ne persistent plus le chemin absolu de la source dans le snapshot, le journal ou les identités d’événements. Les détails complets d’exception restent de session ; le diagnostic persistant est borné à la phase/code d’erreur. `mod_WorkbookSchema` conserve l’autorité sur les propriétés. La source est toujours en lecture seule, macros désactivées. Excel peut recréer des métadonnées de localisation après sauvegarde : **assainir l’artefact final après sa dernière sauvegarde et relancer le gate de confidentialité** ; nettoyer séparément les attributions nominatives `EVENT_ACK` destinées à la publication. Ne pas activer RemovePersonalInformation/filterPrivacy pour forcer le gate au prix d’un avertissement de sauvegarde.
+
+## Domaine Finance v1.5.0 : autorité, vues et calcul explicite
+
+La **Finance** possède un owner métier unique (`mod_Finance`) et un stockage persistant central dans la feuille technique **FINANCE_DATA** (VeryHidden), avec cinq tableaux de domaine : projets, rattachements, fiches financières, journal et métadonnées. Les feuilles **FINANCE** et **FINANCE SUMMARY** sont des *projections* et ne sont plus les magasins canoniques de toutes les données financières.
+
+```text
+Ribbon (vérification du workbook) / édition native Excel
+  -> mod_Finance : contrôles / transaction / commit explicite
+  -> données financières canoniques dans FINANCE_DATA (FinanceStore = I/O)
+  -> Finance_Refresh (WBS/CALC lus, jamais de second scheduler)
+  -> FINANCE + FINANCE SUMMARY : projections / graphique existant
+```
+
+Les projets financiers peuvent référencer des fiches indépendantes, copiées ou partagées. La vue **Global** déduplique les contributions réellement partagées et additionne les fiches indépendantes. Les identités financières ne sont pas les seuls IDs WBS : un même WBS peut exister dans plusieurs projets financiers. Les deux vues visibles restent un seul contexte sélectionné ; une vue non affichée ne doit pas perdre son stockage.
+
+**FINANCE INPUT** est une table temporaire d'édition Excel, non une seconde autorité. Les formulaires et le Ribbon restent des adaptateurs ; seul l'owner Finance valide et confirme. Les dépenses sont datées, signées, et historisées ; le réalisé du graphique est limité au jour du dernier Refresh Finance alors que le journal peut contenir des dépenses futures. START/END/LINEAR sont des profils de budget, distincts de la S-Curve physique. Finance ne s'exécute pas automatiquement au Planning Update, à l'ouverture ou à l'import.
+
+`SchemaVersion=3` décrit le nouveau domaine persistant. `mod_Migration`/`mod_MigrationData` transportent le domaine Finance entier, pas les seules tables visibles. Le Full Reset appelle le reset de l'owner Finance et vide les caches/projections appartenant aux autres owners. L'état final ne doit conserver aucune ancienne fiche, dépense, extraction ou ancienne identité d'ACK ; préférences autorisées et structures persistent.
+
 
 ## Flux principal
 
@@ -67,7 +86,7 @@ Ribbon Import / accueil Import
     -> MigrationData_Read (entrées et stores pris en charge)
     -> fermeture de la source sans sauvegarde
     -> Migration_ApplyInputs (remplacement des données cibles prises en charge)
-    -> propriétaires Settings / formules WBS / Constraints / Dashboard / EventHistory
+    -> propriétaires Settings / formules WBS / Constraints / Dashboard / EventHistory / Finance
     -> vérification des données et des sorties dérivées vides
     -> reçu SUCCESS + acquittement accueil, puis une sauvegarde de la cible
     -> vérification après sauvegarde
@@ -104,7 +123,7 @@ L'import est **data-only** : aucun appel automatique au Core, aucun Gantt/S-Curv
 
 ## Full Update et publication des sorties
 
-`Run_Full_Update` impose toujours un calcul Core et Analytics complet. En v1.4.0, le writer **compare les colonnes de résultats déjà calculés** avec les valeurs WBS existantes et saute uniquement une colonne entièrement identique sans formule. Toute différence, ou toute formule dans une colonne de sortie calculée, déclenche l'écriture bulk normale. Ce n'est pas un calcul Core incrémental, et un premier rendu complet n'est pas promis plus rapide. L'owner des sorties reste unique.
+`Run_Full_Update` impose toujours un calcul Core et Analytics complet. En v1.5.0, le writer **compare les colonnes de résultats déjà calculés** avec les valeurs WBS existantes et saute uniquement une colonne entièrement identique sans formule. Toute différence, ou toute formule dans une colonne de sortie calculée, déclenche l'écriture bulk normale. Ce n'est pas un calcul Core incrémental, et un premier rendu complet n'est pas promis plus rapide. L'owner des sorties reste unique.
 
 ## Domaine Gantt
 
@@ -146,6 +165,11 @@ Le rendu conserve les owners `mod_GanttRefreshPipeline`, `mod_GanttRenderer`, `m
 
 `mod_DashboardReadContext` acquiert une fois WBS, CALC et cette projection pour les trois modes Dashboard. `mod_Dashboard` conserve séparément les politiques Full Build, Content Only et Texts/Comparison.
 
+## Correctifs Dashboard et S-Curve v1.5.0
+
+Le Dashboard possède sa projection journalière relative des summaries, sans recalcul du planning ni pondération de poids S-Curve. Les instantanés incomplets sont rejetés avant engagement et les nouvelles écritures partielles font l’objet d’un rollback ciblé. La sélection des instantanés se valide contre l’historique métier, jamais contre une validation Excel transitoire. La S-Curve peut résoudre la baseline manquante via le Core existant : pas de baseline inventée depuis Forecast.
+
+
 ## Localisation commune
 
 Le TextCatalog logique partagé résout **TextKey + LanguageKey fourni par le consumer**. Le catalogue ne possède pas la langue. Les six owners indépendants sont conservés ; GLOBAL coordonne les changements sans devenir l'autorité unique. Ribbon, accueil, import et navigation consomment cette infrastructure. Les fallbacks doivent être explicites et testables ; l'API logique ne doit pas être enfermée dans le stockage CP1252.
@@ -174,6 +198,7 @@ Le producteur décide le sens et la sévérité du diagnostic. MessageEngine pr�
 | Incremental Signature | 17 champs, ordre, normalisation, sérialisation | CALC_STATE et décision de recalcul |
 | CalcState | persistance du snapshot incrémental | définition de la signature |
 | Dashboard Read Context | acquisition commune d'un refresh | rendu des trois modes |
+| Finance / FinanceStore | FINANCE_DATA canonique, validation et projections financières | dates Core ni logique métier Ribbon autonome |
 | Simulation Table Store | `tbl_CALC_GANTT_TEST` et son reset | politique TEST/SCENARIO/LOCK |
 
 ## Guards et invariants de sécurité

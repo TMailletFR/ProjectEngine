@@ -8,7 +8,7 @@
 - [Maintenance Guide](MAINTENANCE_GUIDE.md): change the project without breaking its contracts.
 - [Project Glossary](PROJECT_GLOSSARY.md): official vocabulary used in code and documentation.
 
-## Using ProjectEngine v1.4.0
+## Using ProjectEngine v1.5.0
 
 - **First use:** the welcome screen offers **Start New Project**, **Import Previous Project**, or **Discover ProjectEngine** when the workbook is eligible (empty and writable). The welcome choice is stored through the existing acknowledgement system; Full Reset can bring the welcome screen back.
 - **Excel Ribbon:** the embedded **ProjectEngine** tab groups planning updates, Gantt simulation controls, Settings, navigation, reset and import. Controls change with the active worksheet; no separate add-in is required.
@@ -18,6 +18,19 @@
 - **Gantt navigation:** **Go to Selected Task** and **Show Full Timeline** use the existing Gantt owner. Complete vertical/horizontal fit is limited by Excel's minimum zoom on very large schedules.
 
 The [Architecture Reading Guide](ARCHITECTURE_READING_GUIDE.md) explains ownership and processing flows; the [Maintenance Guide](MAINTENANCE_GUIDE.md) covers changes and safety constraints.
+
+## Finance and multi-project controls (new in v1.5.0)
+
+- **FINANCE:** attach WBS activities, enter Budget and ETC, review Actual, EAC and Variance, and select **START**, **END** or **LINEAR** planned-cost profiles.
+- **Expense journal:** record dated expenses and negative credits; prepare multiple edits using a native Excel draft table with filtering, sorting and pasting, then explicitly confirm or cancel.
+- **Multi-project:** maintain independent financial projects and independent, copied or shared financial records. The **Global** view consolidates shared financial data once.
+- **FINANCE SUMMARY:** inspect monthly and cumulative planned/actual spending. Future expenses remain recorded but are excluded from actual chart values until the Finance refresh reference date reaches them.
+- **Explicit calculation:** select **Refresh Finance**; opening the workbook, changing language or running Planning Update does not automatically refresh Finance.
+- **Migration:** **SchemaVersion 3** preserves supported financial-domain data, editable WBS cell formats and selected column widths across compatible workbook versions. The source remains unchanged; back up the destination first.
+- **Full Reset:** clears the previous project's Finance data, extracted sheets, event history and old caches while retaining the workbook infrastructure and supported preferences.
+
+Finance provides **project cost reporting**, not general-ledger accounting or invoicing. START/END/LINEAR apply to Finance cost timing, not progress S-Curve shapes. Global Finance does not combine separate planning workbooks.
+
 
 ## Recommended path
 

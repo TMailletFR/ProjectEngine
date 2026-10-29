@@ -38,14 +38,14 @@ Public Function TextCatalog_Get(ByVal messageKey As String, ByVal languageKey As
     normalizedKey = TextCatalog_NormalizeMessageKey(messageKey)
     normalizedLanguage = TextCatalog_NormalizeLanguageKey(languageKey)
 
-    If Not mTextsByKey.Exists(normalizedKey) Then
+    If Not mTextsByKey.exists(normalizedKey) Then
         TextCatalog_RecordDiagnostic "UNKNOWN_KEY", normalizedKey & "/" & normalizedLanguage
         TextCatalog_Get = TextCatalog_MissingMarker(normalizedKey, normalizedLanguage)
         Exit Function
     End If
 
     Set translations = mTextsByKey(normalizedKey)
-    If translations.Exists(normalizedLanguage) Then
+    If translations.exists(normalizedLanguage) Then
         If Len(CStr(translations(normalizedLanguage))) > 0 Then
             TextCatalog_Get = CStr(translations(normalizedLanguage))
             Exit Function
@@ -58,7 +58,7 @@ Public Function TextCatalog_Get(ByVal messageKey As String, ByVal languageKey As
         TextCatalog_RecordDiagnostic "MISSING_ENGLISH", normalizedKey
     End If
 
-    If translations.Exists(TEXT_LANGUAGE_EN) Then
+    If translations.exists(TEXT_LANGUAGE_EN) Then
         If Len(CStr(translations(TEXT_LANGUAGE_EN))) > 0 Then
             TextCatalog_Get = CStr(translations(TEXT_LANGUAGE_EN))
             Exit Function
@@ -92,9 +92,9 @@ Public Function TextCatalog_Format( _
     localizedText = TextCatalog_Get(messageKey, languageKey)
     Set placeholders = TextCatalog_ExtractPlaceholders(localizedText)
 
-    For Each placeholderName In placeholders.Keys
+    For Each placeholderName In placeholders.keys
         If Not namedArguments Is Nothing Then
-            If Not namedArguments.Exists(CStr(placeholderName)) Then
+            If Not namedArguments.exists(CStr(placeholderName)) Then
                 TextCatalog_RecordDiagnostic "MISSING_ARGUMENT", _
                     TextCatalog_NormalizeMessageKey(messageKey) & "/" & CStr(placeholderName)
             End If
@@ -105,8 +105,8 @@ Public Function TextCatalog_Format( _
     Next placeholderName
 
     If Not namedArguments Is Nothing Then
-        For Each argumentName In namedArguments.Keys
-            If Not placeholders.Exists(CStr(argumentName)) Then
+        For Each argumentName In namedArguments.keys
+            If Not placeholders.exists(CStr(argumentName)) Then
                 TextCatalog_RecordDiagnostic "EXTRA_ARGUMENT", _
                     TextCatalog_NormalizeMessageKey(messageKey) & "/" & CStr(argumentName)
             End If
@@ -124,7 +124,7 @@ Public Function TextCatalog_Format( _
         tokenName = Mid$(localizedText, openPosition + 1, closePosition - openPosition - 1)
         tokenText = Mid$(localizedText, openPosition, closePosition - openPosition + 1)
         If Len(tokenName) > 0 And Not namedArguments Is Nothing Then
-            If namedArguments.Exists(tokenName) Then tokenText = CStr(namedArguments(tokenName))
+            If namedArguments.exists(tokenName) Then tokenText = CStr(namedArguments(tokenName))
         End If
         result = result & tokenText
         cursor = closePosition + 1
@@ -158,7 +158,7 @@ Public Function TextCatalog_Arguments(ParamArray nameValuePairs() As Variant) As
             Err.Raise vbObjectError + 5402, "TextCatalog_Arguments", _
                 TextCatalogBootstrap_ErrorWire("TEXTCATALOG.ERROR.EMPTY_ARGUMENT_NAME")
         End If
-        If arguments.Exists(argumentName) Then
+        If arguments.exists(argumentName) Then
             Err.Raise vbObjectError + 5403, "TextCatalog_Arguments", _
                 TextCatalogBootstrap_ErrorWire( _
                     "TEXTCATALOG.ERROR.DUPLICATE_ARGUMENT", argumentName)
@@ -184,22 +184,22 @@ Public Function TextCatalog_ValidateAll() As String
     TextCatalog_EnsureBuilt
     Set validationErrors = New Collection
 
-    For Each messageKey In mTextsByKey.Keys
+    For Each messageKey In mTextsByKey.keys
         Set translations = mTextsByKey(CStr(messageKey))
 
-        If Not translations.Exists(TEXT_LANGUAGE_EN) Then
+        If Not translations.exists(TEXT_LANGUAGE_EN) Then
             validationErrors.Add CStr(messageKey) & ": missing EN"
         ElseIf Len(CStr(translations(TEXT_LANGUAGE_EN))) = 0 Then
             validationErrors.Add CStr(messageKey) & ": empty EN"
         End If
 
-        If Not translations.Exists(TEXT_LANGUAGE_FR) Then
+        If Not translations.exists(TEXT_LANGUAGE_FR) Then
             validationErrors.Add CStr(messageKey) & ": missing FR"
         ElseIf Len(CStr(translations(TEXT_LANGUAGE_FR))) = 0 Then
             validationErrors.Add CStr(messageKey) & ": empty FR"
         End If
 
-        If translations.Exists(TEXT_LANGUAGE_EN) And translations.Exists(TEXT_LANGUAGE_FR) Then
+        If translations.exists(TEXT_LANGUAGE_EN) And translations.exists(TEXT_LANGUAGE_FR) Then
             englishSignature = TextCatalog_PlaceholderSignature(CStr(translations(TEXT_LANGUAGE_EN)))
             frenchSignature = TextCatalog_PlaceholderSignature(CStr(translations(TEXT_LANGUAGE_FR)))
             If englishSignature <> frenchSignature Then
@@ -209,7 +209,7 @@ Public Function TextCatalog_ValidateAll() As String
         End If
     Next messageKey
 
-    If validationErrors.Count = 0 Then
+    If validationErrors.count = 0 Then
         TextCatalog_ValidateAll = "PASS"
     Else
         TextCatalog_ValidateAll = TextCatalog_JoinCollection(validationErrors, vbCrLf)
@@ -228,16 +228,16 @@ End Function
 
 Public Function TextCatalog_DiagnosticCount() As Long
     TextCatalog_EnsureDiagnostics
-    TextCatalog_DiagnosticCount = mDiagnostics.Count
+    TextCatalog_DiagnosticCount = mDiagnostics.count
 End Function
 
-Public Function TextCatalog_Diagnostic(ByVal index As Long) As String
+Public Function TextCatalog_Diagnostic(ByVal Index As Long) As String
     TextCatalog_EnsureDiagnostics
-    If index < 1 Or index > mDiagnostics.Count Then
+    If Index < 1 Or Index > mDiagnostics.count Then
         Err.Raise vbObjectError + 5404, "TextCatalog_Diagnostic", _
             TextCatalogBootstrap_ErrorWire("TEXTCATALOG.ERROR.DIAGNOSTIC_INDEX")
     End If
-    TextCatalog_Diagnostic = CStr(mDiagnostics(index))
+    TextCatalog_Diagnostic = CStr(mDiagnostics(Index))
 End Function
 
 ' Release-audit inventory. Equal translations are not automatically defects:
@@ -249,10 +249,10 @@ Public Function TextCatalog_IdenticalTranslationKeys() As String
     Dim result As String
 
     TextCatalog_EnsureBuilt
-    For Each messageKey In mTextsByKey.Keys
+    For Each messageKey In mTextsByKey.keys
         Set translations = mTextsByKey(CStr(messageKey))
-        If translations.Exists(TEXT_LANGUAGE_EN) And _
-           translations.Exists(TEXT_LANGUAGE_FR) Then
+        If translations.exists(TEXT_LANGUAGE_EN) And _
+           translations.exists(TEXT_LANGUAGE_FR) Then
             If CStr(translations(TEXT_LANGUAGE_EN)) = CStr(translations(TEXT_LANGUAGE_FR)) Then
                 If Len(result) > 0 Then result = result & vbCrLf
                 result = result & CStr(messageKey)
@@ -270,10 +270,10 @@ Public Function TextCatalog_IdenticalTranslationInventory() As String
     Dim result As String
 
     TextCatalog_EnsureBuilt
-    For Each messageKey In mTextsByKey.Keys
+    For Each messageKey In mTextsByKey.keys
         Set translations = mTextsByKey(CStr(messageKey))
-        If translations.Exists(TEXT_LANGUAGE_EN) And _
-           translations.Exists(TEXT_LANGUAGE_FR) Then
+        If translations.exists(TEXT_LANGUAGE_EN) And _
+           translations.exists(TEXT_LANGUAGE_FR) Then
             If CStr(translations(TEXT_LANGUAGE_EN)) = CStr(translations(TEXT_LANGUAGE_FR)) Then
                 If Len(result) > 0 Then result = result & vbCrLf
                 result = result & CStr(messageKey) & vbTab & _
@@ -341,6 +341,8 @@ Private Sub TextCatalog_EnsureBuilt()
         "WELCOME", TextCatalogWelcome_Definitions()
     TextCatalog_ImportDefinitions candidateTexts, _
         "TUTORIAL", TextCatalogTutorial_Definitions()
+    TextCatalog_ImportDefinitions candidateTexts, _
+        "FINANCE", TextCatalogFinance_Definitions()
 
     Set mTextsByKey = candidateTexts
     mCatalogBuilt = True
@@ -351,7 +353,7 @@ Private Sub TextCatalog_EnsureBuilt()
 BuildFailed:
     mCatalogBuilding = False
     Set mTextsByKey = Nothing
-    Err.Raise Err.Number, "TextCatalog_EnsureBuilt", Err.Description
+    Err.Raise Err.number, "TextCatalog_EnsureBuilt", Err.description
 
 End Sub
 
@@ -372,7 +374,7 @@ Private Sub TextCatalog_ImportDefinitions( _
         End If
 
         messageKey = TextCatalog_NormalizeMessageKey(CStr(definition(0)))
-        If targetTexts.Exists(messageKey) Then
+        If targetTexts.exists(messageKey) Then
             Err.Raise vbObjectError + 5407, "TextCatalog_ImportDefinitions", _
                 TextCatalogBootstrap_ErrorWire( _
                     "TEXTCATALOG.ERROR.DUPLICATE_KEY", messageKey)
@@ -421,7 +423,7 @@ Private Function TextCatalog_ExtractPlaceholders(ByVal value As String) As Objec
 
         placeholderName = Mid$(value, openPosition + 1, closePosition - openPosition - 1)
         If Len(placeholderName) > 0 Then
-            If Not result.Exists(placeholderName) Then result.Add placeholderName, True
+            If Not result.exists(placeholderName) Then result.Add placeholderName, True
         End If
         openPosition = closePosition + 1
     Loop
@@ -439,9 +441,9 @@ Private Function TextCatalog_PlaceholderSignature(ByVal value As String) As Stri
     Dim swapValue As String
 
     Set placeholders = TextCatalog_ExtractPlaceholders(value)
-    If placeholders.Count = 0 Then Exit Function
+    If placeholders.count = 0 Then Exit Function
 
-    names = placeholders.Keys
+    names = placeholders.keys
     For i = LBound(names) To UBound(names) - 1
         For j = i + 1 To UBound(names)
             If StrComp(CStr(names(i)), CStr(names(j)), vbBinaryCompare) > 0 Then
@@ -477,10 +479,12 @@ Private Function TextCatalog_JoinCollection(ByVal values As Collection, ByVal se
     Dim parts() As String
     Dim i As Long
 
-    ReDim parts(0 To values.Count - 1)
-    For i = 1 To values.Count
+    ReDim parts(0 To values.count - 1)
+    For i = 1 To values.count
         parts(i - 1) = CStr(values(i))
     Next i
     TextCatalog_JoinCollection = Join(parts, separator)
 
 End Function
+
+

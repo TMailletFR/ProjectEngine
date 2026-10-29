@@ -22,7 +22,7 @@ Option Explicit
 
 Private Const CONSTRAINTS_SHEET_NAME As String = "CONSTRAINTS"
 Private Const CONSTRAINTS_TABLE_NAME As String = "tbl_CONSTRAINTS"
-Private Const CONSTRAINTS_TOP_LEFT As String = "A1"
+Private Const CONSTRAINTS_TOP_LEFT As String = "A2"
 
 Private Const WBS_SHEET_NAME As String = "WBS"
 Private Const WBS_TABLE_NAME As String = "tbl_WBS"
@@ -52,12 +52,82 @@ Public Sub Constraints_ApplyLanguage(Optional ByVal languageCode As String = "")
     Set ws = ThisWorkbook.Worksheets(CONSTRAINTS_SHEET_NAME)
     Set tbl = ws.ListObjects(CONSTRAINTS_TABLE_NAME)
     ApplyConstraintsValidation tbl
+    stepName = "present help row"
+    Constraints_Present tbl
 
     Exit Sub
 
 ErrHandler:
-    Err.Raise Err.Number, "Constraints_ApplyLanguage." & stepName, Err.Description
+    Err.Raise Err.number, "Constraints_ApplyLanguage." & stepName, Err.description
 
+End Sub
+
+Private Function Constraints_IsInput(ByVal key As String) As Boolean
+    Select Case key
+        Case VTS_COL_START_CONSTRAINT_TYPE, VTS_COL_START_CONSTRAINT_DATE, _
+             VTS_COL_FINISH_CONSTRAINT_TYPE, VTS_COL_FINISH_CONSTRAINT_DATE, _
+             VTS_COL_DEADLINE, VTS_COL_ACTIVE, VTS_COL_COMMENT
+            Constraints_IsInput = True
+    End Select
+End Function
+
+Public Function Constraints_HasHelpRow(ByVal tbl As ListObject) As Boolean
+    Dim key As Variant, cell As Range, status As String, language As Variant, matched As Boolean
+    If tbl.HeaderRowRange.row <> 2 Then Exit Function
+    For Each key In SchemaColumnKeys(VTS_TABLE_CONSTRAINTS)
+        Set cell = SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, CStr(key)).Range.cells(1, 1).offset(-1)
+        status = "WBS.ONBOARDING.CALCULATED"
+        If Constraints_IsInput(CStr(key)) Then status = "WBS.ONBOARDING.OPTIONAL"
+        matched = False
+        For Each language In Array("FR", "EN")
+            If CStr(cell.Value2) = TextCatalog_Get(status, CStr(language)) Then matched = True
+        Next language
+        If Not matched Then Exit Function
+    Next key
+    Constraints_HasHelpRow = True
+End Function
+
+Public Sub Constraints_Present(ByRef tbl As ListObject)
+    Dim key As Variant, col As listColumn, automaticColumns As Range, cell As Range
+    Dim status As String, helpKey As String, title As String, oldEvents As Boolean, number As Long, description As String, ws As Worksheet, phase As String
+    oldEvents = Application.EnableEvents
+    On Error GoTo Failed
+    Application.EnableEvents = False
+    Set ws = tbl.parent
+    If tbl.HeaderRowRange.row = 1 Then
+        phase = "move table"
+        tbl.Range.Cut destination:=ws.Range("A2")
+        Set tbl = ws.ListObjects(CONSTRAINTS_TABLE_NAME)
+    End If
+    If tbl.HeaderRowRange.row <> 2 Then Err.Raise 5, "Constraints_Present", "Unexpected Constraints header row"
+    For Each key In SchemaColumnKeys(VTS_TABLE_CONSTRAINTS)
+        phase = "help " & CStr(key)
+        Set col = SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, CStr(key))
+        phase = "cell " & CStr(key)
+        Set cell = col.Range.cells(1, 1).offset(-1)
+        status = "WBS.ONBOARDING.CALCULATED": helpKey = "AUTO"
+        If Constraints_IsInput(CStr(key)) Then
+            status = "WBS.ONBOARDING.OPTIONAL": helpKey = CStr(key)
+        Else
+            If automaticColumns Is Nothing Then Set automaticColumns = col.Range Else Set automaticColumns = Application.Union(automaticColumns, col.Range)
+        End If
+        cell.Value2 = TextCatalog_Get(status, Constraints_CurrentLanguage())
+        cell.font.size = 9: cell.font.color = RGB(90, 90, 90)
+        cell.HorizontalAlignment = xlCenter: cell.WrapText = False
+        title = SchemaColumnTitle(VTS_TABLE_CONSTRAINTS, CStr(key), Constraints_CurrentLanguage())
+        phase = "comment " & CStr(key)
+        WBS_Onboarding_ApplyHelpCell cell, title & vbLf & vbLf & TextCatalog_Get("CONSTRAINTS.HELP." & helpKey, Constraints_CurrentLanguage()), Len(title)
+    Next key
+    tbl.HeaderRowRange.offset(-1).rowHeight = 18
+    phase = "automatic palette"
+    VisibleHeaders_ApplyReadOnlyStyle tbl, automaticColumns
+CleanExit:
+    Application.EnableEvents = oldEvents
+    If number <> 0 Then On Error GoTo 0: Err.Raise number, "Constraints_Present", description
+    Exit Sub
+Failed:
+    number = Err.number: description = phase & ": " & Err.description
+    Resume CleanExit
 End Sub
 
 '------------------------------------------------------------------------------
@@ -112,13 +182,13 @@ Public Sub Handle_Constraints_Change(ByVal ws As Worksheet, ByVal Target As Rang
     Set choices = Application.Intersect(Target, choices)
     If Not choices Is Nothing Then
         Set messages = New Collection
-        For Each cell In choices.Cells
+        For Each cell In choices.cells
             ' Keep Excel's declarative list rule and the existing warning severity.
-            If Not cell.Validation.Value Then
-                CalcBridge_AddConsoleMessage messages, "WARNING", cell.Validation.ErrorTitle & vbCrLf & cell.Validation.ErrorMessage
+            If Not cell.validation.value Then
+                CalcBridge_AddConsoleMessage messages, "WARNING", cell.validation.errorTitle & vbCrLf & cell.validation.errorMessage
             End If
         Next cell
-        If messages.Count > 0 Then CalcBridge_ShowPlanningConsole messages
+        If messages.count > 0 Then CalcBridge_ShowPlanningConsole messages
     End If
 
     Set rngDeadline = SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DEADLINE).DataBodyRange
@@ -216,7 +286,7 @@ Public Sub Import_WBS_To_Constraints()
         GoTo SafeExit
     End If
 
-    ReDim outArr(1 To targetRows, 1 To tblConstraints.ListColumns.Count)
+    ReDim outArr(1 To targetRows, 1 To tblConstraints.ListColumns.count)
 
     outRow = 0
 
@@ -237,7 +307,7 @@ SafeExit:
 
 ErrHandler:
     ' The workflow owns presentation; capture before any formatter or cleanup.
-    errorNumber = Err.Number: errorSource = Err.Source: errorDescription = Err.Description
+    errorNumber = Err.number: errorSource = Err.source: errorDescription = Err.description
     Err.Raise errorNumber, errorSource, errorDescription
 
 End Sub
@@ -372,7 +442,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
             End If
 
             If idVal <> "" Then
-                If calcRowById.Exists(idVal) Then
+                If calcRowById.exists(idVal) Then
                     If HasConstraintDate(arrConstraints(r, mapConstraints(VTS_COL_DEADLINE))) Then
                         calcRow = CLng(calcRowById(idVal))
                         arrCalc(calcRow, mapCalc("Deadline")) = arrConstraints(r, mapConstraints(VTS_COL_DEADLINE))
@@ -389,7 +459,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
                 If IsConstraintSummaryRow(arrConstraints(r, mapConstraints(VTS_COL_IS_SUMMARY))) Then GoTo NextConstraintRow
                 If IsConstraintLevelOfEffort(arrConstraints(r, mapConstraints(VTS_COL_TASK_TYPE))) Then GoTo NextConstraintRow
 
-                If Not calcRowById.Exists(idVal) Then
+                If Not calcRowById.exists(idVal) Then
                     Err.Raise vbObjectError + 8613, "Sync_Constraints_To_CALC", _
                         PlanningMessageText_Format("CONSTRAINTS.ERROR.ID_NOT_IN_CALC", _
                             TextCatalog_Arguments("Id", idVal), TextCatalog_Arguments("Id", idVal))
@@ -418,23 +488,23 @@ NextConstraintRow:
     ApplyCalcConstraintFormats tblCalc
 
 SafeExit:
-    Sync_Constraints_To_CALC_Impl = (Err.Number = 0)
+    Sync_Constraints_To_CALC_Impl = (Err.number = 0)
 
     If showConsole And Not consoleMessages Is Nothing Then
-        If consoleMessages.Count > 0 Then CalcBridge_ShowPlanningConsole consoleMessages
+        If consoleMessages.count > 0 Then CalcBridge_ShowPlanningConsole consoleMessages
     End If
     Exit Function
 
 ErrHandler:
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
-    If Err.Source = "ValidateActiveConstraints" Then
-        CalcBridge_AddConsoleMessage consoleMessages, "STOP", Err.Description
+    If Err.source = "ValidateActiveConstraints" Then
+        CalcBridge_AddConsoleMessage consoleMessages, "STOP", Err.description
     Else
         CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
             PlanningMessageText_Format("CONSTRAINTS.SYNC.ERROR", _
-                TextCatalog_Arguments("Details", Err.Description), _
-                TextCatalog_Arguments("Details", Err.Description))
+                TextCatalog_Arguments("Details", Err.description), _
+                TextCatalog_Arguments("Details", Err.description))
     End If
 
     Resume SafeExit
@@ -457,8 +527,8 @@ Private Function EnsureConstraintsWorksheet() As Worksheet
     On Error GoTo 0
 
     If ws Is Nothing Then
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
-        ws.Name = CONSTRAINTS_SHEET_NAME
+        Set ws = ThisWorkbook.Worksheets.Add(after:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
+        ws.name = CONSTRAINTS_SHEET_NAME
         If Not wsStart Is Nothing Then wsStart.Activate
     End If
 
@@ -477,7 +547,7 @@ Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
     Dim headerCount As Long
     Dim rng As Range
     Dim i As Long
-    Dim lc As ListColumn
+    Dim lc As listColumn
     Dim headerName As String
 
     Constraints_SetLanguage Settings_GetOwnerLanguage("CONSTRAINTS")
@@ -493,12 +563,13 @@ Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
         rng.Clear
 
         For i = 0 To headerCount - 1
-            rng.Cells(1, i + 1).value = SchemaCurrentColumnTitle( _
+            rng.cells(1, i + 1).value = SchemaCurrentColumnTitle( _
                 VTS_TABLE_CONSTRAINTS, CStr(headers(LBound(headers) + i)))
         Next i
 
         Set tbl = ws.ListObjects.Add(xlSrcRange, rng, , xlYes)
-        tbl.Name = CONSTRAINTS_TABLE_NAME
+        tbl.name = CONSTRAINTS_TABLE_NAME
+        tbl.Range.columns.AutoFit
 
         If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
     Else
@@ -511,12 +582,13 @@ Private Function EnsureConstraintsTable(ByVal ws As Worksheet) As ListObject
 
             If lc Is Nothing Then
                 Set lc = tbl.ListColumns.Add
-                lc.Name = headerName
+                lc.name = headerName
             End If
         Next i
     End If
 
     ApplyConstraintsFormats tbl
+    Constraints_Present tbl
     Set EnsureConstraintsTable = tbl
 
 End Function
@@ -562,7 +634,7 @@ Private Sub RequireColumns_Constraints( _
     Dim c As Variant
 
     For Each c In requiredCols
-        If Not mapCol.Exists(CStr(c)) Then
+        If Not mapCol.exists(CStr(c)) Then
             Err.Raise vbObjectError + 8601, "RequireColumns_Constraints", _
                 PlanningMessageText_Format("CONSTRAINTS.ERROR.MISSING_REQUIRED_COLUMN", _
                     TextCatalog_Arguments("Table", tableName, "Column", CStr(c)), _
@@ -692,7 +764,7 @@ Private Sub ValidateActiveConstraints( _
                     arrConstraints, r, mapConstraints, _
                     "CONSTRAINTS.DIAG.INVALID_DEADLINE")
         End If
-        If Not calcRowById.Exists(idVal) Then
+        If Not calcRowById.exists(idVal) Then
             Err.Raise vbObjectError + 8621, "ValidateActiveConstraints", _
                 BuildConstraintValidationMessage( _
                     arrConstraints, r, mapConstraints, _
@@ -874,13 +946,13 @@ Private Sub ApplyCalcConstraintFormats(ByVal tblCalc As ListObject)
 
     On Error Resume Next
 
-    tblCalc.ListColumns("Constraint Active").DataBodyRange.NumberFormat = "@"
-    tblCalc.ListColumns("Start Constraint Type").DataBodyRange.NumberFormat = "@"
-    tblCalc.ListColumns("Start Constraint Date").DataBodyRange.NumberFormat = "dd/mm/yyyy"
-    tblCalc.ListColumns("Finish Constraint Type").DataBodyRange.NumberFormat = "@"
-    tblCalc.ListColumns("Finish Constraint Date").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    tblCalc.ListColumns("Constraint Active").DataBodyRange.numberFormat = "@"
+    tblCalc.ListColumns("Start Constraint Type").DataBodyRange.numberFormat = "@"
+    tblCalc.ListColumns("Start Constraint Date").DataBodyRange.numberFormat = "dd/mm/yyyy"
+    tblCalc.ListColumns("Finish Constraint Type").DataBodyRange.numberFormat = "@"
+    tblCalc.ListColumns("Finish Constraint Date").DataBodyRange.numberFormat = "dd/mm/yyyy"
 
-        tblCalc.ListColumns("Deadline").DataBodyRange.NumberFormat = "dd/mm/yyyy"
+        tblCalc.ListColumns("Deadline").DataBodyRange.numberFormat = "dd/mm/yyyy"
 
     On Error GoTo 0
 
@@ -968,11 +1040,11 @@ Private Function BuildExistingConstraintRows( _
         idVal = Trim$(CStr(arr(r, mapConstraints(VTS_COL_ID))))
 
         If idVal <> "" Then
-            If Not d.Exists(idVal) Then
+            If Not d.exists(idVal) Then
                 Set rowData = CreateObject("Scripting.Dictionary")
 
                 For Each c In headers
-                    If mapConstraints.Exists(CStr(c)) Then
+                    If mapConstraints.exists(CStr(c)) Then
                         rowData(CStr(c)) = arr(r, mapConstraints(CStr(c)))
                     Else
                         rowData(CStr(c)) = Empty
@@ -1022,8 +1094,8 @@ Private Function ConstraintSourceRowHasIdentity( _
 
     If mapWBS Is Nothing Then Exit Function
 
-    If mapWBS.Exists(VTS_COL_ID) Then idVal = Trim$(CStr(arrWBS(rowIndex, mapWBS(VTS_COL_ID))))
-    If mapWBS.Exists(VTS_COL_WBS) Then wbsVal = NormalizeWBS(CStr(arrWBS(rowIndex, mapWBS(VTS_COL_WBS))))
+    If mapWBS.exists(VTS_COL_ID) Then idVal = Trim$(CStr(arrWBS(rowIndex, mapWBS(VTS_COL_ID))))
+    If mapWBS.exists(VTS_COL_WBS) Then wbsVal = NormalizeWBS(CStr(arrWBS(rowIndex, mapWBS(VTS_COL_WBS))))
 
     ConstraintSourceRowHasIdentity = (idVal <> "" Or wbsVal <> "")
 
@@ -1077,7 +1149,7 @@ Private Sub FillConstraintOutputRowFromWBS( _
     idVal = Trim$(CStr(arrWBS(wbsRow, mapWBS(VTS_COL_ID))))
     wbsVal = NormalizeWBS(CStr(arrWBS(wbsRow, mapWBS(VTS_COL_WBS))))
 
-    If existingById.Exists(idVal) Then
+    If existingById.exists(idVal) Then
         Set existingRow = existingById(idVal)
     Else
         Set existingRow = Nothing
@@ -1088,7 +1160,7 @@ Private Sub FillConstraintOutputRowFromWBS( _
     outArr(outRow, mapConstraints(VTS_COL_TASK_NAME)) = arrWBS(wbsRow, mapWBS(VTS_COL_TASK_NAME))
     outArr(outRow, mapConstraints(VTS_COL_TASK_DESCRIPTION)) = arrWBS(wbsRow, mapWBS(VTS_COL_TASK_DESCRIPTION))
     outArr(outRow, mapConstraints(VTS_COL_TASK_TYPE)) = arrWBS(wbsRow, mapWBS(VTS_COL_TASK_TYPE))
-    outArr(outRow, mapConstraints(VTS_COL_IS_SUMMARY)) = IIf(summaryByWbs.Exists(wbsVal), "TRUE", "FALSE")
+    outArr(outRow, mapConstraints(VTS_COL_IS_SUMMARY)) = IIf(summaryByWbs.exists(wbsVal), "TRUE", "FALSE")
     outArr(outRow, mapConstraints(VTS_COL_CALCULATED_START)) = arrWBS(wbsRow, mapWBS(VTS_COL_CALCULATED_START))
     outArr(outRow, mapConstraints(VTS_COL_CALCULATED_FINISH)) = arrWBS(wbsRow, mapWBS(VTS_COL_CALCULATED_FINISH))
     outArr(outRow, mapConstraints(VTS_COL_CALCULATED_DURATION)) = arrWBS(wbsRow, mapWBS(VTS_COL_CALCULATED_DURATION))
@@ -1112,9 +1184,9 @@ Private Sub FillConstraintOutputRowFromExisting( _
     Dim c As Variant
 
     For Each c In ConstraintsHeaders()
-        If mapConstraints.Exists(CStr(c)) Then
+        If mapConstraints.exists(CStr(c)) Then
             If Not existingRow Is Nothing Then
-                If existingRow.Exists(CStr(c)) Then
+                If existingRow.exists(CStr(c)) Then
                     If Not IsPlanningMirrorField(CStr(c)) Then
                         outArr(outRow, mapConstraints(CStr(c))) = existingRow(CStr(c))
                     End If
@@ -1165,14 +1237,14 @@ Private Sub CopyPreservedConstraintFields( _
         VTS_COL_COMMENT)
 
     For Each f In fields
-        If mapConstraints.Exists(CStr(f)) Then
+        If mapConstraints.exists(CStr(f)) Then
             If existingRow Is Nothing Then
                 If CStr(f) = VTS_COL_ACTIVE Then
                     outArr(outRow, mapConstraints(CStr(f))) = "No"
                 Else
                     outArr(outRow, mapConstraints(CStr(f))) = Empty
                 End If
-            ElseIf existingRow.Exists(CStr(f)) Then
+            ElseIf existingRow.exists(CStr(f)) Then
                 outArr(outRow, mapConstraints(CStr(f))) = existingRow(CStr(f))
             End If
         End If
@@ -1202,12 +1274,12 @@ Private Sub ResizeTableToRowCount_Constraints( _
     If tbl.DataBodyRange Is Nothing Then
         currentRows = 0
     Else
-        currentRows = tbl.ListRows.Count
+        currentRows = tbl.ListRows.count
     End If
 
     If targetRows = 0 Then
-        Do While tbl.ListRows.Count > 0
-            tbl.ListRows(tbl.ListRows.Count).Delete
+        Do While tbl.ListRows.count > 0
+            tbl.ListRows(tbl.ListRows.count).Delete
         Loop
         Exit Sub
     End If
@@ -1237,27 +1309,26 @@ Private Sub ApplyConstraintsFormats(ByVal tbl As ListObject)
 
     dateFormat = Settings_GetDateNumberFormat()
 
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ID).Range.NumberFormat = "0"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_WBS).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_NAME).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_DESCRIPTION).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_TYPE).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_IS_SUMMARY).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_START).Range.NumberFormat = dateFormat
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_FINISH).Range.NumberFormat = dateFormat
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_DURATION).Range.NumberFormat = "0"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DRIVING_LOGIC).Range.NumberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ID).Range.numberFormat = "0"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_WBS).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_NAME).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_DESCRIPTION).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_TASK_TYPE).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_IS_SUMMARY).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_START).Range.numberFormat = dateFormat
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_FINISH).Range.numberFormat = dateFormat
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_CALCULATED_DURATION).Range.numberFormat = "0"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DRIVING_LOGIC).Range.numberFormat = "@"
 
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_TYPE).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_DATE).Range.NumberFormat = dateFormat
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_DATE).Range.NumberFormat = dateFormat
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DEADLINE).Range.NumberFormat = dateFormat
-SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).Range.NumberFormat = "@"
-    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_COMMENT).Range.NumberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_TYPE).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_DATE).Range.numberFormat = dateFormat
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_DATE).Range.numberFormat = dateFormat
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_DEADLINE).Range.numberFormat = dateFormat
+SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).Range.numberFormat = "@"
+    SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_COMMENT).Range.numberFormat = "@"
 
     ApplyConstraintsValidation tbl
-    tbl.Range.Columns.AutoFit
 
     On Error GoTo 0
 
@@ -1274,7 +1345,7 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
 
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
-    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_TYPE).DataBodyRange.Validation
+    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_START_CONSTRAINT_TYPE).DataBodyRange.validation
         .Delete
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
@@ -1282,15 +1353,15 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
              Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
-        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT", Constraints_CurrentLanguage())
-        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .inputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .inputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.INPUT", Constraints_CurrentLanguage())
+        .errorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.START_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = False
     End With
 
-    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).DataBodyRange.Validation
+    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_FINISH_CONSTRAINT_TYPE).DataBodyRange.validation
         .Delete
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
@@ -1298,15 +1369,15 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
              Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
-        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT", Constraints_CurrentLanguage())
-        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .inputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .inputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.INPUT", Constraints_CurrentLanguage())
+        .errorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.FINISH_TYPE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = False
     End With
 
-    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).DataBodyRange.Validation
+    With SchemaListColumn(tbl, VTS_TABLE_CONSTRAINTS, VTS_COL_ACTIVE).DataBodyRange.validation
         .Delete
         .Add Type:=xlValidateList, _
              AlertStyle:=xlValidAlertWarning, _
@@ -1314,9 +1385,9 @@ Private Sub ApplyConstraintsValidation(ByVal tbl As ListObject)
              Formula1:=TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.LIST", Constraints_CurrentLanguage())
         .IgnoreBlank = True
         .InCellDropdown = True
-        .InputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT_TITLE", Constraints_CurrentLanguage())
-        .InputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT", Constraints_CurrentLanguage())
-        .ErrorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR_TITLE", Constraints_CurrentLanguage())
+        .inputTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT_TITLE", Constraints_CurrentLanguage())
+        .inputMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.INPUT", Constraints_CurrentLanguage())
+        .errorTitle = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR_TITLE", Constraints_CurrentLanguage())
         .errorMessage = TextCatalog_Get("CONSTRAINTS.VALIDATION.ACTIVE.ERROR", Constraints_CurrentLanguage())
         .ShowInput = True
         .ShowError = False
@@ -1332,8 +1403,8 @@ Public Sub Constraints_DeactivateAll()
 
     Dim ws As Worksheet
     Dim tbl As ListObject
-    Dim activeCol As ListColumn
-    Dim col As ListColumn
+    Dim activeCol As listColumn
+    Dim col As listColumn
     Dim normalizedName As String
 
     On Error Resume Next
@@ -1345,7 +1416,7 @@ Public Sub Constraints_DeactivateAll()
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
     For Each col In tbl.ListColumns
-        normalizedName = UCase$(Trim$(CStr(col.Name)))
+        normalizedName = UCase$(Trim$(CStr(col.name)))
         Select Case normalizedName
             Case "CONSTRAINT ACTIVE", "ACTIVE", "IS ACTIVE"
                 Set activeCol = col
@@ -1359,3 +1430,5 @@ Public Sub Constraints_DeactivateAll()
     activeCol.DataBodyRange.value = "No"
 
 End Sub
+
+

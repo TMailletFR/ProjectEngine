@@ -92,6 +92,7 @@ Private Const VTS_ERROR_BASE As Long = vbObjectError + 5290
 Private gPhysicalLanguageOverrides As Object
 
 Public Function SchemaOwnerForTable(ByVal tableKey As String) As String
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then SchemaOwnerForTable = "FINANCE": Exit Function
     Select Case tableKey
         Case VTS_TABLE_WBS
             SchemaOwnerForTable = VTS_OWNER_WBS
@@ -107,11 +108,12 @@ Public Function SchemaOwnerForTable(ByVal tableKey As String) As String
 End Function
 
 Public Function SchemaPhysicalHeaderLanguageForTable(ByVal tableKey As String) As String
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then SchemaPhysicalHeaderLanguageForTable = Settings_GetOwnerLanguage("FINANCE"): Exit Function
     Dim ownerKey As String
     Dim overrideLanguage As String
 
     If Not gPhysicalLanguageOverrides Is Nothing Then
-        If gPhysicalLanguageOverrides.Exists(tableKey) Then
+        If gPhysicalLanguageOverrides.exists(tableKey) Then
             overrideLanguage = CStr(gPhysicalLanguageOverrides(tableKey))
             If overrideLanguage = VTS_LANG_FR Or overrideLanguage = VTS_LANG_EN Then
                 SchemaPhysicalHeaderLanguageForTable = overrideLanguage
@@ -184,6 +186,10 @@ Public Function SchemaColumnTitle( _
     ByVal tableKey As String, _
     ByVal columnKey As String, _
     ByVal languageCode As String) As String
+
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then
+        SchemaColumnTitle = Finance_ColumnTitle(columnKey, languageCode): Exit Function
+    End If
 
     Dim useFrench As Boolean
     useFrench = SchemaUseFrench(languageCode, tableKey, columnKey)
@@ -270,7 +276,7 @@ End Function
 Public Function SchemaListColumn( _
     ByVal tableObject As ListObject, _
     ByVal tableKey As String, _
-    ByVal columnKey As String) As ListColumn
+    ByVal columnKey As String) As listColumn
 
     Dim expectedTitle As String
 
@@ -281,11 +287,11 @@ Public Function SchemaListColumn( _
                 TextCatalog_Arguments("Table", tableKey))
     End If
 
-    If StrComp(tableObject.Name, tableKey, vbBinaryCompare) <> 0 Then
+    If StrComp(tableObject.name, tableKey, vbBinaryCompare) <> 0 Then
         Err.Raise VTS_ERROR_BASE + 4, "SchemaListColumn", _
             PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_MISMATCH", _
-                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name), _
-                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name))
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.name), _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.name))
     End If
 
     expectedTitle = SchemaCurrentColumnTitle(tableKey, columnKey)
@@ -311,6 +317,7 @@ Public Function SchemaColumnIndex( _
 End Function
 
 Public Function SchemaIsVisibleTable(ByVal tableKey As String) As Boolean
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then SchemaIsVisibleTable = True: Exit Function
     Select Case tableKey
         Case VTS_TABLE_WBS, _
              VTS_TABLE_SCURVE, _
@@ -325,6 +332,11 @@ Public Function SchemaBuildColumnKeyMap( _
     ByVal tableObject As ListObject, _
     ByVal tableKey As String) As Object
 
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then
+        If tableObject.name <> tableKey Then Err.Raise 5, "Schema", "Finance table identity mismatch"
+        Set SchemaBuildColumnKeyMap = Finance_Map(tableObject): Exit Function
+    End If
+
     Dim result As Object
     Dim columnKeys As Variant
     Dim columnKey As Variant
@@ -335,11 +347,11 @@ Public Function SchemaBuildColumnKeyMap( _
                 TextCatalog_Arguments("Table", tableKey), _
                 TextCatalog_Arguments("Table", tableKey))
     End If
-    If StrComp(tableObject.Name, tableKey, vbBinaryCompare) <> 0 Then
+    If StrComp(tableObject.name, tableKey, vbBinaryCompare) <> 0 Then
         Err.Raise VTS_ERROR_BASE + 7, "SchemaBuildColumnKeyMap", _
             PlanningMessageText_Format("VISIBLE_SCHEMA.ERROR.LISTOBJECT_MISMATCH", _
-                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name), _
-                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.Name))
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.name), _
+                TextCatalog_Arguments("Expected", tableKey, "Actual", tableObject.name))
     End If
 
     columnKeys = SchemaColumnKeys(tableKey)
@@ -355,6 +367,7 @@ Public Function SchemaBuildColumnKeyMap( _
 End Function
 
 Public Function SchemaColumnKeys(ByVal tableKey As String) As Variant
+    If tableKey = FIN_TABLE Or tableKey = FIN_EXPENSES Then SchemaColumnKeys = Finance_Keys(tableKey): Exit Function
     Select Case tableKey
         Case VTS_TABLE_WBS
             SchemaColumnKeys = Array( _
@@ -549,3 +562,5 @@ Private Function SchemaChoose( _
         SchemaChoose = englishTitle
     End If
 End Function
+
+

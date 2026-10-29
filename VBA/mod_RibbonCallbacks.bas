@@ -61,16 +61,19 @@ Public Sub PERibbon_GetEnabled(ByVal control As Office.IRibbonControl, ByRef ret
     returnedVal = False
     Set owner = Ribbon_ControlWorkbook(control)
     If owner Is Nothing Then Exit Sub
-    If Not Ribbon_IsActiveOwnerWindow(control.Context, owner) Then Exit Sub
+    If Not Ribbon_IsActiveOwnerWindow(control.context, owner) Then Exit Sub
     If mExecuting Then Exit Sub
-    If Not Ribbon_TutorialAllows(control.Id) Then Exit Sub
-    If control.Id <> "peSettings" And control.Id <> "peTutorial" Then
+    If Not Ribbon_TutorialAllows(control.id) Then Exit Sub
+    If control.id <> "peSettings" And control.id <> "peTutorial" Then
         If Not WorkbookSchema_WritesAllowed() Then Exit Sub
     End If
-    If Ribbon_IsGanttCommand(control.Id) Then
-        returnedVal = (CStr(control.Context.ActiveSheet.Name) = "GANTT")
-    ElseIf Ribbon_IsWBSCommand(control.Id) Then
-        returnedVal = (CStr(control.Context.ActiveSheet.Name) = "WBS")
+    If Ribbon_IsGanttCommand(control.id) Then
+        returnedVal = (CStr(control.context.ActiveSheet.name) = "GANTT")
+    ElseIf Ribbon_IsWBSCommand(control.id) Then
+        returnedVal = (CStr(control.context.ActiveSheet.name) = "WBS")
+    ElseIf left$(control.id, 9) = "peFinance" And control.id <> "peFinanceClean" Then
+        returnedVal = Ribbon_ContextVisible("FINANCE")
+        If control.id = "peFinanceExpenses" And returnedVal Then returnedVal = (Finance_ScopeId() <> 0)
     Else
         returnedVal = True
     End If
@@ -85,19 +88,25 @@ Public Sub PERibbon_GetWBSVisible(ByVal control As Office.IRibbonControl, ByRef 
     returnedVal = Ribbon_ContextVisible("WBS")
 End Sub
 
+Public Sub PERibbon_GetFinanceVisible(ByVal control As Office.IRibbonControl, ByRef returnedVal)
+    returnedVal = Ribbon_ContextVisible("FINANCE")
+End Sub
+
 Private Function Ribbon_ContextVisible(ByVal sheetName As String) As Boolean
-    Dim window As Excel.Window
+    Dim window As Excel.window
     On Error GoTo SafeExit
     ' Avoid the group's borrowed Office Context during a sheet transition.
     ' Visibility is passive: use the active Excel window only after owner validation.
-    Set window = Application.ActiveWindow
+    Set window = Application.activeWindow
     If Not Ribbon_IsActiveOwnerWindow(window, ThisWorkbook) Then Exit Function
-    Ribbon_ContextVisible = (CStr(window.ActiveSheet.Name) = sheetName)
+    Ribbon_ContextVisible = (CStr(window.ActiveSheet.name) = sheetName)
+    If sheetName = "FINANCE" And CStr(window.ActiveSheet.name) = "FINANCE SUMMARY" Then Ribbon_ContextVisible = True
+    If sheetName = "FINANCE" And left$(CStr(window.ActiveSheet.name), 16) = "Extract Finance " Then Ribbon_ContextVisible = True
 SafeExit:
 End Function
 
 Public Sub PERibbon_OnAction(ByVal control As Office.IRibbonControl)
-    Ribbon_ExecuteCommand control.Id, control.Context
+    Ribbon_ExecuteCommand control.id, control.context
 End Sub
 
 Public Function Ribbon_ExecuteCommand(ByVal commandId As String, ByVal commandWindow As Object) As Boolean
@@ -106,40 +115,48 @@ Public Function Ribbon_ExecuteCommand(ByVal commandId As String, ByVal commandWi
     Dim entry As Variant
 
     On Error GoTo Failed
-    If commandWindow Is Nothing Then GoTo Rejected
-    Set owner = commandWindow.ActiveSheet.Parent
-    If Not (owner Is ThisWorkbook) Then GoTo Rejected
+    If commandWindow Is Nothing Then GoTo rejected
+    Set owner = commandWindow.ActiveSheet.parent
+    If Not (owner Is ThisWorkbook) Then GoTo rejected
     mLastDiagnostic = "RIBBON_OWNER_REJECTED"
-    If owner Is Nothing Then GoTo Rejected
+    If owner Is Nothing Then GoTo rejected
     Set ribbonWindow = commandWindow
     ' Ribbon and Excel can expose distinct COM wrappers for the same native window.
     ' Existing owners use ActiveSheet: require the same window AND workbook first.
     mLastDiagnostic = "RIBBON_WINDOW_NOT_ACTIVE"
-    If Not Ribbon_IsActiveOwnerWindow(ribbonWindow, owner) Then GoTo Rejected
+    If Not Ribbon_IsActiveOwnerWindow(ribbonWindow, owner) Then GoTo rejected
     mLastDiagnostic = "RIBBON_TUTORIAL_ACTIVE"
-    If Not Ribbon_TutorialAllows(commandId) Then GoTo Rejected
+    If Not Ribbon_TutorialAllows(commandId) Then GoTo rejected
     If commandId <> "peSettings" And commandId <> "peTutorial" Then
-        If Not WorkbookSchema_WritesAllowed() Then GoTo Rejected
+        If Not WorkbookSchema_WritesAllowed() Then GoTo rejected
     End If
     mLastDiagnostic = "RIBBON_CONTEXT_NOT_WORKSHEET"
-    If TypeName(ribbonWindow.ActiveSheet) <> "Worksheet" Then GoTo Rejected
+    If TypeName(ribbonWindow.ActiveSheet) <> "Worksheet" Then GoTo rejected
     entry = Ribbon_ControlEntry(commandId)
     mLastDiagnostic = "RIBBON_UNKNOWN_CONTROL"
-    If IsEmpty(entry) Then GoTo Rejected
+    If IsEmpty(entry) Then GoTo rejected
+    If left$(commandId, 9) = "peFinance" And commandId <> "peFinanceClean" Then
+        If Not Ribbon_ContextVisible("FINANCE") Then GoTo rejected
+    End If
     If Ribbon_IsGanttCommand(commandId) Then
         mLastDiagnostic = "RIBBON_GANTT_CONTEXT_REQUIRED"
-        If CStr(ribbonWindow.ActiveSheet.Name) <> "GANTT" Then GoTo Rejected
+        If CStr(ribbonWindow.ActiveSheet.name) <> "GANTT" Then GoTo rejected
     ElseIf Ribbon_IsWBSCommand(commandId) Then
         mLastDiagnostic = "RIBBON_WBS_CONTEXT_REQUIRED"
-        If CStr(ribbonWindow.ActiveSheet.Name) <> "WBS" Then GoTo Rejected
+        If CStr(ribbonWindow.ActiveSheet.name) <> "WBS" Then GoTo rejected
     End If
     mLastDiagnostic = "RIBBON_BUSY"
-    If mExecuting Then GoTo Rejected
+    If mExecuting Then GoTo rejected
 
     mLastDiagnostic = vbNullString
     mExecuting = True
     If commandId <> "peTutorial" Then ProjectTutorial_BeginBusinessAction
     Select Case CStr(entry(3))
+        Case "Finance_Manage": Finance_Manage
+        Case "Finance_Refresh": Finance_Refresh
+        Case "Finance_ExpensesCommand": Finance_ExpensesCommand
+        Case "Finance_Extract": Finance_Extract
+        Case "Finance_Clean": Finance_Clean
         Case "Run_Planning_Update": Run_Planning_Update
         Case "Run_Forced_Planning_Update": Run_Forced_Planning_Update
         Case "Run_Full_Update": Run_Full_Update
@@ -161,7 +178,7 @@ Public Function Ribbon_ExecuteCommand(ByVal commandId As String, ByVal commandWi
         Case "NavigationTask": GanttNavigation_Run ribbonWindow, GANTT_NAV_TASK
         Case Else
             mExecuting = False
-            GoTo Rejected
+            GoTo rejected
     End Select
     mLastAction = CStr(entry(3))
     mActions = mActions + 1
@@ -169,16 +186,20 @@ Public Function Ribbon_ExecuteCommand(ByVal commandId As String, ByVal commandWi
     If commandId <> "peTutorial" Then ProjectTutorial_EndBusinessAction
     Ribbon_ExecuteCommand = True
     Ribbon_InvalidateContext
+    Ribbon_ActivateOwnerTab
     Exit Function
-Rejected:
+rejected:
     mRejected = mRejected + 1
     Exit Function
 Failed:
-    mLastDiagnostic = "RIBBON_CALLBACK:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_CALLBACK:" & CStr(Err.number) & ":" & Err.description
     Debug.Print mLastDiagnostic
     mExecuting = False
     ProjectTutorial_EndBusinessAction
     Ribbon_InvalidateContext
+    If left$(commandId, 9) = "peFinance" Then
+        CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", TextCatalog_Arguments("Procedure", "Finance", "Details", mLastDiagnostic)
+    End If
 End Function
 
 Public Sub Ribbon_WorkbookOpened()
@@ -204,49 +225,49 @@ Public Sub Ribbon_InvalidateContext()
     For Each controlId In Array("peGanttContext", "peUpdate", "pePlanning", "peForced", "peFull", "peGantt", "peSCurve", _
                                "peGanttReset", "peScenario", "peTest", "peLock", "peSettings", "peImport", "peTutorial", _
                                "peClearHistory", "peClearAck", "peCleanDashboard", "peResetPlanning", "peFullReset", _
-                               "peFullTimeline", "peSelectedTask")
+                               "peFullTimeline", "peSelectedTask", "peFinanceContext", "peFinanceManage", "peFinanceRefresh", "peFinanceExpenses", "peFinanceExtract", "peFinanceClean")
         mRibbon.InvalidateControl CStr(controlId)
     Next controlId
     Exit Sub
 Failed:
-    mLastDiagnostic = "RIBBON_CONTEXT_INVALIDATION:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_CONTEXT_INVALIDATION:" & CStr(Err.number) & ":" & Err.description
 End Sub
 
 Private Sub Ribbon_TryInitialTab()
     If Not mOpenInitialized Or Not mInitialTabPending Then Exit Sub
     If mRibbon Is Nothing Then Exit Sub
     On Error GoTo Failed
-    If Not Ribbon_IsActiveOwnerWindow(Application.ActiveWindow, ThisWorkbook) Then Exit Sub
+    If Not Ribbon_IsActiveOwnerWindow(Application.activeWindow, ThisWorkbook) Then Exit Sub
     ' Consume the initialization request independently of explicit sheet transitions.
     mInitialTabPending = False
     Ribbon_ActivateOwnerTab
     Exit Sub
 Failed:
     mInitialTabPending = False
-    mLastDiagnostic = "RIBBON_INITIAL_TAB:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_INITIAL_TAB:" & CStr(Err.number) & ":" & Err.description
 End Sub
 
 Private Sub Ribbon_ActivateOwnerTab()
-    Dim window As Excel.Window
+    Dim window As Excel.window
     If mRibbon Is Nothing Then Exit Sub
     On Error GoTo Failed
-    Set window = Application.ActiveWindow
+    Set window = Application.activeWindow
     If Not Ribbon_IsActiveOwnerWindow(window, ThisWorkbook) Then Exit Sub
     mRibbon.ActivateTab "peTab"
     Exit Sub
 Failed:
-    mLastDiagnostic = "RIBBON_ACTIVATE_TAB:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_ACTIVATE_TAB:" & CStr(Err.number) & ":" & Err.description
 End Sub
 
 Private Function Ribbon_IsActiveOwnerWindow(ByVal window As Object, ByVal owner As Workbook) As Boolean
-    Dim activeWindow As Excel.Window
+    Dim activeWindow As Excel.window
     Dim activeOwner As Workbook
     On Error GoTo SafeExit
     If window Is Nothing Or owner Is Nothing Then Exit Function
-    Set activeWindow = Application.ActiveWindow
+    Set activeWindow = Application.activeWindow
     If activeWindow Is Nothing Then Exit Function
-    If window.Hwnd <> activeWindow.Hwnd Then Exit Function
-    Set activeOwner = activeWindow.ActiveSheet.Parent
+    If window.hwnd <> activeWindow.hwnd Then Exit Function
+    Set activeOwner = activeWindow.ActiveSheet.parent
     Ribbon_IsActiveOwnerWindow = (activeOwner Is owner)
 SafeExit:
 End Function
@@ -271,13 +292,14 @@ Public Sub Ribbon_InvalidateLanguage()
     For Each controlId In Array("peTab", "peUpdate", "pePlanning", "peForced", "peFull", "peGantt", "peSCurve", _
                                "pePlanningTools", "peResetPlanning", "peClearHistory", "peClearAck", "peCleanDashboard", "peFullReset", _
                                "peNavigation", "peSettings", "peImport", "peTutorial", "peFullTimeline", "peSelectedTask", "peGanttContext", _
-                               "peGanttReset", "peScenario", "peTest", "peLock")
+                               "peGanttReset", "peScenario", "peTest", "peLock", _
+                               "peFinanceContext", "peFinanceManage", "peFinanceRefresh", "peFinanceExpenses", "peFinanceExtract", "peFinanceClean")
         mRibbon.InvalidateControl CStr(controlId)
     Next controlId
     mInvalidations = mInvalidations + 1
     Exit Sub
 Failed:
-    mLastDiagnostic = "RIBBON_INVALIDATION:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_INVALIDATION:" & CStr(Err.number) & ":" & Err.description
     Debug.Print mLastDiagnostic
 End Sub
 
@@ -294,15 +316,15 @@ Private Function Ribbon_ControlWorkbook(ByVal control As Office.IRibbonControl) 
     Dim candidate As Workbook
     On Error GoTo InvalidContext
     If control Is Nothing Then Exit Function
-    Set ribbonWindow = control.Context
+    Set ribbonWindow = control.context
     If ribbonWindow Is Nothing Then Exit Function
     If TypeName(ribbonWindow) <> "Window" Then Exit Function
     Set contextSheet = ribbonWindow.ActiveSheet
     If contextSheet Is Nothing Then Exit Function
-    Set candidate = contextSheet.Parent
+    Set candidate = contextSheet.parent
     If Not candidate Is ThisWorkbook Then Exit Function
-    If StrComp(candidate.FullName, ThisWorkbook.FullName, vbTextCompare) <> 0 Then Exit Function
-    If StrComp(candidate.Name, ThisWorkbook.Name, vbBinaryCompare) <> 0 Then Exit Function
+    If StrComp(candidate.fullName, ThisWorkbook.fullName, vbTextCompare) <> 0 Then Exit Function
+    If StrComp(candidate.name, ThisWorkbook.name, vbBinaryCompare) <> 0 Then Exit Function
     Set Ribbon_ControlWorkbook = candidate
 InvalidContext:
 End Function
@@ -313,18 +335,24 @@ Private Function Ribbon_Text(ByVal control As Office.IRibbonControl, ByVal field
     On Error GoTo Failed
     Set owner = Ribbon_ControlWorkbook(control)
     If owner Is Nothing Then Exit Function
-    entry = Ribbon_ControlEntry(control.Id)
+    entry = Ribbon_ControlEntry(control.id)
     If IsEmpty(entry) Then Exit Function
     If Len(CStr(entry(field))) = 0 Then Exit Function
     Ribbon_Text = TextCatalog_Get(CStr(entry(field)), Settings_GetGlobalDisplayLanguage())
     Exit Function
 Failed:
-    mLastDiagnostic = "RIBBON_TEXT:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "RIBBON_TEXT:" & CStr(Err.number) & ":" & Err.description
 End Function
 
 ' Single map: label, screentip, supertip, public command. No language selection here.
 Private Function Ribbon_ControlEntry(ByVal controlId As String) As Variant
     Select Case controlId
+        Case "peFinanceContext": Ribbon_ControlEntry = Array("FINANCE.GROUP", "", "", "")
+        Case "peFinanceManage": Ribbon_ControlEntry = Array("FINANCE.MANAGE", "FINANCE.MANAGE", "", "Finance_Manage")
+        Case "peFinanceRefresh": Ribbon_ControlEntry = Array("FINANCE.REFRESH", "FINANCE.REFRESH", "", "Finance_Refresh")
+        Case "peFinanceExpenses": Ribbon_ControlEntry = Array("FINANCE.EXPENSES", "FINANCE.EXPENSES", "", "Finance_ExpensesCommand")
+        Case "peFinanceExtract": Ribbon_ControlEntry = Array("FINANCE.EXTRACT", "FINANCE.EXTRACT", "", "Finance_Extract")
+        Case "peFinanceClean": Ribbon_ControlEntry = Array("FINANCE.CLEAN", "FINANCE.CLEAN", "", "Finance_Clean")
         Case "peTab": Ribbon_ControlEntry = Array(TXT_RIBBON_TAB_LABEL, "", "", "")
         Case "peUpdate": Ribbon_ControlEntry = Array(TXT_RIBBON_UPDATE_LABEL, "", "", "")
         Case "pePlanning": Ribbon_ControlEntry = Array(TXT_RIBBON_PLANNING_LABEL, TXT_RIBBON_PLANNING_TIP, TXT_RIBBON_PLANNING_HELP, "Run_Planning_Update")
@@ -357,3 +385,7 @@ Public Function Ribbon_CommandLabel(ByVal controlId As String, ByVal language As
     entry = Ribbon_ControlEntry(controlId)
     Ribbon_CommandLabel = TextCatalog_Get(CStr(entry(0)), language)
 End Function
+
+
+
+

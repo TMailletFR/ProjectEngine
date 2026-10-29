@@ -2,7 +2,7 @@ Attribute VB_Name = "mod_TextCatalogConstraints"
 Option Explicit
 
 Public Function TextCatalogConstraints_Definitions() As Variant
-    Dim definitions(0 To 36) As Variant
+    Dim definitions(0 To 44) As Variant
     definitions(0) = Array("CONSTRAINTS.VALIDATION.START_TYPE.INPUT_TITLE", _
         "Start Constraint Type", _
         "Type de contrainte de debut")
@@ -72,5 +72,31 @@ Public Function TextCatalogConstraints_Definitions() As Variant
         "Finish No Earlier Than,Finish No Later Than,Must Finish On", _
         "Finish No Earlier Than,Finish No Later Than,Must Finish On")
     definitions(36) = Array("CONSTRAINTS.VALIDATION.ACTIVE.LIST", "Yes,No", "Yes,No")
+    definitions(37) = Array("CONSTRAINTS.HELP.AUTO", _
+        "Automatic projection" & vbLf & "- Identity and hierarchy come from WBS." & vbLf & "- Calculated dates, duration and driving logic come from the planning engine." & vbLf & vbLf & "Update the source or run the planning command; do not enter a value here.", _
+        "Projection automatique" & vbLf & "- Identite et hierarchie issues de WBS." & vbLf & "- Dates calculees, duree et logique pilote issues du moteur de planning." & vbLf & vbLf & "Modifier la source ou actualiser le planning ; ne pas saisir de valeur ici.")
+    definitions(38) = Array("CONSTRAINTS.HELP.START_CONSTRAINT_TYPE", _
+        "Optional input" & vbLf & "Choose a start constraint from the list and enter its date in the adjacent column." & vbLf & "Leave both fields empty when no start constraint is needed.", _
+        "Saisie facultative" & vbLf & "Choisir une contrainte de debut dans la liste et saisir sa date dans la colonne voisine." & vbLf & "Laisser les deux champs vides sans contrainte de debut.")
+    definitions(39) = Array("CONSTRAINTS.HELP.START_CONSTRAINT_DATE", _
+        "Optional input" & vbLf & "Required when a start constraint type is selected." & vbLf & "Enter an Excel date, for example 15/06/2026 in a day/month/year locale.", _
+        "Saisie facultative" & vbLf & "Obligatoire si un type de contrainte de debut est choisi." & vbLf & "Saisir une date Excel, par exemple le 15/06/2026 avec un format jour/mois/annee.")
+    definitions(40) = Array("CONSTRAINTS.HELP.FINISH_CONSTRAINT_TYPE", _
+        "Optional input" & vbLf & "Choose a finish constraint from the list and enter its date in the adjacent column." & vbLf & "Leave both fields empty when no finish constraint is needed.", _
+        "Saisie facultative" & vbLf & "Choisir une contrainte de fin dans la liste et saisir sa date dans la colonne voisine." & vbLf & "Laisser les deux champs vides sans contrainte de fin.")
+    definitions(41) = Array("CONSTRAINTS.HELP.FINISH_CONSTRAINT_DATE", _
+        "Optional input" & vbLf & "Required when a finish constraint type is selected." & vbLf & "Use a real Excel date, not free text.", _
+        "Saisie facultative" & vbLf & "Obligatoire si un type de contrainte de fin est choisi." & vbLf & "Utiliser une vraie date Excel, pas un texte libre.")
+    definitions(42) = Array("CONSTRAINTS.HELP.DEADLINE", _
+        "Optional input" & vbLf & "Target date used to assess deadline float; it does not force the activity finish date." & vbLf & "Leave empty if no deadline is specified.", _
+        "Saisie facultative" & vbLf & "Date cible utilisee pour evaluer la marge deadline ; elle ne force pas la fin de l'activite." & vbLf & "Laisser vide sans echeance definie.")
+    definitions(43) = Array("CONSTRAINTS.HELP.ACTIVE", _
+        "Optional input" & vbLf & "Yes: apply the row constraints. No: retain the inputs without applying them." & vbLf & "Summary and Level of Effort restrictions remain applicable.", _
+        "Saisie facultative" & vbLf & "Yes : appliquer les contraintes de la ligne. No : conserver les saisies sans les appliquer." & vbLf & "Les restrictions des parents et activites Level of Effort restent applicables.")
+    definitions(44) = Array("CONSTRAINTS.HELP.COMMENT", _
+        "Optional input" & vbLf & "Explain the constraint or its assumption." & vbLf & "Example: equipment available after delivery.", _
+        "Saisie facultative" & vbLf & "Expliquer la contrainte ou son hypothese." & vbLf & "Exemple : equipement disponible apres livraison.")
     TextCatalogConstraints_Definitions = definitions
 End Function
+
+

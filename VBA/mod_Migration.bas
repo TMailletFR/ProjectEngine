@@ -17,6 +17,17 @@ Public Function Migration_LastDiagnostic() As String
     Migration_LastDiagnostic = mLastDiagnostic
 End Function
 
+Public Sub Migration_ResetMetadata()
+    Dim i As Long
+    If mRunning Then Err.Raise 5, "Migration_ResetMetadata", "IMPORT_IN_PROGRESS"
+    For i = ThisWorkbook.CustomDocumentProperties.count To 1 Step -1
+        If left$(ThisWorkbook.CustomDocumentProperties(i).name, Len("ProjectEngine.Import")) = "ProjectEngine.Import" Then
+            ThisWorkbook.CustomDocumentProperties(i).Delete
+        End If
+    Next i
+    mLastResult = "": mLastDiagnostic = ""
+End Sub
+
 Public Function Migration_Text(ByVal key As String, Optional ByVal arguments As Object = Nothing) As String
     Migration_Text = Replace$(TextCatalog_Format(key, Settings_GetGlobalDisplayLanguage(), arguments), "\n", vbCrLf)
 End Function
@@ -33,22 +44,22 @@ Public Sub Migration_ImportPrevious()
     WorkbookSchema_RequireWritable
     If Application.ActiveWorkbook Is Nothing Then Exit Sub
     If Not (Application.ActiveWorkbook Is ThisWorkbook) Then Exit Sub
-    targetName = ThisWorkbook.Name: targetPath = ThisWorkbook.FullName
+    targetName = ThisWorkbook.name: targetPath = ThisWorkbook.fullName
     Set dialog = Application.FileDialog(msoFileDialogFilePicker)
-    dialog.Title = Migration_Text("MIGRATION.SELECT")
+    dialog.title = Migration_Text("MIGRATION.SELECT")
     dialog.AllowMultiSelect = False
     dialog.Filters.Clear
     dialog.Filters.Add "Excel", "*.xlsm;*.xlsx"
     If dialog.Show <> -1 Then Exit Sub
     selected = dialog.SelectedItems(1)
-    If ThisWorkbook.Name <> targetName Or ThisWorkbook.FullName <> targetPath Then Err.Raise 5, , "TARGET_IDENTITY_CHANGED"
+    If ThisWorkbook.name <> targetName Or ThisWorkbook.fullName <> targetPath Then Err.Raise 5, , "TARGET_IDENTITY_CHANGED"
     Migration_ImportFile selected
     Exit Sub
 Failed:
     mLastResult = "FAILED"
-    mLastDiagnostic = CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description
-    If Err.Source = "MigrationValidation" Then
-        MsgBox Err.Description, vbExclamation, Migration_Text("MIGRATION.TITLE")
+    mLastDiagnostic = CStr(Err.number) & ":" & Err.source & ":" & Err.description
+    If Err.source = "MigrationValidation" Then
+        MsgBox Err.description, vbExclamation, Migration_Text("MIGRATION.TITLE")
     Else
         MsgBox Migration_Text("MIGRATION.PROFILE"), vbExclamation, Migration_Text("MIGRATION.TITLE")
     End If
@@ -69,13 +80,13 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     If mRunning Then Err.Raise 5, , "IMPORT_REENTRANT"
     Set target = ThisWorkbook
     WorkbookSchema_RequireWritable
-    If target.ReadOnly Or Len(target.Path) = 0 Or target.ProtectStructure Then Migration_Reject "MIGRATION.TARGET"
-    targetName = target.Name: targetPath = target.FullName
+    If target.readOnly Or Len(target.path) = 0 Or target.ProtectStructure Then Migration_Reject "MIGRATION.TARGET"
+    targetName = target.name: targetPath = target.fullName
     fullSource = CreateObject("Scripting.FileSystemObject").GetAbsolutePathName(sourcePath)
     sourceName = CreateObject("Scripting.FileSystemObject").GetFileName(fullSource)
     If StrComp(fullSource, targetPath, vbTextCompare) = 0 Then Migration_Reject "MIGRATION.PROFILE"
     For Each item In Application.Workbooks
-        If StrComp(item.FullName, fullSource, vbTextCompare) = 0 Or StrComp(item.Name, sourceName, vbTextCompare) = 0 Then Migration_Reject "MIGRATION.OPEN_SOURCE"
+        If StrComp(item.fullName, fullSource, vbTextCompare) = 0 Or StrComp(item.name, sourceName, vbTextCompare) = 0 Then Migration_Reject "MIGRATION.OPEN_SOURCE"
     Next item
     If Not confirmation Then
         If MsgBox(Migration_Text("MIGRATION.DESTRUCTIVE"), vbOKCancel + vbExclamation + vbDefaultButton2, Migration_Text("MIGRATION.WARNING_TITLE")) <> vbOK Then
@@ -93,13 +104,13 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     Application.AutomationSecurity = msoAutomationSecurityForceDisable
     phase = "READ_SOURCE"
     Set perfScope = Profiler_BeginScope("Migration.Source.Open", "Migration")
-    Set source = Application.Workbooks.Open(Filename:=fullSource, UpdateLinks:=0, ReadOnly:=True, Password:="PE_IMPORT_NO_PASSWORD", AddToMru:=False)
+    Set source = Application.Workbooks.Open(fileName:=fullSource, UpdateLinks:=0, readOnly:=True, Password:="PE_IMPORT_NO_PASSWORD", AddToMru:=False)
     Set perfScope = Nothing
     Profiler_RecordCounter "Migration.Source.Opens", 1
     sourceOwned = True
     Application.AutomationSecurity = oldSecurity
     Migration_AssertIdentity source, fullSource, sourceName
-    If Not source.ReadOnly Or source.Connections.Count <> 0 Then Migration_Reject "MIGRATION.UNSAFE"
+    If Not source.readOnly Or source.Connections.count <> 0 Then Migration_Reject "MIGRATION.UNSAFE"
     Dim links As Variant
     links = source.LinkSources(xlExcelLinks)
     If Not IsEmpty(links) Then Migration_Reject "MIGRATION.UNSAFE"
@@ -113,7 +124,10 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     Profiler_RecordCounter "Migration.Source.Closes", 1
 
     Migration_AssertIdentity target, targetPath, targetName
-    If target.ReadOnly Then Err.Raise 5, , "TARGET_READONLY"
+    If target.readOnly Then Err.Raise 5, , "TARGET_READONLY"
+    ' Validate/persist the current Finance view only after source preflight succeeds.
+    phase = "FLUSH_FINANCE"
+    Finance_Flush
     GanttDrag_PauseForLifecycle
     watchPaused = True
     Application.ScreenUpdating = False
@@ -164,7 +178,7 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     mLastResult = "SUCCESS"
     GoTo CleanExit
 Failed:
-    errorNumber = Err.Number: errorSource = Err.Source: errorDescription = Err.Description
+    errorNumber = Err.number: errorSource = Err.source: errorDescription = Err.description
     mLastDiagnostic = phase & ":" & CStr(errorNumber) & ":" & errorSource & ":" & errorDescription
     mLastResult = "FAILED"
     Set perfScope = Nothing
@@ -176,7 +190,7 @@ Failed:
         WorkbookSchema_SetProperty target, "ProjectEngine.ImportDiagnostic", phase & ":" & CStr(errorNumber)
         Err.Clear
         Migration_Log "STOP", IIf(finalSaved, "MIGRATION.POST_SAVE_FAILED", "MIGRATION.FAILED"), operationId, "", CStr(snapshot("Profile"))
-        If Err.Number <> 0 Then mLastDiagnostic = mLastDiagnostic & "|FAILURE_RECEIPT:" & CStr(Err.Number) & ":" & Err.Description
+        If Err.number <> 0 Then mLastDiagnostic = mLastDiagnostic & "|FAILURE_RECEIPT:" & CStr(Err.number) & ":" & Err.description
     End If
     On Error GoTo 0
 CleanExit:
@@ -210,7 +224,7 @@ CleanExit:
     End If
     Exit Function
 CleanupFailed:
-    mLastDiagnostic = mLastDiagnostic & "|CLEANUP:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = mLastDiagnostic & "|CLEANUP:" & CStr(Err.number) & ":" & Err.description
     On Error Resume Next
     If captured Then
         Application.AutomationSecurity = oldSecurity
@@ -224,7 +238,7 @@ End Function
 
 Private Sub Migration_AssertIdentity(ByVal wb As Workbook, ByVal fullName As String, ByVal name As String)
     If wb Is Nothing Then Err.Raise 5, , "WORKBOOK_OBJECT_MISSING"
-    If StrComp(wb.FullName, fullName, vbTextCompare) <> 0 Or wb.Name <> name Then Err.Raise 5, , "WORKBOOK_IDENTITY_CHANGED"
+    If StrComp(wb.fullName, fullName, vbTextCompare) <> 0 Or wb.name <> name Then Err.Raise 5, , "WORKBOOK_IDENTITY_CHANGED"
 End Sub
 
 Public Function Migration_ApplyInputs(ByVal snapshot As Object) As String
@@ -233,11 +247,12 @@ Public Function Migration_ApplyInputs(ByVal snapshot As Object) As String
     Dim oldEvents As Boolean, eventsCaptured As Boolean
     On Error GoTo Failed
     previousRunning = mRunning: mRunning = True
-    If ThisWorkbook.ReadOnly Then Err.Raise 5, , "TARGET_READONLY"
+    If ThisWorkbook.readOnly Then Err.Raise 5, , "TARGET_READONLY"
     oldEvents = Application.EnableEvents: eventsCaptured = True
     Application.EnableEvents = False
     GanttDrag_PauseForLifecycle
     Set tbl = MigrationData_Table(ThisWorkbook, "tbl_WBS")
+    Finance_ClearOutputs ThisWorkbook.Worksheets("FINANCE")
     If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
     Planning_FullSafeEmptyState
     Reset_Dashboard
@@ -254,43 +269,44 @@ Public Function Migration_ApplyInputs(ByVal snapshot As Object) As String
         Dim restored As Variant, expected As String, actual As String
         For Each key In Array(VTS_COL_BASELINE_FINISH, VTS_COL_ACTUAL_DURATION, VTS_COL_CALCULATED_DURATION)
             expected = WBSFormulaWriter_ExpectedFormula(CStr(key))
-            restored = SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).DataBodyRange.Formula
-            For n = 1 To tbl.ListRows.Count
-                If tbl.ListRows.Count = 1 Then actual = CStr(restored) Else actual = CStr(restored(n, 1))
-                actual = Replace$(actual, tbl.Name & "[[#This Row],[", "[@[")
+            restored = SchemaListColumn(tbl, VTS_TABLE_WBS, CStr(key)).DataBodyRange.formula
+            For n = 1 To tbl.ListRows.count
+                If tbl.ListRows.count = 1 Then actual = CStr(restored) Else actual = CStr(restored(n, 1))
+                actual = Replace$(actual, tbl.name & "[[#This Row],[", "[@[")
                 If actual <> expected Then Err.Raise 5, "Migration", "STANDARD_FORMULA_NOT_RESTORED:" & CStr(key)
             Next n
         Next key
     End If
     Import_WBS_To_Constraints
-    If MigrationData_Table(ThisWorkbook, "tbl_CONSTRAINTS").ListRows.Count <> tbl.ListRows.Count Then
+    If MigrationData_Table(ThisWorkbook, "tbl_CONSTRAINTS").ListRows.count <> tbl.ListRows.count Then
         Err.Raise 5, "Migration", "CONSTRAINTS_INPUT_PROJECTION_INCOMPLETE"
     End If
     Migration_Log "INFO", "MIGRATION.STARTED", CStr(snapshot("OperationId")), CStr(snapshot("RecoveryBackup")), CStr(snapshot("Profile")), snapshot
     Migration_VerifyEmptyOutputs
     Refresh_EventHistory_View True, True
     Settings_Initialize
+    MigrationData_ApplyColumnWidths snapshot, ThisWorkbook
     GanttDrag_PauseForLifecycle
     If eventsCaptured Then Application.EnableEvents = oldEvents
     Migration_ApplyInputs = "PASS"
     mRunning = previousRunning
     Exit Function
 Failed:
-    Migration_ApplyInputs = "FAIL:" & CStr(Err.Number) & ":" & Err.Source & ":" & Err.Description
+    Migration_ApplyInputs = "FAIL:" & CStr(Err.number) & ":" & Err.source & ":" & Err.description
     GanttDrag_PauseForLifecycle
     If eventsCaptured Then Application.EnableEvents = oldEvents
     mRunning = previousRunning
 End Function
 
 Private Sub Migration_VerifyEmptyOutputs()
-    Dim name As Variant, tbl As ListObject, shape As Shape
+    Dim name As Variant, tbl As ListObject, shape As shape
     For Each name In Array("tbl_CALC", "tbl_LOGIC_LINKS", "tbl_SCURVE", "tbl_CALC_STATE", "tbl_CALC_GANTT_TEST", "tbl_CALC_SCURVE")
         Set tbl = MigrationData_Table(ThisWorkbook, CStr(name))
-        If tbl.ListRows.Count <> 0 Or Not tbl.DataBodyRange Is Nothing Then Err.Raise 5, "Migration", "EMPTY_OUTPUT_NOT_CLEARED:" & CStr(name)
+        If tbl.ListRows.count <> 0 Or Not tbl.DataBodyRange Is Nothing Then Err.Raise 5, "Migration", "EMPTY_OUTPUT_NOT_CLEARED:" & CStr(name)
     Next name
     For Each shape In ThisWorkbook.Worksheets("GANTT").Shapes
-        If GanttShapeRegistry_IsBusinessShapeName(shape.Name) Or GanttDependencySvg_IsLayerName(shape.Name) Then
-            Err.Raise 5, "Migration", "EMPTY_GANTT_SHAPE_NOT_CLEARED:" & shape.Name
+        If GanttShapeRegistry_IsBusinessShapeName(shape.name) Or GanttDependencySvg_IsLayerName(shape.name) Then
+            Err.Raise 5, "Migration", "EMPTY_GANTT_SHAPE_NOT_CLEARED:" & shape.name
         End If
     Next shape
 End Sub
@@ -302,7 +318,7 @@ Private Sub Migration_Log(ByVal severity As String, ByVal key As String, ByVal o
     If Not snapshot Is Nothing Then
         arguments.Add "SourceDigest", CStr(snapshot("Digest"))
         arguments.Add "HistoryImported", CBool(snapshot("Tables")("tbl_CALC_ALARM")("Available"))
-        If snapshot("Tables")("tbl_CALC_ALARM").Exists("UnavailableDiagnostic") Then arguments.Add "HistoryDiagnostic", CStr(snapshot("Tables")("tbl_CALC_ALARM")("UnavailableDiagnostic"))
+        If snapshot("Tables")("tbl_CALC_ALARM").exists("UnavailableDiagnostic") Then arguments.Add "HistoryDiagnostic", CStr(snapshot("Tables")("tbl_CALC_ALARM")("UnavailableDiagnostic"))
         Dim name As Variant
         For Each name In Array("tbl_WBS", "tbl_CONSTRAINTS", "tbl_EVENT_ACK", "tbl_DASHBOARD_SNAPSHOTS", "tbl_CALC_ALARM")
             arguments.Add CStr(name) & ".Count", CLng(snapshot("Tables")(name)("Count"))
@@ -324,7 +340,7 @@ Private Sub Migration_PreflightPackage(ByVal path As String)
     Dim offset As Long, count As Long, i As Long, nameLength As Long, extra As Long, comment As Long
     Dim name As String, j As Long, foundWorkbook As Boolean
     On Error GoTo Failed
-    If LCase$(Right$(path, 5)) <> ".xlsm" And LCase$(Right$(path, 5)) <> ".xlsx" Then Migration_Reject "MIGRATION.PROFILE"
+    If LCase$(right$(path, 5)) <> ".xlsm" And LCase$(right$(path, 5)) <> ".xlsx" Then Migration_Reject "MIGRATION.PROFILE"
     fileNo = FreeFile
     Open path For Binary Access Read Lock Write As #fileNo
     length = LOF(fileNo)
@@ -359,7 +375,7 @@ Private Sub Migration_PreflightPackage(ByVal path As String)
     Exit Sub
 Failed:
     Dim errorNumber As Long, description As String, source As String
-    errorNumber = Err.Number: description = Err.Description: source = Err.Source
+    errorNumber = Err.number: description = Err.description: source = Err.source
     If fileNo <> 0 Then Close #fileNo
     Err.Raise errorNumber, source, description
 End Sub
@@ -374,3 +390,11 @@ Private Function Migration_U32(ByRef bytes() As Byte, ByVal offset As Long) As L
     If value > 2147483647# Then Err.Raise 5, , "ZIP_OFFSET_NOT_SUPPORTED"
     Migration_U32 = CLng(value)
 End Function
+
+
+
+
+
+
+
+

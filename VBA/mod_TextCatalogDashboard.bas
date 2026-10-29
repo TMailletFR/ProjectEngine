@@ -2,7 +2,10 @@ Attribute VB_Name = "mod_TextCatalogDashboard"
 Option Explicit
 
 Public Function TextCatalogDashboard_Definitions() As Variant
-    Dim definitions(0 To 109) As Variant
+    Dim definitions(0 To 110) As Variant
+    definitions(110) = Array("DASHBOARD.SNAPSHOT.INCOMPLETE", _
+        "Snapshot not saved: planning or S-Curve data is incomplete. Fix the reported errors and update the Dashboard again.", _
+        "Instantané non enregistré : les données du planning ou de la S-Curve sont incomplètes. Corrigez les erreurs signalées puis actualisez le Dashboard.")
     definitions(0) = Array("DASHBOARD.ERROR.COMPARISON", _
         "Error in Refresh_Dashboard_Comparison" & vbCrLf & "{Details}", _
         "Erreur dans Refresh_Dashboard_Comparison" & vbCrLf & "{Details}")
@@ -315,3 +318,7 @@ Public Function TextCatalogDashboard_Definitions() As Variant
     definitions(109) = Array("DASHBOARD.VALIDATION.SNAPSHOT.ERROR", "Choose an existing snapshot from the drop-down list.", "Choisissez un instantané existant dans la liste déroulante.")
     TextCatalogDashboard_Definitions = definitions
 End Function
+
+
+
+

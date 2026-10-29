@@ -33,23 +33,23 @@ Private gHotSpotStep As String
 Public Function Dashboard_TutorialSnapshotTarget() As Range
     Dim ws As Worksheet
     Dim snapshots As ListObject
-    On Error GoTo Missing
+    On Error GoTo missing
     Set snapshots = ThisWorkbook.Worksheets(DASHBOARD_SNAPSHOT_SHEET).ListObjects(DASHBOARD_SNAPSHOT_TABLE)
     If snapshots.DataBodyRange Is Nothing Then Exit Function
     Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
     If Len(CStr(ws.Range(DASH_FROM_CELL).Value2)) = 0 Then Exit Function
-    Set Dashboard_TutorialSnapshotTarget = ws.Range(ws.Cells(ws.Range(DASH_FROM_CELL).Row, 2), ws.Shapes("btn_Dashboard_Refresh_Comparison").BottomRightCell)
-Missing:
+    Set Dashboard_TutorialSnapshotTarget = ws.Range(ws.cells(ws.Range(DASH_FROM_CELL).row, 2), ws.Shapes("btn_Dashboard_Refresh_Comparison").BottomRightCell)
+missing:
 End Function
 
 Public Function Dashboard_TutorialNewSnapshotTarget() As Range
     Dim ws As Worksheet
-    Dim button As Shape
-    On Error GoTo Missing
+    Dim Button As shape
+    On Error GoTo missing
     Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
-    Set button = ws.Shapes("btn_Update_Dashboard")
-    Set Dashboard_TutorialNewSnapshotTarget = ws.Range(button.TopLeftCell, button.BottomRightCell)
-Missing:
+    Set Button = ws.Shapes("btn_Update_Dashboard")
+    Set Dashboard_TutorialNewSnapshotTarget = ws.Range(Button.TopLeftCell, Button.BottomRightCell)
+missing:
 End Function
 
 '------------------------------------------------------------------------------
@@ -70,13 +70,14 @@ End Sub
 ' FR: Rafraichit Dashboard Full Build a partir de l'etat courant.
 ' EN: Refreshes Dashboard Full Build from the current state.
 '------------------------------------------------------------------------------
-Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection As Boolean = False)
+Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False)
 
     Dim ws As Worksheet
     Dim readContext As clsDashboardReadContext
     Dim fromLabel As String
     Dim toLabel As String
     Dim langCode As String
+    Dim failureNumber As Long, failureDescription As String
 
     On Error GoTo ErrHandler
     Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
@@ -92,15 +93,20 @@ Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection 
     Set readContext = DashboardReadContext_Load()
 
     Dashboard_RenderHeader ws, fromLabel, toLabel
-    Dashboard_RenderExecutiveSummary ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
-    Dashboard_RenderSCurveChart ws, readContext.SCurveProjection
-    Dashboard_RenderPlanningOverview ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
-    Dashboard_RenderHotSpots ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_RenderExecutiveSummary ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns, readContext.scurveProjection
+    Dashboard_RenderSCurveChart ws, readContext.scurveProjection
+    Dashboard_RenderPlanningOverview ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
+    Dashboard_RenderHotSpots ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
 
 SafeExit:
     Exit Sub
 ErrHandler:
-    Debug.Print "Refresh_Dashboard_FullBuild error " & Err.Number & ": " & Err.Description
+    If propagateErrors Then
+        failureNumber = Err.number: failureDescription = Err.description
+        On Error GoTo 0
+        Err.Raise failureNumber, "Refresh_Dashboard_FullBuild", failureDescription
+    End If
+    Debug.Print "Refresh_Dashboard_FullBuild error " & Err.number & ": " & Err.description
     Resume SafeExit
 End Sub
 
@@ -108,18 +114,19 @@ End Sub
 ' FR: Rafraichit Dashboard Content Only a partir de l'etat courant.
 ' EN: Refreshes Dashboard Content Only from the current state.
 '------------------------------------------------------------------------------
-Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelection As Boolean = False)
+Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False)
 
     Dim ws As Worksheet
     Dim readContext As clsDashboardReadContext
     Dim fromLabel As String
     Dim toLabel As String
     Dim oldScreenUpdating As Boolean
+    Dim failureNumber As Long, failureDescription As String
     On Error GoTo ErrHandler
     Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
 
     If Not Dashboard_HasUsableLayout() Then
-        Refresh_Dashboard_FullBuild preserveSnapshotSelection
+        Refresh_Dashboard_FullBuild preserveSnapshotSelection, propagateErrors
         Exit Sub
     End If
 
@@ -138,16 +145,21 @@ Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelectio
     Dashboard_EnsureResetButton ws
     Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
-    Dashboard_UpdateKpiCardsInPlace ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
-    Dashboard_UpdateSCurveChartInPlace ws, readContext.SCurveProjection
-    Dashboard_UpdatePlanningOverviewContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
-    Dashboard_UpdateHotSpotsContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_UpdateKpiCardsInPlace ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns, readContext.scurveProjection
+    Dashboard_UpdateSCurveChartInPlace ws, readContext.scurveProjection
+    Dashboard_UpdatePlanningOverviewContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
+    Dashboard_UpdateHotSpotsContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
 
 SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
+    If propagateErrors And failureNumber <> 0 Then
+        On Error GoTo 0
+        Err.Raise failureNumber, "Refresh_Dashboard_ContentOnly", failureDescription
+    End If
     Exit Sub
 ErrHandler:
-    Debug.Print "Refresh_Dashboard_ContentOnly error " & Err.Number & ": " & Err.Description
+    failureNumber = Err.number: failureDescription = Err.description
+    Debug.Print "Refresh_Dashboard_ContentOnly error " & Err.number & ": " & Err.description
     Resume SafeExit
 End Sub
 '------------------------------------------------------------------------------
@@ -248,19 +260,25 @@ Public Sub Run_Dashboard_Update()
     Dim workflowStarted As Boolean
     Dim stopOnlyStarted As Boolean
     Dim consoleMessages As Collection
+    Dim newSnapshot As ListRow
+    Dim failureDescription As String
+    Dim previousFrom As String, previousTo As String
 On Error GoTo ErrHandler
 
     workflowStarted = EnsurePlanningWorkflowStarted("Run_Dashboard_Update")
     BeginPlanningEventRun "Run_Dashboard_Update"
     BeginPlanningWorkflowStopOnlyDisplay
     stopOnlyStarted = True
-    Run_Full_Update
+    Run_Full_Update True
 
     If CalcEngine_HasBlockingErrorsForState() Then GoTo CleanExit
     If IsMacroAbortRequested() Then GoTo CleanExit
-    Dashboard_CreateSnapshotFromCurrentData
-    Refresh_Dashboard_ContentOnly
+    previousFrom = CStr(ThisWorkbook.Worksheets(DASHBOARD_SHEET).Range(DASH_FROM_CELL).Value2)
+    previousTo = CStr(ThisWorkbook.Worksheets(DASHBOARD_SHEET).Range(DASH_TO_CELL).Value2)
+    Set newSnapshot = Dashboard_CreateSnapshotFromCurrentData()
+    Refresh_Dashboard_ContentOnly False, True
     ThisWorkbook.Worksheets(DASHBOARD_SHEET).Activate
+    Set newSnapshot = Nothing
 
 CleanExit:
     If stopOnlyStarted Then
@@ -272,6 +290,12 @@ CleanExit:
     Exit Sub
 
 ErrHandler:
+    failureDescription = Err.description
+    If Not newSnapshot Is Nothing Then
+        newSnapshot.Delete
+        Set newSnapshot = Nothing
+        Dashboard_SetupSnapshotControls ThisWorkbook.Worksheets(DASHBOARD_SHEET), previousFrom, previousTo, False
+    End If
     If stopOnlyStarted Then
         EndPlanningWorkflowStopOnlyDisplay
         stopOnlyStarted = False
@@ -280,8 +304,8 @@ ErrHandler:
     Set consoleMessages = New Collection
     CalcBridge_AddConsoleMessage consoleMessages, "STOP", _
         PlanningMessageText_Format("DASHBOARD.ERROR.UPDATE", _
-            TextCatalog_Arguments("Details", Err.Description), _
-            TextCatalog_Arguments("Details", Err.Description))
+            TextCatalog_Arguments("Details", failureDescription), _
+            TextCatalog_Arguments("Details", failureDescription))
     CalcBridge_ShowPlanningConsole consoleMessages
     Resume CleanExit
 
@@ -301,8 +325,8 @@ Private Function Dashboard_EnsureSheet() As Worksheet
     On Error GoTo 0
 
     If ws Is Nothing Then
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
-        ws.Name = DASHBOARD_SHEET
+        Set ws = ThisWorkbook.Worksheets.Add(after:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
+        ws.name = DASHBOARD_SHEET
     End If
 
     Set Dashboard_EnsureSheet = ws
@@ -348,13 +372,13 @@ Private Sub Dashboard_Clear(ByVal ws As Worksheet)
 
     Dim i As Long
 
-    ws.Cells.Clear
+    ws.cells.Clear
 
-    For i = ws.ChartObjects.Count To 1 Step -1
+    For i = ws.ChartObjects.count To 1 Step -1
         ws.ChartObjects(i).Delete
     Next i
 
-    For i = ws.Shapes.Count To 1 Step -1
+    For i = ws.Shapes.count To 1 Step -1
         ws.Shapes(i).Delete
     Next i
 
@@ -369,27 +393,27 @@ Private Sub Dashboard_SetupCanvas(ByVal ws As Worksheet)
 
     Dim i As Long
 
-    ws.Cells.Interior.Color = RGB(246, 248, 251)
-    ws.Cells.Font.Name = "Segoe UI"
-    ws.Cells.Font.Size = 10
+    ws.cells.Interior.color = RGB(246, 248, 251)
+    ws.cells.font.name = "Segoe UI"
+    ws.cells.font.size = 10
 
     For i = 1 To 24
-        ws.Columns(i).ColumnWidth = 10
+        ws.columns(i).ColumnWidth = 10
     Next i
 
-    ws.Columns("A").ColumnWidth = 2
-    ws.Columns("B:C").ColumnWidth = 11
-    ws.Columns("D:F").ColumnWidth = 12
-    ws.Columns("G:H").ColumnWidth = 11
-    ws.Columns("I:N").ColumnWidth = 12
-    ws.Columns("O:W").ColumnWidth = 11
+    ws.columns("A").ColumnWidth = 2
+    ws.columns("B:C").ColumnWidth = 11
+    ws.columns("D:F").ColumnWidth = 12
+    ws.columns("G:H").ColumnWidth = 11
+    ws.columns("I:N").ColumnWidth = 12
+    ws.columns("O:W").ColumnWidth = 11
 
     For i = 1 To 62
         ws.rows(i).rowHeight = 18
     Next i
 
-    ws.Range("A1:W62").Interior.Color = RGB(246, 248, 251)
-    ActiveWindow.DisplayGridlines = False
+    ws.Range("A1:W62").Interior.color = RGB(246, 248, 251)
+    activeWindow.DisplayGridlines = False
 
     With ws.PageSetup
         .PrintArea = ""
@@ -411,21 +435,25 @@ Public Sub Refresh_Dashboard_Comparison()
 
 ErrHandler:
     CalcBridge_ShowSingleConsoleMessage "WARNING", "DASHBOARD.ERROR.COMPARISON", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", Err.description)
 
 End Sub
 
-Public Sub Dashboard_HandleSnapshotSelectionChange(ByVal ws As Worksheet, ByVal target As Range)
+Public Sub Dashboard_HandleSnapshotSelectionChange(ByVal ws As Worksheet, ByVal Target As Range)
     Dim selected As Range, cell As Range
+    Dim snapshots As ListObject, label As String
     Dim oldEvents As Boolean
     oldEvents = Application.EnableEvents
     On Error GoTo Failed
-    If Not (ws.Parent Is ThisWorkbook) Then Exit Sub
-    Set selected = Application.Intersect(target, ws.Range(DASH_FROM_CELL & "," & DASH_TO_CELL))
+    If Not (ws.parent Is ThisWorkbook) Then Exit Sub
+    Set selected = Application.Intersect(Target, ws.Range(DASH_FROM_CELL & "," & DASH_TO_CELL))
     If selected Is Nothing Then Exit Sub
-    For Each cell In selected.Cells
-        If cell.Validation.Type = xlValidateList Then
-            If Not cell.Validation.Value Then
+    Set snapshots = ThisWorkbook.Worksheets(DASHBOARD_SNAPSHOT_SHEET).ListObjects(DASHBOARD_SNAPSHOT_TABLE)
+    For Each cell In selected.cells
+        ' UI reconstruction may temporarily remove validation; the owned history remains authoritative.
+        label = CStr(cell.Value2)
+        If Len(label) > 0 Then
+            If Not Dashboard_SnapshotLabelExists(snapshots, label) Then
                 Application.EnableEvents = False
                 Application.Undo
                 Application.EnableEvents = oldEvents
@@ -438,7 +466,7 @@ Public Sub Dashboard_HandleSnapshotSelectionChange(ByVal ws As Worksheet, ByVal 
 Failed:
     Application.EnableEvents = oldEvents
     CalcBridge_ShowSingleConsoleMessage "STOP", "DASHBOARD.ERROR.COMPARISON", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", Err.description)
 End Sub
 
 '------------------------------------------------------------------------------
@@ -464,16 +492,16 @@ Private Sub Refresh_Dashboard_TextsAndComparisonOnly()
     Dashboard_EnsureResetButton ws
     Dashboard_RemoveLegacyLanguageToggle ws
     Dashboard_UpdateKnownShapeTexts ws
-    Dashboard_UpdateKpiCardsInPlace ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns, readContext.SCurveProjection
-    Dashboard_UpdateSCurveChartInPlace ws, readContext.SCurveProjection
-    Dashboard_UpdatePlanningOverviewContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
-    Dashboard_UpdateHotSpotsContent ws, readContext.WbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.CalcColumns
+    Dashboard_UpdateKpiCardsInPlace ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns, readContext.scurveProjection
+    Dashboard_UpdateSCurveChartInPlace ws, readContext.scurveProjection
+    Dashboard_UpdatePlanningOverviewContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
+    Dashboard_UpdateHotSpotsContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
 
 SafeExit:
     Exit Sub
 ErrHandler:
-    Debug.Print "Refresh_Dashboard_TextsAndComparisonOnly error " & Err.Number & ": " & Err.Description
-    Err.Raise Err.Number, "Refresh_Dashboard_TextsAndComparisonOnly", Err.Description
+    Debug.Print "Refresh_Dashboard_TextsAndComparisonOnly error " & Err.number & ": " & Err.description
+    Err.Raise Err.number, "Refresh_Dashboard_TextsAndComparisonOnly", Err.description
 End Sub
 
 '------------------------------------------------------------------------------
@@ -490,8 +518,8 @@ Private Sub Dashboard_ClearSnapshotsForReset()
     Set tbl = Dashboard_EnsureSnapshotsTable()
 
     If Not tbl Is Nothing Then
-        Do While tbl.ListRows.Count > 0
-            tbl.ListRows(tbl.ListRows.Count).Delete
+        Do While tbl.ListRows.count > 0
+            tbl.ListRows(tbl.ListRows.count).Delete
         Loop
     End If
 
@@ -541,23 +569,23 @@ Private Sub Dashboard_RenderExecutiveSummaryEmpty(ByVal ws As Worksheet)
     Dim cardWidth As Double
     Dim gapVal As Double
 
-    leftPos = ws.Range("B5").Left
-    topPos = ws.Range("B7").Top
-    widthVal = ws.Range("B5:Q29").Width
+    leftPos = ws.Range("B5").left
+    topPos = ws.Range("B7").top
+    widthVal = ws.Range("B5:Q29").width
     gapVal = 12
     cardWidth = (widthVal - (gapVal * 3)) / 4
 
     ws.Range("B6:M6").Merge
     ws.Range("B6").value = TextCatalog_Get("DASHBOARD.TITLE.EXECUTIVE_SUMMARY", Dashboard_CurrentLanguage())
-    ws.Range("B6").Font.Bold = True
-    ws.Range("B6").Font.Size = 15
-    ws.Range("B6").Font.Color = RGB(20, 34, 51)
+    ws.Range("B6").font.bold = True
+    ws.Range("B6").font.size = 15
+    ws.Range("B6").font.color = RGB(20, 34, 51)
 
     With ws.Range("N6:Q6")
         .Merge
         .value = Dashboard_NoProjectLoadedText()
-        .Font.Size = 9
-        .Font.Color = RGB(96, 111, 128)
+        .font.size = 9
+        .font.color = RGB(96, 111, 128)
         .HorizontalAlignment = xlRight
         .VerticalAlignment = xlCenter
     End With
@@ -592,10 +620,10 @@ Private Sub Dashboard_RenderSCurveEmpty(ByVal ws As Worksheet)
     Dim widthVal As Double
     Dim heightVal As Double
 
-    leftPos = ws.Range("B13").Left + 18
-    topPos = ws.Range("B13").Top
-    widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
-    heightVal = ws.Range("B13:I29").Height
+    leftPos = ws.Range("B13").left + 18
+    topPos = ws.Range("B13").top
+    widthVal = (ws.Range("I13").left + ws.Range("I13").width) - leftPos
+    heightVal = ws.Range("B13:I29").height
 
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
     Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
@@ -615,10 +643,10 @@ Private Sub Dashboard_RenderPlanningOverviewEmpty(ByVal ws As Worksheet)
     Dim widthVal As Double
     Dim heightVal As Double
 
-    leftPos = ws.Range("J13").Left + 8
-    topPos = ws.Range("J13").Top
-    widthVal = ws.Range("J13:Q29").Width - 20
-    heightVal = ws.Range("J13:Q29").Height
+    leftPos = ws.Range("J13").left + 8
+    topPos = ws.Range("J13").top
+    widthVal = ws.Range("J13:Q29").width - 20
+    heightVal = ws.Range("J13:Q29").height
 
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
     Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
@@ -644,10 +672,10 @@ Private Sub Dashboard_RenderHotSpotsEmpty(ByVal ws As Worksheet)
     Dim largeW As Double
     Dim smallH As Double
 
-    leftPos = ws.Range("B32").Left
-    topPos = ws.Range("B32").Top
-    widthVal = ws.Range("B32:Q56").Width
-    heightVal = ws.Range("B32:Q56").Height
+    leftPos = ws.Range("B32").left
+    topPos = ws.Range("B32").top
+    widthVal = ws.Range("B32:Q56").width
+    heightVal = ws.Range("B32:Q56").height
 
     Dashboard_AddSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 36
 
@@ -682,9 +710,9 @@ Private Sub Dashboard_UpdateHeaderTexts(ByVal ws As Worksheet)
     End With
 
     On Error Resume Next
-    ws.Shapes("btn_Update_Dashboard").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
-    ws.Shapes("btn_Dashboard_Refresh_Comparison").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
-    ws.Shapes("btn_Dashboard_Reset").TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
+    ws.Shapes("btn_Update_Dashboard").TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
+    ws.Shapes("btn_Dashboard_Refresh_Comparison").TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
+    ws.Shapes("btn_Dashboard_Reset").TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
     On Error GoTo 0
 
 End Sub
@@ -696,7 +724,7 @@ End Sub
 
 Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
 
-    Dim shp As Shape
+    Dim shp As shape
     Dim tsText As String
     Dim found As Boolean
 
@@ -705,9 +733,9 @@ Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
     On Error Resume Next
     For Each shp In ws.Shapes
         If shp.TextFrame2.HasText Then
-            If shp.Top < ws.Range("A4").Top Then
-                If Dashboard_IsTimestampText(Trim$(shp.TextFrame2.TextRange.Text)) Then
-                    shp.TextFrame2.TextRange.Text = tsText
+            If shp.top < ws.Range("A4").top Then
+                If Dashboard_IsTimestampText(Trim$(shp.TextFrame2.TextRange.text)) Then
+                    shp.TextFrame2.TextRange.text = tsText
                     found = True
                     Exit For
                 End If
@@ -717,7 +745,7 @@ Private Sub Dashboard_UpdateHeaderTimestamp(ByVal ws As Worksheet)
     On Error GoTo 0
 
     If Not found Then
-        Dashboard_AddBadge ws, tsText, ws.Range("T1").Left, ws.Range("T1").Top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
+        Dashboard_AddBadge ws, tsText, ws.Range("T1").left, ws.Range("T1").top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
     End If
 
 End Sub
@@ -749,8 +777,8 @@ End Sub
 
 Private Sub Dashboard_UpdateLanguageToggle(ByVal ws As Worksheet)
 
-    Dim trackShape As Shape
-    Dim knobShape As Shape
+    Dim trackShape As shape
+    Dim knobShape As shape
     Dim isOn As Boolean
     Dim knobSize As Double
     Dim knobLeft As Double
@@ -764,14 +792,14 @@ Private Sub Dashboard_UpdateLanguageToggle(ByVal ws As Worksheet)
     isOn = Not Dashboard_IsFrench()
     Dashboard_FormatSwitchTrack trackShape, isOn
 
-    knobSize = knobShape.Width
+    knobSize = knobShape.width
     If isOn Then
-        knobLeft = trackShape.Left + trackShape.Width - knobSize - 2
+        knobLeft = trackShape.left + trackShape.width - knobSize - 2
     Else
-        knobLeft = trackShape.Left + 2
+        knobLeft = trackShape.left + 2
     End If
-    knobShape.Left = knobLeft
-    knobShape.Top = trackShape.Top + ((trackShape.Height - knobSize) / 2)
+    knobShape.left = knobLeft
+    knobShape.top = trackShape.top + ((trackShape.height - knobSize) / 2)
 
 End Sub
 
@@ -785,21 +813,21 @@ End Sub
 Private Sub Dashboard_ClearKpiShapes(ByVal ws As Worksheet)
 
     Dim i As Long
-    Dim shp As Shape
+    Dim shp As shape
     Dim kpiLeft As Double
     Dim kpiRight As Double
     Dim kpiTop As Double
     Dim kpiBottom As Double
 
-    kpiLeft = ws.Range("B7").Left - 4
-    kpiRight = ws.Range("Q7").Left + ws.Range("Q7").Width + 4
-    kpiTop = ws.Range("B7").Top - 6
-    kpiBottom = ws.Range("B7").Top + 90
+    kpiLeft = ws.Range("B7").left - 4
+    kpiRight = ws.Range("Q7").left + ws.Range("Q7").width + 4
+    kpiTop = ws.Range("B7").top - 6
+    kpiBottom = ws.Range("B7").top + 90
 
-    For i = ws.Shapes.Count To 1 Step -1
+    For i = ws.Shapes.count To 1 Step -1
         Set shp = ws.Shapes(i)
-        If Left$(shp.Name, Len(DASH_PREFIX & "KPI")) = DASH_PREFIX & "KPI" Or _
-            (shp.Left >= kpiLeft And shp.Left <= kpiRight And shp.Top >= kpiTop And shp.Top <= kpiBottom) Then
+        If left$(shp.name, Len(DASH_PREFIX & "KPI")) = DASH_PREFIX & "KPI" Or _
+            (shp.left >= kpiLeft And shp.left <= kpiRight And shp.top >= kpiTop And shp.top <= kpiBottom) Then
             shp.Delete
         End If
     Next i
@@ -813,36 +841,36 @@ End Sub
 
 Private Sub Dashboard_UpdateKnownShapeTexts(ByVal ws As Worksheet)
 
-    Dim shp As Shape
+    Dim shp As shape
     Dim txt As String
 
     On Error Resume Next
     For Each shp In ws.Shapes
         If shp.TextFrame2.HasText Then
-            txt = Trim$(shp.TextFrame2.TextRange.Text)
+            txt = Trim$(shp.TextFrame2.TextRange.text)
             Select Case txt
                 Case TextCatalog_Get("DASHBOARD.SECTION.SCURVE", "FR"), TextCatalog_Get("DASHBOARD.SECTION.SCURVE", "EN")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", "FR"), TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", "EN")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.SECTION.OVERVIEW", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", "FR"), TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", "EN")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", "FR"), TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.TOP_DELAYS", "FR")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", "FR"), TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", "EN")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.CARD.DEADLINE_RISKS", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", "FR"), TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", "EN")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.CARD.FORECAST_ISSUES", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DELAYS", "FR")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DEADLINE_RISKS", "FR")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_RISKS", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_FORECAST_ISSUES", "FR")
-                    shp.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", Dashboard_CurrentLanguage())
+                    shp.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.EMPTY.NO_FORECAST_ISSUES", Dashboard_CurrentLanguage())
                 Case TextCatalog_Get("DASHBOARD.EMPTY.NO_PROJECT", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_PROJECT", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_PROJECT", "FR")
-                    shp.TextFrame2.TextRange.Text = Dashboard_NoProjectLoadedText()
+                    shp.TextFrame2.TextRange.text = Dashboard_NoProjectLoadedText()
                 Case TextCatalog_Get("DASHBOARD.EMPTY.NO_DATA", "FR"), TextCatalog_Get("DASHBOARD.EMPTY.NO_DATA", "EN"), TextCatalog_Get("DASHBOARD.LEGACY_ALIAS.NO_DATA", "FR")
-                    shp.TextFrame2.TextRange.Text = Dashboard_NoDataText()
+                    shp.TextFrame2.TextRange.text = Dashboard_NoDataText()
             End Select
         End If
     Next shp
@@ -860,9 +888,9 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
     With ws.Range("B1:P2")
         .Merge
         .value = TextCatalog_Get("DASHBOARD.TITLE.PAGE", Dashboard_CurrentLanguage())
-        .Font.Size = 24
-        .Font.Bold = True
-        .Font.Color = RGB(20, 34, 51)
+        .font.size = 24
+        .font.bold = True
+        .font.color = RGB(20, 34, 51)
         .HorizontalAlignment = xlLeft
         .VerticalAlignment = xlCenter
     End With
@@ -870,16 +898,16 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
     With ws.Range("B3:P3")
         .Merge
         .value = TextCatalog_Get("DASHBOARD.TITLE.SUBTITLE", Dashboard_CurrentLanguage())
-        .Font.Size = 10
-        .Font.Color = RGB(96, 111, 128)
+        .font.size = 10
+        .font.color = RGB(96, 111, 128)
         .HorizontalAlignment = xlLeft
         .VerticalAlignment = xlCenter
     End With
 
-    Dashboard_AddUpdateButton ws, ws.Range("Q1").Left, ws.Range("Q1").Top + 4, 126, 24
-    Dashboard_AddBadge ws, Dashboard_FormatTimestamp(Now), ws.Range("T1").Left, ws.Range("T1").Top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
+    Dashboard_AddUpdateButton ws, ws.Range("Q1").left, ws.Range("Q1").top + 4, 126, 24
+    Dashboard_AddBadge ws, Dashboard_FormatTimestamp(Now), ws.Range("T1").left, ws.Range("T1").top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
     Dashboard_SetupSnapshotControls ws, selectedFromLabel, selectedToLabel, True
-    Dashboard_AddResetButton ws, ws.Range("Q3").Left, ws.Range("Q3").Top + 4, 126, 24
+    Dashboard_AddResetButton ws, ws.Range("Q3").left, ws.Range("Q3").top + 4, 126, 24
     Dashboard_RemoveLegacyLanguageToggle ws
 
 End Sub
@@ -891,13 +919,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    Dim btn As Shape
+    Dim btn As shape
 
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    btn.Name = "btn_Update_Dashboard"
-    btn.Fill.ForeColor.RGB = RGB(20, 34, 51)
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    btn.name = "btn_Update_Dashboard"
+    btn.fill.ForeColor.RGB = RGB(20, 34, 51)
     btn.Line.Visible = msoFalse
     btn.OnAction = "Run_Dashboard_Update"
 
@@ -906,12 +934,12 @@ Private Sub Dashboard_AddUpdateButton(ByVal ws As Worksheet, ByVal x As Double, 
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
-        .TextRange.Font.Name = "Segoe UI"
-        .TextRange.Font.Size = 9
-        .TextRange.Font.Bold = msoTrue
-        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.SNAPSHOT", Dashboard_CurrentLanguage())
+        .TextRange.font.name = "Segoe UI"
+        .TextRange.font.size = 9
+        .TextRange.font.bold = msoTrue
+        .TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
+        .TextRange.ParagraphFormat.alignment = msoAlignCenter
         .VerticalAnchor = msoAnchorMiddle
     End With
 
@@ -924,11 +952,11 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    Dim labelShape As Shape
-    Dim trackShape As Shape
-    Dim knobShape As Shape
+    Dim labelShape As shape
+    Dim trackShape As shape
+    Dim knobShape As shape
     Dim labelW As Double
     Dim trackW As Double
     Dim trackH As Double
@@ -942,23 +970,23 @@ Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double
     trackW = 36
     trackH = 14
     knobSize = 10
-    trackLeft = x + labelW
+    trackLeft = X + labelW
     isOn = Not Dashboard_IsFrench()
 
-    Set labelShape = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, labelW, trackH)
-    labelShape.Name = "DASH_Language_Label"
+    Set labelShape = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, labelW, trackH)
+    labelShape.name = "DASH_Language_Label"
     labelShape.OnAction = "Toggle_Dashboard_Language"
     labelShape.Placement = xlMove
     Dashboard_FormatSwitchLabel labelShape, TextCatalog_Get("DASHBOARD.LANGUAGE.SWITCH", Dashboard_CurrentLanguage())
 
-    Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, y, trackW, trackH)
-    trackShape.Name = "DASH_Language_BG"
+    Set trackShape = ws.Shapes.AddShape(msoShapeRoundedRectangle, trackLeft, Y, trackW, trackH)
+    trackShape.name = "DASH_Language_BG"
     trackShape.OnAction = "Toggle_Dashboard_Language"
     trackShape.Placement = xlMove
     trackShape.Adjustments.item(1) = 0.5
     Dashboard_FormatSwitchTrack trackShape, isOn
 
-    knobTop = y + ((trackH - knobSize) / 2)
+    knobTop = Y + ((trackH - knobSize) / 2)
     If isOn Then
         knobLeft = trackLeft + trackW - knobSize - 2
     Else
@@ -966,7 +994,7 @@ Private Sub Dashboard_AddLanguageToggle(ByVal ws As Worksheet, ByVal x As Double
     End If
 
     Set knobShape = ws.Shapes.AddShape(msoShapeOval, knobLeft, knobTop, knobSize, knobSize)
-    knobShape.Name = "DASH_Language_Knob"
+    knobShape.name = "DASH_Language_Knob"
     knobShape.OnAction = "Toggle_Dashboard_Language"
     knobShape.Placement = xlMove
     Dashboard_FormatSwitchKnob knobShape
@@ -978,22 +1006,22 @@ End Sub
 ' EN: Normalizes or formats Format Switch Label according to the component contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_FormatSwitchLabel(ByVal shp As Shape, ByVal caption As String)
+Private Sub Dashboard_FormatSwitchLabel(ByVal shp As shape, ByVal caption As String)
 
     With shp
         .Line.Visible = msoFalse
-        .Fill.Visible = msoFalse
+        .fill.Visible = msoFalse
         .TextFrame2.VerticalAnchor = msoAnchorMiddle
         .TextFrame2.MarginLeft = 0
         .TextFrame2.MarginRight = 0
         .TextFrame2.MarginTop = 0
         .TextFrame2.MarginBottom = 0
-        .TextFrame2.TextRange.Text = caption
-        .TextFrame2.TextRange.Font.Name = "Segoe UI"
-        .TextFrame2.TextRange.Font.Size = 9
-        .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(68, 114, 196)
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextFrame2.TextRange.text = caption
+        .TextFrame2.TextRange.font.name = "Segoe UI"
+        .TextFrame2.TextRange.font.size = 9
+        .TextFrame2.TextRange.font.bold = msoTrue
+        .TextFrame2.TextRange.font.fill.ForeColor.RGB = RGB(68, 114, 196)
+        .TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
     End With
 
 End Sub
@@ -1003,16 +1031,16 @@ End Sub
 ' EN: Normalizes or formats Format Switch Track according to the component contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_FormatSwitchTrack(ByVal shp As Shape, ByVal isOn As Boolean)
+Private Sub Dashboard_FormatSwitchTrack(ByVal shp As shape, ByVal isOn As Boolean)
 
     With shp
-        .Line.Weight = 1
+        .Line.weight = 1
         .Shadow.Visible = msoFalse
         If isOn Then
-            .Fill.ForeColor.RGB = RGB(68, 114, 196)
+            .fill.ForeColor.RGB = RGB(68, 114, 196)
             .Line.ForeColor.RGB = RGB(68, 114, 196)
         Else
-            .Fill.ForeColor.RGB = RGB(230, 230, 230)
+            .fill.ForeColor.RGB = RGB(230, 230, 230)
             .Line.ForeColor.RGB = RGB(170, 170, 170)
         End If
     End With
@@ -1024,12 +1052,12 @@ End Sub
 ' EN: Normalizes or formats Format Switch Knob according to the component contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_FormatSwitchKnob(ByVal shp As Shape)
+Private Sub Dashboard_FormatSwitchKnob(ByVal shp As shape)
 
     With shp
-        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(150, 150, 150)
-        .Line.Weight = 0.75
+        .Line.weight = 0.75
         .Shadow.Visible = msoFalse
     End With
 
@@ -1042,13 +1070,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    Dim btn As Shape
+    Dim btn As shape
 
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    btn.Name = "btn_Dashboard_Refresh_Comparison"
-    btn.Fill.ForeColor.RGB = RGB(96, 111, 128)
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    btn.name = "btn_Dashboard_Refresh_Comparison"
+    btn.fill.ForeColor.RGB = RGB(96, 111, 128)
     btn.Line.Visible = msoFalse
     btn.OnAction = "Refresh_Dashboard_Comparison"
 
@@ -1057,12 +1085,12 @@ Private Sub Dashboard_AddRefreshComparisonButton(ByVal ws As Worksheet, ByVal x 
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
-        .TextRange.Font.Name = "Segoe UI"
-        .TextRange.Font.Size = 9
-        .TextRange.Font.Bold = msoTrue
-        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.COMPARE", Dashboard_CurrentLanguage())
+        .TextRange.font.name = "Segoe UI"
+        .TextRange.font.size = 9
+        .TextRange.font.bold = msoTrue
+        .TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
+        .TextRange.ParagraphFormat.alignment = msoAlignCenter
         .VerticalAnchor = msoAnchorMiddle
     End With
 
@@ -1075,13 +1103,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    Dim btn As Shape
+    Dim btn As shape
 
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    btn.Name = "btn_Dashboard_Reset"
-    btn.Fill.ForeColor.RGB = RGB(192, 80, 77)
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    btn.name = "btn_Dashboard_Reset"
+    btn.fill.ForeColor.RGB = RGB(192, 80, 77)
     btn.Line.Visible = msoFalse
     btn.OnAction = "Reset_Dashboard"
 
@@ -1090,12 +1118,12 @@ Private Sub Dashboard_AddResetButton(ByVal ws As Worksheet, ByVal x As Double, B
         .MarginRight = 8
         .MarginTop = 2
         .MarginBottom = 2
-        .TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
-        .TextRange.Font.Name = "Segoe UI"
-        .TextRange.Font.Size = 9
-        .TextRange.Font.Bold = msoTrue
-        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
+        .TextRange.font.name = "Segoe UI"
+        .TextRange.font.size = 9
+        .TextRange.font.bold = msoTrue
+        .TextRange.font.fill.ForeColor.RGB = RGB(255, 255, 255)
+        .TextRange.ParagraphFormat.alignment = msoAlignCenter
         .VerticalAnchor = msoAnchorMiddle
     End With
 
@@ -1108,18 +1136,18 @@ End Sub
 
 Private Sub Dashboard_EnsureResetButton(ByVal ws As Worksheet)
 
-    Dim btn As Shape
+    Dim btn As shape
 
     Set btn = Dashboard_GetShape(ws, "btn_Dashboard_Reset")
     If btn Is Nothing Then
-        Dashboard_AddResetButton ws, ws.Range("Q3").Left, ws.Range("Q3").Top + 4, 126, 24
+        Dashboard_AddResetButton ws, ws.Range("Q3").left, ws.Range("Q3").top + 4, 126, 24
     Else
-        Dashboard_PositionKpiShape btn, ws.Range("Q3").Left, ws.Range("Q3").Top + 4, 126, 24
-        btn.Fill.ForeColor.RGB = RGB(192, 80, 77)
+        Dashboard_PositionKpiShape btn, ws.Range("Q3").left, ws.Range("Q3").top + 4, 126, 24
+        btn.fill.ForeColor.RGB = RGB(192, 80, 77)
         btn.Line.Visible = msoFalse
         btn.Visible = msoTrue
         btn.OnAction = "Reset_Dashboard"
-        btn.TextFrame2.TextRange.Text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
+        btn.TextFrame2.TextRange.text = TextCatalog_Get("DASHBOARD.COMMAND.CLEAN", Dashboard_CurrentLanguage())
     End If
 
 End Sub
@@ -1144,37 +1172,37 @@ Private Sub Dashboard_SetupSnapshotControls(ByVal ws As Worksheet, ByVal selecte
 
     ws.Range("B4").value = TextCatalog_Get("DASHBOARD.SNAPSHOT.FROM", Dashboard_CurrentLanguage())
     ws.Range("F4").value = TextCatalog_Get("DASHBOARD.SNAPSHOT.TO", Dashboard_CurrentLanguage())
-    ws.Range("B4,F4").Font.Bold = True
-    ws.Range("B4,F4").Font.Color = RGB(96, 111, 128)
+    ws.Range("B4,F4").font.bold = True
+    ws.Range("B4,F4").font.color = RGB(96, 111, 128)
 
     ws.Range("C4:D4").Merge
     ws.Range("G4:H4").Merge
 
     With ws.Range("C4:D4")
         .value = fromDefault
-        .Interior.Color = RGB(255, 255, 255)
-        .Font.Color = RGB(20, 34, 51)
+        .Interior.color = RGB(255, 255, 255)
+        .font.color = RGB(20, 34, 51)
         .HorizontalAlignment = xlLeft
-        .Validation.Delete
+        .validation.Delete
         If Not tbl.DataBodyRange Is Nothing Then
-            .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
-            .Validation.ShowError = False
+            .validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+            .validation.ShowError = False
         End If
     End With
 
     With ws.Range("G4:H4")
         .value = toDefault
-        .Interior.Color = RGB(255, 255, 255)
-        .Font.Color = RGB(20, 34, 51)
+        .Interior.color = RGB(255, 255, 255)
+        .font.color = RGB(20, 34, 51)
         .HorizontalAlignment = xlLeft
-        .Validation.Delete
+        .validation.Delete
         If Not tbl.DataBodyRange Is Nothing Then
-            .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
-            .Validation.ShowError = False
+            .validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:="=DashboardSnapshotLabels"
+            .validation.ShowError = False
         End If
     End With
 
-    If recreateButton Then Dashboard_AddRefreshComparisonButton ws, ws.Range("J4").Left, ws.Range("J4").Top - 1, 132, 22
+    If recreateButton Then Dashboard_AddRefreshComparisonButton ws, ws.Range("J4").left, ws.Range("J4").top - 1, 132, 22
 
 End Sub
 
@@ -1280,39 +1308,39 @@ Private Sub Dashboard_UpdateKpiCardsInPlace( _
     criticalHeroText = Dashboard_CriticalActivitiesHero(fromRow, toRow, criticalColor, criticalSubText)
     momentumText = Dashboard_ScheduleMomentumStatus(fromRow, toRow, momentumColor, momentumSubText)
 
-    leftPos = ws.Range("B5").Left
-    topPos = ws.Range("B5").Top
-    widthVal = ws.Range("B5:Q29").Width
+    leftPos = ws.Range("B5").left
+    topPos = ws.Range("B5").top
+    widthVal = ws.Range("B5:Q29").width
     gapVal = 12
     cardWidth = (widthVal - (gapVal * 3)) / 4
 
     ws.Range("B6:M6").Merge
     ws.Range("B6").value = TextCatalog_Get("DASHBOARD.TITLE.EXECUTIVE_SUMMARY", Dashboard_CurrentLanguage())
-    ws.Range("B6").Font.Bold = True
-    ws.Range("B6").Font.Size = 15
-    ws.Range("B6").Font.Color = RGB(20, 34, 51)
+    ws.Range("B6").font.bold = True
+    ws.Range("B6").font.size = 15
+    ws.Range("B6").font.color = RGB(20, 34, 51)
 
     Dashboard_UpdateKpiCard ws, 1, TextCatalog_Get("DASHBOARD.KPI.PROGRESS", Dashboard_CurrentLanguage()), Format$(actualProgress, "0%"), _
         progressDeltaText, _
-        leftPos + 18, ws.Range("B7").Top, cardWidth - 10, 78, progressColor
+        leftPos + 18, ws.Range("B7").top, cardWidth - 10, 78, progressColor
 
     Dashboard_UpdateKpiCard ws, 2, TextCatalog_Get("DASHBOARD.KPI.FORECAST_FINISH", Dashboard_CurrentLanguage()), Dashboard_FormatDateShort(calcFinish), _
         forecastDeltaText, _
-        leftPos + 18 + cardWidth + gapVal, ws.Range("B7").Top, cardWidth - 10, 78, forecastColor
+        leftPos + 18 + cardWidth + gapVal, ws.Range("B7").top, cardWidth - 10, 78, forecastColor
 
     Dashboard_UpdateKpiCard ws, 3, TextCatalog_Get("DASHBOARD.KPI.CRITICAL_ACTIVITIES", Dashboard_CurrentLanguage()), criticalHeroText, _
         criticalSubText, _
-        leftPos + 18 + ((cardWidth + gapVal) * 2), ws.Range("B7").Top, cardWidth - 10, 78, criticalColor
+        leftPos + 18 + ((cardWidth + gapVal) * 2), ws.Range("B7").top, cardWidth - 10, 78, criticalColor
 
     Dashboard_UpdateKpiCard ws, 4, TextCatalog_Get("DASHBOARD.KPI.MOMENTUM", Dashboard_CurrentLanguage()), Dashboard_LocalMomentumStatus(momentumText), _
         momentumSubText, _
-        leftPos + 18 + ((cardWidth + gapVal) * 3), ws.Range("B7").Top, cardWidth - 10, 78, momentumColor
+        leftPos + 18 + ((cardWidth + gapVal) * 3), ws.Range("B7").top, cardWidth - 10, 78, momentumColor
 
     With ws.Range("N6:Q6")
         .Merge
         .value = compareText
-        .Font.Size = 9
-        .Font.Color = RGB(96, 111, 128)
+        .font.size = 9
+        .font.color = RGB(96, 111, 128)
         .HorizontalAlignment = xlRight
         .VerticalAlignment = xlCenter
     End With
@@ -1329,7 +1357,7 @@ End Sub
 Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal scurveProjection As Object)
 
     Dim chartObj As ChartObject
-    Dim ch As Chart
+    Dim ch As chart
     Dim leftPos As Double
     Dim topPos As Double
     Dim widthVal As Double
@@ -1340,11 +1368,11 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal scur
     Dim forecastRange As Range
 
     If scurveProjection Is Nothing Then Exit Sub
-    If Not scurveProjection.Exists("DateRange") Then Exit Sub
+    If Not scurveProjection.exists("DateRange") Then Exit Sub
     Set xRange = scurveProjection("DateRange")
-    If scurveProjection.Exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
-    If scurveProjection.Exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
-    If scurveProjection.Exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
+    If scurveProjection.exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
+    If scurveProjection.exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
+    If scurveProjection.exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
 
     On Error Resume Next
     Set chartObj = ws.ChartObjects(DASH_CHART_SCURVE)
@@ -1354,36 +1382,36 @@ Private Sub Dashboard_UpdateSCurveChartInPlace(ByVal ws As Worksheet, ByVal scur
         Exit Sub
     End If
 
-    leftPos = ws.Range("B13").Left + 18
-    topPos = ws.Range("B13").Top
-    widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
-    heightVal = ws.Range("B13:I29").Height
-    chartObj.Left = leftPos + 16
-    chartObj.Top = topPos + 38
-    chartObj.Width = widthVal - 24
-    chartObj.Height = heightVal - 56
+    leftPos = ws.Range("B13").left + 18
+    topPos = ws.Range("B13").top
+    widthVal = (ws.Range("I13").left + ws.Range("I13").width) - leftPos
+    heightVal = ws.Range("B13:I29").height
+    chartObj.left = leftPos + 16
+    chartObj.top = topPos + 38
+    chartObj.width = widthVal - 24
+    chartObj.height = heightVal - 56
 
-    Set ch = chartObj.Chart
-    Do While ch.SeriesCollection.Count > 0
+    Set ch = chartObj.chart
+    Do While ch.SeriesCollection.count > 0
         ch.SeriesCollection(1).Delete
     Loop
     ch.ChartType = xlLine
     ch.HasTitle = False
     ch.HasLegend = True
-    ch.Legend.Position = xlLegendPositionBottom
+    ch.Legend.position = xlLegendPositionBottom
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.BASELINE", Dashboard_CurrentLanguage()), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.ACTUAL", Dashboard_CurrentLanguage()), xRange, actualRange, RGB(0, 145, 112), 2.5, False
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.FORECAST", Dashboard_CurrentLanguage()), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
 
     On Error Resume Next
-    ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
-    ch.Axes(xlCategory).TickLabels.NumberFormat = Dashboard_ChartDateNumberFormat(False)
-    ch.Axes(xlCategory).TickLabels.Orientation = 45
+    ch.Axes(xlValue).TickLabels.numberFormat = "0%"
+    ch.Axes(xlCategory).TickLabels.numberFormat = Dashboard_ChartDateNumberFormat(False)
+    ch.Axes(xlCategory).TickLabels.orientation = 45
     ch.Axes(xlValue).MajorGridlines.Format.Line.ForeColor.RGB = RGB(225, 231, 238)
     ch.ChartArea.Format.Line.Visible = msoFalse
     ch.PlotArea.Format.Line.Visible = msoFalse
-    ch.ChartArea.Format.Fill.Visible = msoFalse
-    ch.PlotArea.Format.Fill.Visible = msoFalse
+    ch.ChartArea.Format.fill.Visible = msoFalse
+    ch.PlotArea.Format.fill.Visible = msoFalse
     On Error GoTo 0
     SCurve_DrawDashboardTodayLine ch, ws, DASH_SCURVE_TODAY_LINE
 
@@ -1396,7 +1424,7 @@ End Sub
 Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal scurveProjection As Object)
 
     Dim chartObj As ChartObject
-    Dim ch As Chart
+    Dim ch As chart
     Dim xRange As Range
     Dim baselineRange As Range
     Dim actualRange As Range
@@ -1407,36 +1435,36 @@ Private Sub Dashboard_RenderSCurveChart(ByVal ws As Worksheet, ByVal scurveProje
     Dim heightVal As Double
 
     If scurveProjection Is Nothing Then Exit Sub
-    If Not scurveProjection.Exists("DateRange") Then Exit Sub
+    If Not scurveProjection.exists("DateRange") Then Exit Sub
     Set xRange = scurveProjection("DateRange")
-    If scurveProjection.Exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
-    If scurveProjection.Exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
-    If scurveProjection.Exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
-    leftPos = ws.Range("B13").Left + 18
-    topPos = ws.Range("B13").Top
-    widthVal = (ws.Range("I13").Left + ws.Range("I13").Width) - leftPos
-    heightVal = ws.Range("B13:I29").Height
+    If scurveProjection.exists("BaselineRange") Then Set baselineRange = scurveProjection("BaselineRange")
+    If scurveProjection.exists("ActualRange") Then Set actualRange = scurveProjection("ActualRange")
+    If scurveProjection.exists("ForecastRange") Then Set forecastRange = scurveProjection("ForecastRange")
+    leftPos = ws.Range("B13").left + 18
+    topPos = ws.Range("B13").top
+    widthVal = (ws.Range("I13").left + ws.Range("I13").width) - leftPos
+    heightVal = ws.Range("B13:I29").height
     Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
     Dashboard_AddCenteredSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.SCURVE", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 44
     Set chartObj = ws.ChartObjects.Add(leftPos + 16, topPos + 38, widthVal - 24, heightVal - 56)
-    chartObj.Name = DASH_CHART_SCURVE
-    Set ch = chartObj.Chart
+    chartObj.name = DASH_CHART_SCURVE
+    Set ch = chartObj.chart
     ch.ChartType = xlLine
     ch.HasTitle = False
     ch.HasLegend = True
-    ch.Legend.Position = xlLegendPositionBottom
+    ch.Legend.position = xlLegendPositionBottom
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.BASELINE", Dashboard_CurrentLanguage()), xRange, baselineRange, RGB(150, 150, 150), 1.5, False
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.ACTUAL", Dashboard_CurrentLanguage()), xRange, actualRange, RGB(0, 145, 112), 2.5, False
     Dashboard_AddLineSeries ch, TextCatalog_Get("DASHBOARD.SERIES.FORECAST", Dashboard_CurrentLanguage()), xRange, forecastRange, RGB(43, 106, 176), 2.5, True
     On Error Resume Next
-    ch.Axes(xlValue).TickLabels.NumberFormat = "0%"
-    ch.Axes(xlCategory).TickLabels.NumberFormat = Dashboard_ChartDateNumberFormat(False)
-    ch.Axes(xlCategory).TickLabels.Orientation = 45
+    ch.Axes(xlValue).TickLabels.numberFormat = "0%"
+    ch.Axes(xlCategory).TickLabels.numberFormat = Dashboard_ChartDateNumberFormat(False)
+    ch.Axes(xlCategory).TickLabels.orientation = 45
     ch.Axes(xlValue).MajorGridlines.Format.Line.ForeColor.RGB = RGB(225, 231, 238)
     ch.ChartArea.Format.Line.Visible = msoFalse
     ch.PlotArea.Format.Line.Visible = msoFalse
-    ch.ChartArea.Format.Fill.Visible = msoFalse
-    ch.PlotArea.Format.Fill.Visible = msoFalse
+    ch.ChartArea.Format.fill.Visible = msoFalse
+    ch.PlotArea.Format.fill.Visible = msoFalse
     On Error GoTo 0
     SCurve_DrawDashboardTodayLine ch, ws, DASH_SCURVE_TODAY_LINE
 
@@ -1448,7 +1476,7 @@ End Sub
 '------------------------------------------------------------------------------
 
 Private Sub Dashboard_AddLineSeries( _
-    ByVal ch As Chart, _
+    ByVal ch As chart, _
     ByVal seriesName As String, _
     ByVal xRange As Range, _
     ByVal yRange As Range, _
@@ -1456,16 +1484,16 @@ Private Sub Dashboard_AddLineSeries( _
     ByVal weightVal As Double, _
     ByVal dashed As Boolean)
 
-    Dim s As Series
+    Dim s As series
     If xRange Is Nothing Or yRange Is Nothing Then Exit Sub
     Set s = ch.SeriesCollection.NewSeries
     With s
-        .Name = seriesName
+        .name = seriesName
         .XValues = xRange
-        .Values = yRange
+        .values = yRange
         .ChartType = xlLine
         .Format.Line.ForeColor.RGB = rgbColor
-        .Format.Line.Weight = weightVal
+        .Format.Line.weight = weightVal
         If dashed Then .Format.Line.DashStyle = msoLineDash
         .MarkerStyle = xlMarkerStyleNone
     End With
@@ -1484,10 +1512,10 @@ Private Sub Dashboard_UpdatePlanningOverviewContent(ByVal ws As Worksheet, ByVal
     Dim widthVal As Double
     Dim heightVal As Double
 
-    leftPos = ws.Range("J13").Left + 8
-    topPos = ws.Range("J13").Top
-    widthVal = ws.Range("J13:Q29").Width - 20
-    heightVal = ws.Range("J13:Q29").Height
+    leftPos = ws.Range("J13").left + 8
+    topPos = ws.Range("J13").top
+    widthVal = ws.Range("J13:Q29").width - 20
+    heightVal = ws.Range("J13:Q29").height
 
     Dashboard_DeleteShapesInRect ws, leftPos + 1, topPos + 36, widthVal - 2, heightVal - 38
     Dashboard_RenderPlanningOverview ws, tblWBS, mapWBS, tblCalc, mapCalc, False
@@ -1531,6 +1559,10 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
     Dim axisRight As Double
     Dim progressSummary As Double
     Dim progressById As Object
+    Dim summaryProgressByWbs As Object
+    Dim visibleParents As Object
+    Dim summaryMetrics As Variant
+    Dim progressColor As Variant
     Dim axisMin As Double
     Dim axisMax As Double
     Dim axisMargin As Double
@@ -1551,14 +1583,14 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
 
     If tblCalc Is Nothing Then Exit Sub
     If tblCalc.DataBodyRange Is Nothing Then Exit Sub
-    If Not mapCalc.Exists("IsSummary") Then Exit Sub
-    If Not mapCalc.Exists("Calculated Start") Then Exit Sub
-    If Not mapCalc.Exists("Calculated Finish") Then Exit Sub
+    If Not mapCalc.exists("IsSummary") Then Exit Sub
+    If Not mapCalc.exists("Calculated Start") Then Exit Sub
+    If Not mapCalc.exists("Calculated Finish") Then Exit Sub
 
-    leftPos = ws.Range("J13").Left + 8
-    topPos = ws.Range("J13").Top
-    widthVal = ws.Range("J13:Q29").Width - 20
-    heightVal = ws.Range("J13:Q29").Height
+    leftPos = ws.Range("J13").left + 8
+    topPos = ws.Range("J13").top
+    widthVal = ws.Range("J13:Q29").width - 20
+    heightVal = ws.Range("J13:Q29").height
 
     If renderShell Then
         Dashboard_AddPanel ws, leftPos, topPos, widthVal, heightVal, RGB(255, 255, 255)
@@ -1569,10 +1601,19 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
     Set progressById = Dashboard_BuildProgressById(tblWBS, mapWBS)
 
     Set rowsToShow = Dashboard_PlanningOverviewRows(arr, mapCalc, axisMin, axisMax)
-    If rowsToShow.Count = 0 Or axisMin <= 0 Or axisMax < axisMin Then
+    If rowsToShow.count = 0 Or axisMin <= 0 Or axisMax < axisMin Then
         Dashboard_WriteEmptyState ws, leftPos + 22, topPos + 70, widthVal - 44, TextCatalog_Get("DASHBOARD.EMPTY.NO_SUMMARY", Dashboard_CurrentLanguage())
         Exit Sub
     End If
+
+    Set visibleParents = CreateObject("Scripting.Dictionary")
+    For Each rowRef In rowsToShow
+        rowIndex = CLng(rowRef)
+        If Dashboard_IsSummaryArrayRow(arr, mapCalc, rowIndex) Then
+            visibleParents(NormalizeWBS(CStr(Dashboard_ArrayVal(arr, mapCalc, rowIndex, "WBS")))) = True
+        End If
+    Next rowRef
+    Set summaryProgressByWbs = Dashboard_BuildSummaryProgress(arr, mapCalc, progressById, visibleParents)
 
     axisMargin = Dashboard_PlanningAxisMargin(axisMin, axisMax)
     axisMin = axisMin - axisMargin
@@ -1593,7 +1634,7 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
 
     Dashboard_RenderTimeAxis ws, axisMin, axisMax, axisLeft, axisY, axisWidth
 
-    rowCount = rowsToShow.Count
+    rowCount = rowsToShow.count
     If rowCount <= 0 Then Exit Sub
     rowH = (plotBottom - plotTop) / rowCount
     If rowH > 22 Then rowH = 22
@@ -1632,7 +1673,16 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
             labelTop = shapeCenterY - ((fontSize + 4) / 2)
             Dashboard_AddMiniGanttLabel ws, labelText, usefulLeft, labelTop, labelWidth, fontSize
 
-            progressSummary = Dashboard_SummaryProgress(arr, mapCalc, progressById, rowIndex)
+            progressSummary = Dashboard_RowProgress(arr, mapCalc, progressById, rowIndex, _
+                CStr(GetCellValue(Dashboard_ArrayVal(arr, mapCalc, rowIndex, "ID"))))
+            progressColor = Empty
+            If Dashboard_IsSummaryArrayRow(arr, mapCalc, rowIndex) Then
+                If summaryProgressByWbs.exists(NormalizeWBS(wbsVal)) Then
+                    summaryMetrics = summaryProgressByWbs(NormalizeWBS(wbsVal))
+                    progressSummary = summaryMetrics(1) / summaryMetrics(0)
+                    progressColor = summaryMetrics(2)
+                End If
+            End If
             isMilestone = (Dashboard_DateNumber(rowFinish) <= Dashboard_DateNumber(rowStart))
 
             baseStart = GetCellValue(Dashboard_ArrayVal(arr, mapCalc, rowIndex, "Baseline Start"))
@@ -1650,7 +1700,7 @@ Private Sub Dashboard_RenderPlanningOverview(ByVal ws As Worksheet, ByVal tblWBS
             If isMilestone Then
                 Dashboard_AddMilestoneDiamond ws, x1, shapeCenterY, WorksheetFunction.Max(7, barHeight + 2), Dashboard_MiniGanttCurrentColor(progressSummary)
             ElseIf (x2 - x1) >= 6 Then
-                Dashboard_AddProgressBar ws, x1, shapeCenterY - (barHeight / 2), x2 - x1, barHeight, progressSummary, rowStart, rowFinish
+                Dashboard_AddProgressBar ws, x1, shapeCenterY - (barHeight / 2), x2 - x1, barHeight, progressSummary, rowStart, rowFinish, progressColor
             End If
         End If
     Next rowRef
@@ -1678,10 +1728,10 @@ Private Sub Dashboard_UpdateHotSpotsContent(ByVal ws As Worksheet, ByVal tblWBS 
     Dim widthVal As Double
     Dim heightVal As Double
 
-    leftPos = ws.Range("B32").Left
-    topPos = ws.Range("B32").Top
-    widthVal = ws.Range("B32:Q56").Width
-    heightVal = ws.Range("B32:Q56").Height
+    leftPos = ws.Range("B32").left
+    topPos = ws.Range("B32").top
+    widthVal = ws.Range("B32:Q56").width
+    heightVal = ws.Range("B32:Q56").height
 
     Dashboard_DeleteShapesInRect ws, leftPos + 1, topPos + 40, widthVal - 2, heightVal - 42
     Dashboard_RenderHotSpots ws, tblWBS, mapWBS, tblCalc, mapCalc, False
@@ -1705,10 +1755,10 @@ Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As List
     Dim largeW As Double
     Dim smallH As Double
 
-    leftPos = ws.Range("B32").Left
-    topPos = ws.Range("B32").Top
-    widthVal = ws.Range("B32:Q56").Width
-    heightVal = ws.Range("B32:Q56").Height
+    leftPos = ws.Range("B32").left
+    topPos = ws.Range("B32").top
+    widthVal = ws.Range("B32:Q56").width
+    heightVal = ws.Range("B32:Q56").height
 
     If renderShell Then Dashboard_AddSectionTitle ws, TextCatalog_Get("DASHBOARD.SECTION.HOT_SPOTS", Dashboard_CurrentLanguage()), leftPos + 22, topPos + 10, widthVal - 36
 
@@ -1731,7 +1781,7 @@ End Sub
 ' EN: Refreshes Render Top Delays without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As ListObject, ByVal mapWBS As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
     Const TOP_DELAY_COUNT As Long = 4
 
@@ -1751,7 +1801,7 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
     If tblWBS Is Nothing Then GoTo NoData
     If mapWBS Is Nothing Then GoTo NoData
     If tblWBS.DataBodyRange Is Nothing Then GoTo NoData
-    If Not mapWBS.Exists(VTS_COL_FINISH_VARIANCE) Then GoTo NoData
+    If Not mapWBS.exists(VTS_COL_FINISH_VARIANCE) Then GoTo NoData
 
     arr = tblWBS.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -1773,12 +1823,12 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
         accentColor = RGB(0, 145, 112)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), accentColor
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), accentColor
 
     For i = 1 To TOP_DELAY_COUNT
-        lineY = y + 66 + ((i - 1) * 68)
+        lineY = Y + 66 + ((i - 1) * 68)
         If topIds(i) <> "" Then
-            Dashboard_AddHotSpotRankingItem ws, x + 18, lineY, w - 36, 54, _
+            Dashboard_AddHotSpotRankingItem ws, X + 18, lineY, w - 36, 54, _
                 CStr(i), _
                 topWbs(i), _
                 Dashboard_TruncateText(topNames(i), 30), _
@@ -1788,18 +1838,18 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
     Next i
 
     If topIds(1) = "" Then
-        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAYS", Dashboard_CurrentLanguage()), X + 18, Y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAY_DATA", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.DELAYS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DELAY_DATA", Dashboard_CurrentLanguage()), X + 18, Y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
+    Dashboard_WriteHotSpotRuntimeError ws, X + 18, Y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.TOP_DELAYS", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -1808,7 +1858,7 @@ End Sub
 ' EN: Refreshes Render Deadline Health without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim arr As Variant
     Dim r As Long
@@ -1835,8 +1885,8 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
     If tblCalc Is Nothing Then GoTo NoData
     If mapCalc Is Nothing Then GoTo NoData
     If tblCalc.DataBodyRange Is Nothing Then GoTo NoData
-    If Not mapCalc.Exists("Deadline") Then GoTo NoData
-    If Not mapCalc.Exists("Deadline Float") Then GoTo NoData
+    If Not mapCalc.exists("Deadline") Then GoTo NoData
+    If Not mapCalc.exists("Deadline Float") Then GoTo NoData
 
     arr = tblCalc.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -1876,14 +1926,14 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
         accentColor = RGB(0, 145, 112)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), accentColor
-    Dashboard_AddHotSpotKpiBlock ws, x + 18, y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.OVERDUE", Dashboard_CurrentLanguage()), CStr(overdueCount), IIf(overdueCount > 0, RGB(192, 80, 77), RGB(0, 145, 112)), IIf(overdueCount > 0, RGB(252, 235, 232), RGB(229, 246, 239))
-    Dashboard_AddHotSpotKpiBlock ws, x + 30 + ((w - 48) / 2), y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.ON_TRACK", Dashboard_CurrentLanguage()), CStr(onTrackCount), RGB(0, 145, 112), RGB(229, 246, 239)
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), accentColor
+    Dashboard_AddHotSpotKpiBlock ws, X + 18, Y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.OVERDUE", Dashboard_CurrentLanguage()), CStr(overdueCount), IIf(overdueCount > 0, RGB(192, 80, 77), RGB(0, 145, 112)), IIf(overdueCount > 0, RGB(252, 235, 232), RGB(229, 246, 239))
+    Dashboard_AddHotSpotKpiBlock ws, X + 30 + ((w - 48) / 2), Y + 62, (w - 48) / 2, 64, TextCatalog_Get("DASHBOARD.STATUS.ON_TRACK", Dashboard_CurrentLanguage()), CStr(onTrackCount), RGB(0, 145, 112), RGB(229, 246, 239)
 
-    closestY = y + 152
+    closestY = Y + 152
     If worstFound Then
-        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.WORST", Dashboard_CurrentLanguage()), worstWbs, Dashboard_TruncateText(worstName, 30), CStr(CLng(worstFloat)) & Dashboard_DurationSuffix(), RGB(192, 80, 77), RGB(252, 235, 232)
-        closestY = y + 242
+        Dashboard_AddHotSpotInsightBlock ws, X + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.WORST", Dashboard_CurrentLanguage()), worstWbs, Dashboard_TruncateText(worstName, 30), CStr(CLng(worstFloat)) & Dashboard_DurationSuffix(), RGB(192, 80, 77), RGB(252, 235, 232)
+        closestY = Y + 242
     End If
 
     If riskFound Then
@@ -1894,20 +1944,20 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
             riskColor = RGB(0, 145, 112)
             riskFill = RGB(229, 246, 239)
         End If
-        Dashboard_AddHotSpotInsightBlock ws, x + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.NEAREST_RISK", Dashboard_CurrentLanguage()), riskWbs, Dashboard_TruncateText(riskName, 30), "+" & CStr(CLng(riskFloat)) & Dashboard_DurationSuffix(), riskColor, riskFill
+        Dashboard_AddHotSpotInsightBlock ws, X + 18, closestY, w - 36, 72, TextCatalog_Get("DASHBOARD.LABEL.NEAREST_RISK", Dashboard_CurrentLanguage()), riskWbs, Dashboard_TruncateText(riskName, 30), "+" & CStr(CLng(riskFloat)) & Dashboard_DurationSuffix(), riskColor, riskFill
     ElseIf activeDeadlineCount = 0 Then
-        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_DEADLINE", Dashboard_CurrentLanguage()), x + 18, closestY + 10, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_DEADLINE", Dashboard_CurrentLanguage()), X + 18, closestY + 10, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_DATA", Dashboard_CurrentLanguage()), x + 18, y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_DEADLINE_DATA", Dashboard_CurrentLanguage()), X + 18, Y + 90, w - 36, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 18, y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage())
+    Dashboard_WriteHotSpotRuntimeError ws, X + 18, Y + 90, w - 36, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -1916,7 +1966,7 @@ End Sub
 ' EN: Refreshes Render Next Milestone without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim arr As Variant
     Dim r As Long
@@ -1940,8 +1990,8 @@ Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc A
     If tblCalc Is Nothing Then GoTo NoData
     If mapCalc Is Nothing Then GoTo NoData
     If tblCalc.DataBodyRange Is Nothing Then GoTo NoData
-    If Not mapCalc.Exists("Task Type") Then GoTo NoData
-    If Not mapCalc.Exists("Calculated Finish") Then GoTo NoData
+    If Not mapCalc.exists("Task Type") Then GoTo NoData
+    If Not mapCalc.exists("Calculated Finish") Then GoTo NoData
 
     arr = tblCalc.DataBodyRange.value
     todaySerial = CDbl(Date)
@@ -1983,26 +2033,26 @@ Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc A
         dateColor = RGB(96, 111, 128)
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", accentColor
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", accentColor
 
     If bestFutureFound Or bestPastFound Then
-        Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), x + 16, y + 58, w - 32, 28, RGB(20, 34, 51)
-        Dashboard_AddHotSpotText ws, bestWbs, x + 16, y + 86, w - 32, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
-        Dashboard_AddHotSpotText ws, Dashboard_FormatDate(bestDate, True), x + 16, y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
-        Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), x + 16, y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
+        Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), X + 16, Y + 58, w - 32, 28, RGB(20, 34, 51)
+        Dashboard_AddHotSpotText ws, bestWbs, X + 16, Y + 86, w - 32, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, Dashboard_FormatDate(bestDate, True), X + 16, Y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), X + 16, Y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
     Else
-        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_MILESTONE", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_MILESTONE", Dashboard_CurrentLanguage()), X + 16, Y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_MILESTONE_DATA", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_MILESTONE_DATA", Dashboard_CurrentLanguage()), X + 16, Y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage())
+    Dashboard_WriteHotSpotRuntimeError ws, X + 16, Y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_MILESTONE", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -2011,7 +2061,7 @@ End Sub
 ' EN: Refreshes Render Next Critical Activity without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim arr As Variant
     Dim r As Long
@@ -2037,8 +2087,8 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
     If tblCalc Is Nothing Then GoTo NoData
     If mapCalc Is Nothing Then GoTo NoData
     If tblCalc.DataBodyRange Is Nothing Then GoTo NoData
-    If Not mapCalc.Exists("Critical Path") Then GoTo NoData
-    If Not mapCalc.Exists("Calculated Start") Then GoTo NoData
+    If Not mapCalc.exists("Critical Path") Then GoTo NoData
+    If Not mapCalc.exists("Calculated Start") Then GoTo NoData
 
     arr = tblCalc.DataBodyRange.value
     todaySerial = CDbl(Date)
@@ -2056,14 +2106,14 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
                                 bestDate = startSerial
                                 bestWbs = CStr(Dashboard_ArrayVal(arr, mapCalc, r, "WBS"))
                                 bestName = CStr(Dashboard_ArrayVal(arr, mapCalc, r, "Task Name"))
-                                If mapCalc.Exists("Total Float") Then bestFloat = Dashboard_ArrayVal(arr, mapCalc, r, "Total Float") Else bestFloat = Empty
+                                If mapCalc.exists("Total Float") Then bestFloat = Dashboard_ArrayVal(arr, mapCalc, r, "Total Float") Else bestFloat = Empty
                             End If
                         ElseIf Not fallbackFound Or startSerial > fallbackDate Then
                             fallbackFound = True
                             fallbackDate = startSerial
                             fallbackWbs = CStr(Dashboard_ArrayVal(arr, mapCalc, r, "WBS"))
                             fallbackName = CStr(Dashboard_ArrayVal(arr, mapCalc, r, "Task Name"))
-                            If mapCalc.Exists("Total Float") Then fallbackFloat = Dashboard_ArrayVal(arr, mapCalc, r, "Total Float") Else fallbackFloat = Empty
+                            If mapCalc.exists("Total Float") Then fallbackFloat = Dashboard_ArrayVal(arr, mapCalc, r, "Total Float") Else fallbackFloat = Empty
                         End If
                     End If
                 End If
@@ -2095,27 +2145,27 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
         End If
     End If
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", accentColor
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", accentColor
 
     If bestFound Then
-        Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), x + 16, y + 58, w - 32, 28, RGB(20, 34, 51)
-        Dashboard_AddHotSpotText ws, bestWbs, x + 16, y + 86, w - 32, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
-        Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.STARTS", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Date", Dashboard_FormatDate(bestDate, True))), x + 16, y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
-        Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), x + 16, y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
-        If IsNumeric(bestFloat) Then Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.FLOAT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", CStr(CLng(bestFloat)) & Dashboard_DurationSuffix())), x + 16, y + h - 24, w - 32, 16, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotHero ws, Dashboard_TruncateText(bestName, 24), X + 16, Y + 58, w - 32, 28, RGB(20, 34, 51)
+        Dashboard_AddHotSpotText ws, bestWbs, X + 16, Y + 86, w - 32, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.STARTS", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Date", Dashboard_FormatDate(bestDate, True))), X + 16, Y + 112, w - 32, 16, RGB(42, 52, 65), 9, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, Dashboard_DaysRemainingText(CLng(bestDate - todaySerial)), X + 16, Y + 136, w - 32, 16, dateColor, 9, True, xlHAlignLeft
+        If IsNumeric(bestFloat) Then Dashboard_AddHotSpotText ws, TextCatalog_Format("DASHBOARD.TASK.FLOAT", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Days", CStr(CLng(bestFloat)) & Dashboard_DurationSuffix())), X + 16, Y + h - 24, w - 32, 16, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Else
-        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_CRITICAL", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_ACTIVE_CRITICAL", Dashboard_CurrentLanguage()), X + 16, Y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     End If
 
     Exit Sub
 
 NoData:
-    Dashboard_AddHotSpotCard ws, x, y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_CRITICAL_DATA", Dashboard_CurrentLanguage()), x + 16, y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.EMPTY.NO_CRITICAL_DATA", Dashboard_CurrentLanguage()), X + 16, Y + 76, w - 32, 18, RGB(96, 111, 128), 8, False, xlHAlignLeft
     Exit Sub
 
 RenderFailed:
-    Dashboard_WriteHotSpotRuntimeError ws, x + 16, y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage())
+    Dashboard_WriteHotSpotRuntimeError ws, X + 16, Y + 76, w - 32, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage())
 
 End Sub
 
@@ -2139,8 +2189,8 @@ End Sub
 
 Private Sub Dashboard_WriteHotSpotRuntimeError( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal cardName As String)
 
@@ -2148,13 +2198,13 @@ Private Sub Dashboard_WriteHotSpotRuntimeError( _
     Dim errDesc As String
     Dim msg As String
 
-    errNum = Err.Number
-    errDesc = Err.Description
+    errNum = Err.number
+    errDesc = Err.description
     msg = TextCatalog_Format("DASHBOARD.ERROR.RENDER", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Number", CStr(errNum), "Details", errDesc, "Card", cardName, "Helper", gHotSpotHelper, "Step", gHotSpotStep))
     Debug.Print "Dashboard Hot Spots | " & cardName & " | " & gHotSpotHelper & " | " & gHotSpotStep & " | RenderFailed " & CStr(errNum) & ": " & errDesc
 
     On Error Resume Next
-    Dashboard_AddHotSpotText ws, msg, x, y, w, 28, RGB(192, 80, 77), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, msg, X, Y, w, 28, RGB(192, 80, 77), 8, False, xlHAlignLeft
 
 End Sub
 
@@ -2167,39 +2217,39 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotCard( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal titleText As String, _
     ByVal subtitleText As String, _
     ByVal accentColor As Long)
 
-    Dim bg As Shape
-    Dim accent As Shape
+    Dim bg As shape
+    Dim accent As shape
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Add background shape"
-    Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
+    Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Format background"
-    bg.Name = DASH_PREFIX & "HOTSPOT_CARD"
-    bg.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    bg.name = DASH_PREFIX & "HOTSPOT_CARD"
+    bg.fill.ForeColor.RGB = RGB(255, 255, 255)
     bg.Line.ForeColor.RGB = RGB(224, 230, 237)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Add accent shape"
-    Set accent = ws.Shapes.AddShape(msoShapeRectangle, x, y, 5, h)
+    Set accent = ws.Shapes.AddShape(msoShapeRectangle, X, Y, 5, h)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Format accent"
-    accent.Name = DASH_PREFIX & "HOTSPOT_ACCENT"
-    accent.Fill.ForeColor.RGB = accentColor
+    accent.name = DASH_PREFIX & "HOTSPOT_ACCENT"
+    accent.fill.ForeColor.RGB = accentColor
     accent.Line.Visible = msoFalse
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Add title text"
-    Dashboard_AddHotSpotText ws, titleText, x + 16, y + 11, w - 30, 18, RGB(20, 34, 51), 11, True, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, titleText, X + 16, Y + 11, w - 30, 18, RGB(20, 34, 51), 11, True, xlHAlignLeft
 
     If Len(Trim$(subtitleText)) > 0 Then
         Dashboard_HotSpotTrace "Dashboard_AddHotSpotCard", "Add subtitle text"
-        Dashboard_AddHotSpotText ws, subtitleText, x + 16, y + 32, w - 30, 14, RGB(126, 139, 153), 7, False, xlHAlignLeft
+        Dashboard_AddHotSpotText ws, subtitleText, X + 16, Y + 32, w - 30, 14, RGB(126, 139, 153), 7, False, xlHAlignLeft
     End If
 
 End Sub
@@ -2209,10 +2259,10 @@ End Sub
 ' EN: Adds the Empty Hot Spot Card reference to the target structure supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddEmptyHotSpotCard(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal titleText As String)
+Private Sub Dashboard_AddEmptyHotSpotCard(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal titleText As String)
 
-    Dashboard_AddHotSpotCard ws, x, y, w, h, titleText, "", RGB(160, 170, 181)
-    Dashboard_AddHotSpotText ws, Dashboard_NoProjectLoadedText(), x + 16, y + 58, w - 32, 18, RGB(96, 111, 128), 9, True, xlHAlignLeft
+    Dashboard_AddHotSpotCard ws, X, Y, w, h, titleText, "", RGB(160, 170, 181)
+    Dashboard_AddHotSpotText ws, Dashboard_NoProjectLoadedText(), X + 16, Y + 58, w - 32, 18, RGB(96, 111, 128), 9, True, xlHAlignLeft
 
 End Sub
 
@@ -2223,8 +2273,8 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotKpiBlock( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal labelText As String, _
@@ -2233,9 +2283,9 @@ Private Sub Dashboard_AddHotSpotKpiBlock( _
     ByVal fillColor As Long)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotKpiBlock", "Add KPI background"
-    Dashboard_AddHotSpotBlock ws, x, y, w, h, fillColor, colorVal
-    Dashboard_AddHotSpotText ws, valueText, x + 12, y + 10, w - 24, 28, colorVal, 18, True, xlHAlignLeft
-    Dashboard_AddHotSpotText ws, labelText, x + 12, y + 40, w - 24, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
+    Dashboard_AddHotSpotBlock ws, X, Y, w, h, fillColor, colorVal
+    Dashboard_AddHotSpotText ws, valueText, X + 12, Y + 10, w - 24, 28, colorVal, 18, True, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, labelText, X + 12, Y + 40, w - 24, 14, RGB(96, 111, 128), 8, False, xlHAlignLeft
 
 End Sub
 
@@ -2246,8 +2296,8 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotInsightBlock( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal labelText As String, _
@@ -2258,11 +2308,11 @@ Private Sub Dashboard_AddHotSpotInsightBlock( _
     ByVal fillColor As Long)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotInsightBlock", "Add insight background"
-    Dashboard_AddHotSpotBlock ws, x, y, w, h, fillColor, colorVal
-    Dashboard_AddHotSpotText ws, labelText, x + 12, y + 8, w - 24, 13, RGB(96, 111, 128), 7, True, xlHAlignLeft
-    If Len(wbsText) > 0 Then Dashboard_AddHotSpotText ws, wbsText, x + 12, y + 27, 72, 14, colorVal, 8, True, xlHAlignLeft
-    Dashboard_AddHotSpotText ws, nameText, x + 12, y + 43, w - 86, 16, RGB(20, 34, 51), 8, False, xlHAlignLeft
-    If Len(metricText) > 0 Then Dashboard_AddHotSpotText ws, metricText, x + w - 70, y + 30, 58, 18, colorVal, 10, True, xlHAlignRight
+    Dashboard_AddHotSpotBlock ws, X, Y, w, h, fillColor, colorVal
+    Dashboard_AddHotSpotText ws, labelText, X + 12, Y + 8, w - 24, 13, RGB(96, 111, 128), 7, True, xlHAlignLeft
+    If Len(wbsText) > 0 Then Dashboard_AddHotSpotText ws, wbsText, X + 12, Y + 27, 72, 14, colorVal, 8, True, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, nameText, X + 12, Y + 43, w - 86, 16, RGB(20, 34, 51), 8, False, xlHAlignLeft
+    If Len(metricText) > 0 Then Dashboard_AddHotSpotText ws, metricText, X + w - 70, Y + 30, 58, 18, colorVal, 10, True, xlHAlignRight
 
 End Sub
 
@@ -2273,8 +2323,8 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotRankingItem( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal rankText As String, _
@@ -2284,11 +2334,11 @@ Private Sub Dashboard_AddHotSpotRankingItem( _
     ByVal colorVal As Long)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotRankingItem", "Add ranking background"
-    Dashboard_AddHotSpotBlock ws, x, y, w, h, RGB(249, 251, 253), colorVal
-    Dashboard_AddHotSpotPill ws, rankText, x + 12, y + 13, 28, 28, Dashboard_LightenColor(colorVal, 0.86), colorVal, 9, True
-    Dashboard_AddHotSpotText ws, wbsText, x + 50, y + 9, w - 124, 13, RGB(96, 111, 128), 7, False, xlHAlignLeft
-    Dashboard_AddHotSpotText ws, nameText, x + 50, y + 26, w - 124, 16, RGB(20, 34, 51), 9, False, xlHAlignLeft
-    Dashboard_AddHotSpotPill ws, metricText, x + w - 72, y + 15, 58, 24, Dashboard_LightenColor(colorVal, 0.88), colorVal, 8, True
+    Dashboard_AddHotSpotBlock ws, X, Y, w, h, RGB(249, 251, 253), colorVal
+    Dashboard_AddHotSpotPill ws, rankText, X + 12, Y + 13, 28, 28, Dashboard_LightenColor(colorVal, 0.86), colorVal, 9, True
+    Dashboard_AddHotSpotText ws, wbsText, X + 50, Y + 9, w - 124, 13, RGB(96, 111, 128), 7, False, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, nameText, X + 50, Y + 26, w - 124, 16, RGB(20, 34, 51), 9, False, xlHAlignLeft
+    Dashboard_AddHotSpotPill ws, metricText, X + w - 72, Y + 15, 58, 24, Dashboard_LightenColor(colorVal, 0.88), colorVal, 8, True
 
 End Sub
 
@@ -2299,14 +2349,14 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotMetric( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal labelText As String, _
     ByVal valueText As String, _
     ByVal colorVal As Long)
 
-    Dashboard_AddHotSpotKpiBlock ws, x, y, w, 62, labelText, valueText, colorVal, Dashboard_LightenColor(colorVal, 0.9)
+    Dashboard_AddHotSpotKpiBlock ws, X, Y, w, 62, labelText, valueText, colorVal, Dashboard_LightenColor(colorVal, 0.9)
 
 End Sub
 
@@ -2315,10 +2365,10 @@ End Sub
 ' EN: Adds the Hot Spot Label reference to the target structure supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddHotSpotLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_AddHotSpotLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotLabel", "Add label text"
-    Dashboard_AddHotSpotText ws, txt, x, y, w, 14, RGB(96, 111, 128), 8, True, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, txt, X, Y, w, 14, RGB(96, 111, 128), 8, True, xlHAlignLeft
 
 End Sub
 
@@ -2330,14 +2380,14 @@ End Sub
 Private Sub Dashboard_AddHotSpotHero( _
     ByVal ws As Worksheet, _
     ByVal txt As String, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal colorVal As Long)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotHero", "Add hero text"
-    Dashboard_AddHotSpotText ws, txt, x, y, w, h, colorVal, 13, True, xlHAlignLeft
+    Dashboard_AddHotSpotText ws, txt, X, Y, w, h, colorVal, 13, True, xlHAlignLeft
 
 End Sub
 
@@ -2348,15 +2398,15 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotListItem( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal wbsText As String, _
     ByVal nameText As String, _
     ByVal metricText As String, _
     ByVal metricColor As Long)
 
-    Dashboard_AddHotSpotRankingItem ws, x, y, w, 48, "", wbsText, nameText, metricText, metricColor
+    Dashboard_AddHotSpotRankingItem ws, X, Y, w, 48, "", wbsText, nameText, metricText, metricColor
 
 End Sub
 
@@ -2369,19 +2419,19 @@ End Sub
 
 Private Sub Dashboard_AddHotSpotBlock( _
     ByVal ws As Worksheet, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal fillColor As Long, _
     ByVal lineColor As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotBlock", "Add block shape"
-    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    shp.Name = DASH_PREFIX & "HOTSPOT_BLOCK"
-    shp.Fill.ForeColor.RGB = fillColor
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    shp.name = DASH_PREFIX & "HOTSPOT_BLOCK"
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.ForeColor.RGB = Dashboard_LightenColor(lineColor, 0.7)
 
 End Sub
@@ -2396,8 +2446,8 @@ End Sub
 Private Sub Dashboard_AddHotSpotPill( _
     ByVal ws As Worksheet, _
     ByVal txt As String, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal fillColor As Long, _
@@ -2405,14 +2455,14 @@ Private Sub Dashboard_AddHotSpotPill( _
     ByVal fontSize As Double, _
     ByVal isBold As Boolean)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotPill", "Add pill shape"
-    Set shp = ws.Shapes.AddShape(msoShapeOval, x, y, w, h)
-    shp.Name = DASH_PREFIX & "HOTSPOT_PILL"
-    shp.Fill.ForeColor.RGB = fillColor
+    Set shp = ws.Shapes.AddShape(msoShapeOval, X, Y, w, h)
+    shp.name = DASH_PREFIX & "HOTSPOT_PILL"
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.Visible = msoFalse
-    Dashboard_AddHotSpotText ws, txt, x, y + 1, w, h - 2, colorVal, fontSize, isBold, xlHAlignCenter
+    Dashboard_AddHotSpotText ws, txt, X, Y + 1, w, h - 2, colorVal, fontSize, isBold, xlHAlignCenter
 
 End Sub
 
@@ -2426,8 +2476,8 @@ End Sub
 Private Sub Dashboard_AddHotSpotText( _
     ByVal ws As Worksheet, _
     ByVal txt As String, _
-    ByVal x As Double, _
-    ByVal y As Double, _
+    ByVal X As Double, _
+    ByVal Y As Double, _
     ByVal w As Double, _
     ByVal h As Double, _
     ByVal colorVal As Long, _
@@ -2435,14 +2485,14 @@ Private Sub Dashboard_AddHotSpotText( _
     ByVal isBold As Boolean, _
     ByVal horizontalAlign As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotText", "Add textbox"
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, h)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, h)
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotText", "Format shape fill line"
-    shp.Name = DASH_PREFIX & "HOTSPOT_TXT"
-    shp.Fill.Visible = msoFalse
+    shp.name = DASH_PREFIX & "HOTSPOT_TXT"
+    shp.fill.Visible = msoFalse
     shp.Line.Visible = msoFalse
 
     Dashboard_HotSpotTrace "Dashboard_AddHotSpotText", "Format legacy TextFrame"
@@ -2453,11 +2503,11 @@ Private Sub Dashboard_AddHotSpotText( _
         .MarginBottom = 0
         .HorizontalAlignment = horizontalAlign
         .VerticalAlignment = xlVAlignCenter
-        .Characters.Text = txt
-        .Characters.Font.Name = "Segoe UI"
-        .Characters.Font.Size = fontSize
-        .Characters.Font.Color = colorVal
-        .Characters.Font.Bold = isBold
+        .characters.text = txt
+        .characters.font.name = "Segoe UI"
+        .characters.font.size = fontSize
+        .characters.font.color = colorVal
+        .characters.font.bold = isBold
     End With
 
 End Sub
@@ -2494,12 +2544,12 @@ Private Function Dashboard_IsActiveDashboardTask(ByRef arr As Variant, ByVal map
     Dim progressVal As Variant
     Dim actualFinish As Variant
 
-    If mapTbl.Exists("Actual Finish") Then
+    If mapTbl.exists("Actual Finish") Then
         actualFinish = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Actual Finish"))
         If HasValue(actualFinish) Then Exit Function
     End If
 
-    If mapTbl.Exists("% Progress") Then
+    If mapTbl.exists("% Progress") Then
         progressVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "% Progress"))
         If IsNumeric(progressVal) Then
             If Dashboard_NormalizeProgress(progressVal) >= 1# Then Exit Function
@@ -2520,13 +2570,13 @@ Private Function Dashboard_IsMilestoneRow(ByRef arr As Variant, ByVal mapTbl As 
     Dim taskTypeVal As String
     Dim durationVal As Variant
 
-    If mapTbl.Exists("Task Type") Then
+    If mapTbl.exists("Task Type") Then
         taskTypeVal = UCase$(Trim$(CStr(Dashboard_ArrayVal(arr, mapTbl, r, "Task Type"))))
         Dashboard_IsMilestoneRow = (taskTypeVal = "MILESTONE")
         Exit Function
     End If
 
-    If mapTbl.Exists("Calculated Duration") Then
+    If mapTbl.exists("Calculated Duration") Then
         durationVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Duration"))
         If IsNumeric(durationVal) Then Dashboard_IsMilestoneRow = (CDbl(durationVal) <= 1#)
     End If
@@ -2569,7 +2619,7 @@ Private Function Dashboard_MaxDate(ByVal tbl As ListObject, ByVal mapTbl As Obje
 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists(colName) Then Exit Function
+    If Not mapTbl.exists(colName) Then Exit Function
 
     arr = tbl.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -2608,7 +2658,7 @@ Private Function Dashboard_MinDateAcross(ByVal tbl As ListObject, ByVal mapTbl A
 
     For r = 1 To UBound(arr, 1)
         For Each c In colNames
-            If mapTbl.Exists(CStr(c)) Then
+            If mapTbl.exists(CStr(c)) Then
                 v = GetCellValue(arr(r, mapTbl(CStr(c))))
                 If Dashboard_HasDateValue(v) Then
                     If Not hasDate Then
@@ -2646,7 +2696,7 @@ Private Function Dashboard_MaxDateAcross(ByVal tbl As ListObject, ByVal mapTbl A
 
     For r = 1 To UBound(arr, 1)
         For Each c In colNames
-            If mapTbl.Exists(CStr(c)) Then
+            If mapTbl.exists(CStr(c)) Then
                 v = GetCellValue(arr(r, mapTbl(CStr(c))))
                 If Dashboard_HasDateValue(v) Then
                     If Not hasDate Then
@@ -2677,7 +2727,7 @@ Private Function Dashboard_CountNumericBelow(ByVal tbl As ListObject, ByVal mapT
 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists(colName) Then Exit Function
+    If Not mapTbl.exists(colName) Then Exit Function
 
     arr = tbl.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -2711,7 +2761,7 @@ Private Function Dashboard_CountMarker(ByVal tbl As ListObject, ByVal mapTbl As 
 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists(colName) Then Exit Function
+    If Not mapTbl.exists(colName) Then Exit Function
 
     arr = tbl.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -2737,9 +2787,9 @@ Private Function Dashboard_CountMarkerRemaining(ByVal tbl As ListObject, ByVal m
 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.Exists(colName) Then Exit Function
+    If Not mapTbl.exists(colName) Then Exit Function
 
-    hasProgress = mapTbl.Exists("% Progress")
+    hasProgress = mapTbl.exists("% Progress")
 
     arr = tbl.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -2747,7 +2797,7 @@ Private Function Dashboard_CountMarkerRemaining(ByVal tbl As ListObject, ByVal m
         If txt <> "" And txt <> "NO" And txt <> "FALSE" And txt <> "0" Then
             If hasProgress Then
                 progressVal = Dashboard_NormalizeProgress(GetCellValue(arr(r, mapTbl("% Progress"))))
-            ElseIf mapTbl.Exists("Actual Finish") Then
+            ElseIf mapTbl.exists("Actual Finish") Then
                 actualFinish = GetCellValue(arr(r, mapTbl("Actual Finish")))
                 If Dashboard_HasDateValue(actualFinish) Then progressVal = 1# Else progressVal = 0#
             Else
@@ -2829,7 +2879,7 @@ End Function
 ' EN - Side effect: writes to an Excel table owned by the workflow.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_CreateSnapshotFromCurrentData()
+Private Function Dashboard_CreateSnapshotFromCurrentData() As ListRow
 
     Dim tblCalc As ListObject
     Dim mapCalc As Object
@@ -2839,33 +2889,59 @@ Private Sub Dashboard_CreateSnapshotFromCurrentData()
     Dim newRow As ListRow
     Dim snapshotId As Long
     Dim ts As Date
+    Dim payload() As Variant
+    Dim key As Variant
+    Dim failureNumber As Long, failureDescription As String
+
+    On Error GoTo Failed
 
     Set tblCalc = ThisWorkbook.Worksheets("CALC").ListObjects("tbl_CALC")
     Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
     Set scurveProjection = SCurve_BuildDashboardProjection()
+    If Not CBool(scurveProjection("IsComplete")) Then
+        Err.Raise 5, "Dashboard_CreateSnapshotFromCurrentData", TextCatalog_Get("DASHBOARD.SNAPSHOT.INCOMPLETE", Dashboard_CurrentLanguage())
+    End If
     Set metrics = Dashboard_BuildMetrics(tblCalc, mapCalc, scurveProjection)
+    If Not Dashboard_SnapshotMetricsComplete(metrics) Then
+        Err.Raise 5, "Dashboard_CreateSnapshotFromCurrentData", TextCatalog_Get("DASHBOARD.SNAPSHOT.INCOMPLETE", Dashboard_CurrentLanguage())
+    End If
     Set tblSnap = Dashboard_EnsureSnapshotsTable()
     snapshotId = Dashboard_NextSnapshotId(tblSnap)
     ts = Now
+    ReDim payload(1 To 1, 1 To tblSnap.ListColumns.count)
+    payload(1, tblSnap.ListColumns("SnapshotId").Index) = snapshotId
+    payload(1, tblSnap.ListColumns("SnapshotDateTime").Index) = CDbl(ts)
+    payload(1, tblSnap.ListColumns("SnapshotLabel").Index) = Dashboard_SnapshotLabel(snapshotId, ts)
+    For Each key In metrics.keys
+        payload(1, tblSnap.ListColumns(CStr(key)).Index) = metrics(key)
+    Next key
     Set newRow = tblSnap.ListRows.Add
-    With newRow.Range
-        .Cells(1, tblSnap.ListColumns("SnapshotId").Index).value = snapshotId
-        .Cells(1, tblSnap.ListColumns("SnapshotDateTime").Index).value = ts
-        .Cells(1, tblSnap.ListColumns("SnapshotLabel").Index).value = Dashboard_SnapshotLabel(snapshotId, ts)
-        .Cells(1, tblSnap.ListColumns("ActualProgress").Index).value = metrics("ActualProgress")
-        .Cells(1, tblSnap.ListColumns("PlannedProgress").Index).value = metrics("PlannedProgress")
-        .Cells(1, tblSnap.ListColumns("ProgressVariance").Index).value = metrics("ProgressVariance")
-        If Dashboard_HasDateValue(metrics("ForecastFinish")) Then .Cells(1, tblSnap.ListColumns("ForecastFinish").Index).value = CDate(Dashboard_DateNumber(metrics("ForecastFinish")))
-        If Dashboard_HasDateValue(metrics("BaselineFinish")) Then .Cells(1, tblSnap.ListColumns("BaselineFinish").Index).value = CDate(Dashboard_DateNumber(metrics("BaselineFinish")))
-        If HasValue(metrics("DriftDays")) Then .Cells(1, tblSnap.ListColumns("DriftDays").Index).value = CLng(metrics("DriftDays"))
-        .Cells(1, tblSnap.ListColumns("ContractStatus").Index).value = metrics("ContractStatus")
-        .Cells(1, tblSnap.ListColumns("DeadlineRiskCount").Index).value = metrics("DeadlineRiskCount")
-        .Cells(1, tblSnap.ListColumns("LongestPathCount").Index).value = metrics("LongestPathCount")
-        .Cells(1, tblSnap.ListColumns("LongestPathRemaining").Index).value = metrics("LongestPathRemaining")
-        .Cells(1, tblSnap.ListColumns("CriticalPathCount").Index).value = metrics("CriticalPathCount")
-    End With
+    newRow.Range.Value2 = payload
+    Set Dashboard_CreateSnapshotFromCurrentData = newRow
+    Exit Function
+Failed:
+    failureNumber = Err.number: failureDescription = Err.description
+    If Not newRow Is Nothing Then newRow.Delete
+    On Error GoTo 0
+    Err.Raise failureNumber, "Dashboard_CreateSnapshotFromCurrentData", failureDescription
+End Function
 
-End Sub
+Private Function Dashboard_SnapshotMetricsComplete(ByVal metrics As Object) As Boolean
+    Dim key As Variant
+    For Each key In Array("ActualProgress", "PlannedProgress", "ProgressVariance", "DriftDays", _
+        "DeadlineRiskCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount")
+        If Not metrics.exists(CStr(key)) Then Exit Function
+        If isError(metrics(key)) Then Exit Function
+        If Not HasValue(metrics(key)) Or Not IsNumeric(metrics(key)) Then Exit Function
+    Next key
+    For Each key In Array("ForecastFinish", "BaselineFinish")
+        If Not metrics.exists(CStr(key)) Then Exit Function
+        If Not Dashboard_HasDateValue(metrics(key)) Then Exit Function
+    Next key
+    If Not metrics.exists("ContractStatus") Then Exit Function
+    If Len(CStr(metrics("ContractStatus"))) = 0 Then Exit Function
+    Dashboard_SnapshotMetricsComplete = True
+End Function
 
 '------------------------------------------------------------------------------
 ' FR: Cree ou remet en conformite la reference Snapshots Table de maniere idempotente.
@@ -2882,14 +2958,14 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     Dim tbl As ListObject
     Dim headers As Variant
     Dim i As Long
-    Dim nm As Name
+    Dim nm As name
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(DASHBOARD_SNAPSHOT_SHEET)
     On Error GoTo 0
     If ws Is Nothing Then
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
-        ws.Name = DASHBOARD_SNAPSHOT_SHEET
+        Set ws = ThisWorkbook.Worksheets.Add(after:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.count))
+        ws.name = DASHBOARD_SNAPSHOT_SHEET
     End If
 
     On Error Resume Next
@@ -2899,10 +2975,10 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     If tbl Is Nothing Then
         headers = Array("SnapshotId", "SnapshotDateTime", "SnapshotLabel", "ActualProgress", "PlannedProgress", "ProgressVariance", "ForecastFinish", "BaselineFinish", "DriftDays", "ContractStatus", "DeadlineRiskCount", "ForecastIssueCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount")
         For i = LBound(headers) To UBound(headers)
-            ws.Cells(1, i + 1).value = CStr(headers(i))
+            ws.cells(1, i + 1).value = CStr(headers(i))
         Next i
-        Set tbl = ws.ListObjects.Add(xlSrcRange, ws.Range(ws.Cells(1, 1), ws.Cells(1, UBound(headers) + 1)), , xlYes)
-        tbl.Name = DASHBOARD_SNAPSHOT_TABLE
+        Set tbl = ws.ListObjects.Add(xlSrcRange, ws.Range(ws.cells(1, 1), ws.cells(1, UBound(headers) + 1)), , xlYes)
+        tbl.name = DASHBOARD_SNAPSHOT_TABLE
     End If
 
     On Error Resume Next
@@ -2910,9 +2986,9 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     On Error GoTo 0
     If Not tbl.DataBodyRange Is Nothing Then
         ' Refresh the owned physical extent whenever snapshot controls are rebuilt.
-        ThisWorkbook.names.Add Name:="DashboardSnapshotLabels", _
-            RefersTo:="='" & Replace$(ws.Name, "'", "''") & "'!" & _
-                tbl.ListColumns("SnapshotLabel").DataBodyRange.Address(True, True, xlA1)
+        ThisWorkbook.names.Add name:="DashboardSnapshotLabels", _
+            RefersTo:="='" & Replace$(ws.name, "'", "''") & "'!" & _
+                tbl.ListColumns("SnapshotLabel").DataBodyRange.address(True, True, xlA1)
     End If
 
     Set Dashboard_EnsureSnapshotsTable = tbl
@@ -2976,10 +3052,10 @@ Private Sub Dashboard_GetDefaultSnapshotLabels(ByVal tbl As ListObject, ByRef fr
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
-    n = tbl.ListRows.Count
-    toLabel = CStr(tbl.DataBodyRange.Cells(n, tbl.ListColumns("SnapshotLabel").Index).value)
+    n = tbl.ListRows.count
+    toLabel = CStr(tbl.DataBodyRange.cells(n, tbl.ListColumns("SnapshotLabel").Index).value)
     If n > 1 Then
-        fromLabel = CStr(tbl.DataBodyRange.Cells(n - 1, tbl.ListColumns("SnapshotLabel").Index).value)
+        fromLabel = CStr(tbl.DataBodyRange.cells(n - 1, tbl.ListColumns("SnapshotLabel").Index).value)
     Else
         fromLabel = toLabel
     End If
@@ -3081,9 +3157,10 @@ Private Function Dashboard_GetSnapshotByLabel(ByVal tbl As ListObject, ByVal sna
     For r = 1 To UBound(arr, 1)
         If CStr(arr(r, tbl.ListColumns("SnapshotLabel").Index)) = snapshotLabel Then
             Set snap = CreateObject("Scripting.Dictionary")
-            For c = 1 To tbl.ListColumns.Count
-                snap(tbl.ListColumns(c).Name) = arr(r, c)
+            For c = 1 To tbl.ListColumns.count
+                snap(tbl.ListColumns(c).name) = arr(r, c)
             Next c
+            If Not Dashboard_SnapshotMetricsComplete(snap) Then Exit Function
             Set Dashboard_GetSnapshotByLabel = snap
             Exit Function
         End If
@@ -3350,7 +3427,7 @@ End Function
 
 Private Function Dashboard_ArrayVal(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long, ByVal colName As String) As Variant
 
-    If mapTbl.Exists(colName) Then Dashboard_ArrayVal = arr(r, mapTbl(colName))
+    If mapTbl.exists(colName) Then Dashboard_ArrayVal = arr(r, mapTbl(colName))
 
 End Function
 
@@ -3364,7 +3441,7 @@ Private Function Dashboard_IsSummaryArrayRow(ByRef arr As Variant, ByVal mapTbl 
     Dim v As Variant
     Dim txt As String
 
-    If Not mapTbl.Exists("IsSummary") Then Exit Function
+    If Not mapTbl.exists("IsSummary") Then Exit Function
     v = arr(r, mapTbl("IsSummary"))
 
     If VarType(v) = vbBoolean Then
@@ -3394,8 +3471,8 @@ Private Function Dashboard_BuildProgressById(ByVal tblWBS As ListObject, ByVal m
 
     If tblWBS Is Nothing Then GoTo CleanExit
     If tblWBS.DataBodyRange Is Nothing Then GoTo CleanExit
-    If Not mapWBS.Exists(VTS_COL_ID) Then GoTo CleanExit
-    If Not mapWBS.Exists(VTS_COL_PROGRESS_PERCENT) Then GoTo CleanExit
+    If Not mapWBS.exists(VTS_COL_ID) Then GoTo CleanExit
+    If Not mapWBS.exists(VTS_COL_PROGRESS_PERCENT) Then GoTo CleanExit
 
     arr = tblWBS.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
@@ -3413,48 +3490,157 @@ End Function
 ' EN: Returns the Summary Progress map without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Function Dashboard_SummaryProgress(ByRef arr As Variant, ByVal mapTbl As Object, ByVal progressById As Object, ByVal r As Long) As Double
-
+Private Function Dashboard_BuildSummaryProgress(ByRef arr As Variant, ByVal mapTbl As Object, ByVal progressById As Object, Optional ByVal visibleParents As Object = Nothing) As Object
+    Dim result As Object
+    Dim eventsByParent As Object
+    Dim events As Object
+    Dim r As Long
     Dim parentWbs As String
-    Dim parentLevel As Long
-    Dim childWbs As String
-    Dim childLevel As Long
-    Dim i As Long
-    Dim durationVal As Variant
-    Dim progressVal As Variant
-    Dim totalDuration As Double
-    Dim weightedProgress As Double
-    Dim childId As String
+    Dim taskId As String
+    Dim startVal As Variant
+    Dim finishVal As Variant
+    Dim progressVal As Double
+    Dim leafColor As Variant
+    Dim completeColor As Long
+    Dim metrics As Variant
+    Dim coveredThrough As Variant
+    Dim key As Variant
+    Dim day As Long, i As Long
+    Dim eventDays() As Long
+    Dim keys As Variant
+    Dim intervalStart As Long, intervalFinish As Long
+    Dim active As Long, covered As Long
+    Dim delta As Variant
 
-    If Not mapTbl.Exists("WBS") Then Exit Function
-    If Not mapTbl.Exists("Calculated Duration") Then Exit Function
+    Set result = CreateObject("Scripting.Dictionary")
+    Set eventsByParent = CreateObject("Scripting.Dictionary")
+    Set Dashboard_BuildSummaryProgress = result
+    If Not mapTbl.exists("WBS") Then Exit Function
 
-    parentWbs = CStr(Dashboard_ArrayVal(arr, mapTbl, r, "WBS"))
-    parentLevel = Dashboard_WbsLevel(parentWbs)
+    ' Parent geometry comes from CALC; no scheduling or inferred dates here.
+    For r = 1 To UBound(arr, 1)
+        If Not Dashboard_IsSummaryArrayRow(arr, mapTbl, r) Then GoTo NextParent
+        parentWbs = NormalizeWBS(CStr(Dashboard_ArrayVal(arr, mapTbl, r, "WBS")))
+        If Not visibleParents Is Nothing Then
+            If Not visibleParents.exists(parentWbs) Then GoTo NextParent
+        End If
+        startVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Start"))
+        finishVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Finish"))
+        If Not Dashboard_HasDateValue(startVal) Or Not Dashboard_HasDateValue(finishVal) Then GoTo NextParent
+        startVal = CLng(Dashboard_DateNumber(startVal))
+        finishVal = CLng(Dashboard_DateNumber(finishVal))
+        If finishVal < startVal Then GoTo NextParent
+        completeColor = CLng(GetProgressFillColor(startVal, finishVal, 1#))
+        result(parentWbs) = Array(CDbl(finishVal - startVal + 1), 0#, completeColor, startVal, finishVal, 0&)
+        Set events = CreateObject("Scripting.Dictionary")
+        Set eventsByParent(parentWbs) = events
+NextParent:
+    Next r
 
-    For i = 1 To UBound(arr, 1)
-        childWbs = CStr(Dashboard_ArrayVal(arr, mapTbl, i, "WBS"))
-        childLevel = Dashboard_WbsLevel(childWbs)
-        If childLevel = parentLevel + 1 Then
-            If Left$(childWbs, Len(parentWbs) + 1) = parentWbs & "." Then
-                durationVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, i, "Calculated Duration"))
-                If IsNumeric(durationVal) And CDbl(durationVal) > 0 Then
-                    childId = CStr(GetCellValue(Dashboard_ArrayVal(arr, mapTbl, i, "ID")))
-                    progressVal = Dashboard_RowProgress(arr, mapTbl, progressById, i, childId)
-                    totalDuration = totalDuration + CDbl(durationVal)
-                    weightedProgress = weightedProgress + (CDbl(durationVal) * CDbl(progressVal))
+    ' Sparse daily deltas: each terminal task counts once per ancestor, with equal weight on each day.
+    For r = 1 To UBound(arr, 1)
+        If Dashboard_IsSummaryArrayRow(arr, mapTbl, r) Then GoTo NextTask
+        taskId = CStr(GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "ID")))
+        If taskId = "" Then GoTo NextTask
+        startVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Start"))
+        finishVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Finish"))
+        If Not Dashboard_HasDateValue(startVal) Or Not Dashboard_HasDateValue(finishVal) Then GoTo NextTask
+        startVal = CLng(Dashboard_DateNumber(startVal))
+        finishVal = CLng(Dashboard_DateNumber(finishVal))
+        If CDbl(finishVal) < CDbl(startVal) Then GoTo NextTask
+        progressVal = Dashboard_RowProgress(arr, mapTbl, progressById, r, taskId)
+        leafColor = GetProgressFillColor(startVal, finishVal, progressVal, coveredThrough)
+        If TaskTypeRules_IsMilestoneRow(arr, mapTbl, r) Then leafColor = Empty
+        completeColor = CLng(GetProgressFillColor(startVal, finishVal, 1#))
+        parentWbs = GetParentWBS(NormalizeWBS(CStr(Dashboard_ArrayVal(arr, mapTbl, r, "WBS"))))
+        Do While parentWbs <> ""
+            If result.exists(parentWbs) Then
+                metrics = result(parentWbs)
+                metrics(5) = CLng(metrics(5)) + 1
+                Set events = eventsByParent(parentWbs)
+                Dashboard_AddDailyProgressDelta events, CLng(startVal), 1, 0
+                Dashboard_AddDailyProgressDelta events, CLng(finishVal) + 1, -1, 0
+                If Not IsEmpty(coveredThrough) Then
+                    Dashboard_AddDailyProgressDelta events, CLng(startVal), 0, 1
+                    Dashboard_AddDailyProgressDelta events, CLng(coveredThrough) + 1, 0, -1
+                End If
+                If Not IsEmpty(leafColor) Then
+                    If CLng(leafColor) <> completeColor Then metrics(2) = CLng(leafColor)
+                End If
+                result(parentWbs) = metrics
+            End If
+            parentWbs = GetParentWBS(parentWbs)
+        Loop
+NextTask:
+    Next r
+
+    ' Counts are constant between event dates; integrate daily fractions over those intervals.
+    For Each key In result.keys
+        metrics = result(key)
+        If CLng(metrics(5)) = 0 Then
+            result.Remove key
+            GoTo NextSummary
+        End If
+        Set events = eventsByParent(key)
+        Dashboard_AddDailyProgressDelta events, CLng(metrics(3)), 0, 0
+        Dashboard_AddDailyProgressDelta events, CLng(metrics(4)) + 1, 0, 0
+        If CLng(Date) > CLng(metrics(3)) And CLng(Date) <= CLng(metrics(4)) Then
+            Dashboard_AddDailyProgressDelta events, CLng(Date), 0, 0
+        End If
+        keys = events.keys
+        ReDim eventDays(0 To events.count - 1)
+        For i = 0 To UBound(keys)
+            eventDays(i) = CLng(keys(i))
+        Next i
+        Dashboard_SortProgressDays eventDays, LBound(eventDays), UBound(eventDays)
+        active = 0: covered = 0
+        For i = LBound(eventDays) To UBound(eventDays) - 1
+            day = eventDays(i)
+            delta = events(CStr(day))
+            active = active + CLng(delta(0))
+            covered = covered + CLng(delta(1))
+            intervalStart = day: intervalFinish = eventDays(i + 1)
+            If intervalStart < CLng(metrics(3)) Then intervalStart = CLng(metrics(3))
+            If intervalFinish > CLng(metrics(4)) + 1 Then intervalFinish = CLng(metrics(4)) + 1
+            If intervalFinish > intervalStart Then
+                If active > 0 Then
+                    metrics(1) = metrics(1) + (intervalFinish - intervalStart) * CDbl(covered) / active
+                ElseIf intervalStart < CLng(Date) Then
+                    metrics(1) = metrics(1) + intervalFinish - intervalStart
                 End If
             End If
-        End If
-    Next i
-
-    If totalDuration > 0 Then
-        Dashboard_SummaryProgress = weightedProgress / totalDuration
-    Else
-        Dashboard_SummaryProgress = Dashboard_RowProgress(arr, mapTbl, progressById, r, CStr(GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "ID"))))
-    End If
-
+        Next i
+        result(key) = metrics
+NextSummary:
+    Next key
 End Function
+
+Private Sub Dashboard_AddDailyProgressDelta(ByVal events As Object, ByVal day As Long, ByVal active As Long, ByVal covered As Long)
+    Dim delta As Variant
+    If events.exists(CStr(day)) Then
+        delta = events(CStr(day))
+    Else
+        delta = Array(0&, 0&)
+    End If
+    delta(0) = CLng(delta(0)) + active
+    delta(1) = CLng(delta(1)) + covered
+    events(CStr(day)) = delta
+End Sub
+
+Private Sub Dashboard_SortProgressDays(ByRef days() As Long, ByVal first As Long, ByVal last As Long)
+    Dim left As Long, right As Long, pivot As Long, swap As Long
+    left = first: right = last: pivot = days((first + last) \ 2)
+    Do While left <= right
+        Do While days(left) < pivot: left = left + 1: Loop
+        Do While days(right) > pivot: right = right - 1: Loop
+        If left <= right Then
+            swap = days(left): days(left) = days(right): days(right) = swap
+            left = left + 1: right = right - 1
+        End If
+    Loop
+    If first < right Then Dashboard_SortProgressDays days, first, right
+    If left < last Then Dashboard_SortProgressDays days, left, last
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Retourne la map Row Progress sans modifier les donnees d'entree.
@@ -3465,16 +3651,23 @@ Private Function Dashboard_RowProgress(ByRef arr As Variant, ByVal mapTbl As Obj
 
     Dim actualFinish As Variant
 
+    If TaskTypeRules_IsLevelOfEffortRow(arr, mapTbl, r) Then
+        Dashboard_RowProgress = GetLoEProgressFromToday( _
+            GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Start")), _
+            GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Finish")))
+        Exit Function
+    End If
+
     If Not progressById Is Nothing Then
-        If idVal <> "" And progressById.Exists(idVal) Then
+        If idVal <> "" And progressById.exists(idVal) Then
             Dashboard_RowProgress = CDbl(progressById(idVal))
             Exit Function
         End If
     End If
 
-    If mapTbl.Exists("% Progress") Then
+    If mapTbl.exists("% Progress") Then
         Dashboard_RowProgress = Dashboard_NormalizeProgress(GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "% Progress")))
-    ElseIf mapTbl.Exists("Actual Finish") Then
+    ElseIf mapTbl.exists("Actual Finish") Then
         actualFinish = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Actual Finish"))
         If Dashboard_HasDateValue(actualFinish) Then Dashboard_RowProgress = 1#
     End If
@@ -3587,7 +3780,7 @@ Private Function Dashboard_PlanningOverviewRows(ByRef arr As Variant, ByVal mapT
 
     Dashboard_AddPlanningCandidates selected, selectedRows, activeRows, MAX_OVERVIEW_ROWS
 
-    remainingSlots = MAX_OVERVIEW_ROWS - selected.Count
+    remainingSlots = MAX_OVERVIEW_ROWS - selected.count
     If remainingSlots > 0 Then
         beforeQuota = remainingSlots \ 2
         afterQuota = remainingSlots - beforeQuota
@@ -3595,17 +3788,17 @@ Private Function Dashboard_PlanningOverviewRows(ByRef arr As Variant, ByVal mapT
         Dashboard_AddPlanningCandidates selected, selectedRows, beforeRows, beforeQuota
         Dashboard_AddPlanningCandidates selected, selectedRows, afterRows, afterQuota
 
-        If selected.Count < MAX_OVERVIEW_ROWS Then
-            Dashboard_AddPlanningCandidates selected, selectedRows, beforeRows, MAX_OVERVIEW_ROWS - selected.Count
+        If selected.count < MAX_OVERVIEW_ROWS Then
+            Dashboard_AddPlanningCandidates selected, selectedRows, beforeRows, MAX_OVERVIEW_ROWS - selected.count
         End If
-        If selected.Count < MAX_OVERVIEW_ROWS Then
-            Dashboard_AddPlanningCandidates selected, selectedRows, afterRows, MAX_OVERVIEW_ROWS - selected.Count
+        If selected.count < MAX_OVERVIEW_ROWS Then
+            Dashboard_AddPlanningCandidates selected, selectedRows, afterRows, MAX_OVERVIEW_ROWS - selected.count
         End If
     End If
 
     Set orderedRows = Dashboard_OrderPlanningRowsBySourceOrder(selected)
 
-    For r = 1 To orderedRows.Count
+    For r = 1 To orderedRows.count
         Dashboard_IncludeAxisDate arr, mapTbl, CLng(orderedRows(r)), "Baseline Start", hasDate, minOut, maxOut
         Dashboard_IncludeAxisDate arr, mapTbl, CLng(orderedRows(r)), "Baseline Finish", hasDate, minOut, maxOut
         Dashboard_IncludeAxisDate arr, mapTbl, CLng(orderedRows(r)), "Calculated Start", hasDate, minOut, maxOut
@@ -3634,7 +3827,7 @@ Private Sub Dashboard_InsertPlanningCandidateByDistance(ByVal rows As Collection
     item("Distance") = distanceVal
 
     Set tmp = New Collection
-    For i = 1 To rows.Count
+    For i = 1 To rows.count
         Set existing = rows(i)
         If Not inserted Then
             If distanceVal < CDbl(existing("Distance")) Then
@@ -3647,10 +3840,10 @@ Private Sub Dashboard_InsertPlanningCandidateByDistance(ByVal rows As Collection
 
     If Not inserted Then tmp.Add item
 
-    Do While rows.Count > 0
+    Do While rows.count > 0
         rows.Remove 1
     Loop
-    For i = 1 To tmp.Count
+    For i = 1 To tmp.count
         rows.Add tmp(i)
     Next i
 
@@ -3676,7 +3869,7 @@ Private Sub Dashboard_AddPlanningCandidates( _
     For Each item In candidates
         rowIndex = Dashboard_PlanningCandidateRow(item)
         If rowIndex > 0 Then
-            If Not selectedRows.Exists(CStr(rowIndex)) Then
+            If Not selectedRows.exists(CStr(rowIndex)) Then
                 selectedRows(CStr(rowIndex)) = True
                 selected.Add rowIndex
                 added = added + 1
@@ -3717,11 +3910,11 @@ Private Function Dashboard_OrderPlanningRowsBySourceOrder(ByVal rows As Collecti
 
     Set ordered = New Collection
 
-    For i = 1 To rows.Count
+    For i = 1 To rows.count
         currentRow = CLng(rows(i))
         inserted = False
 
-        For j = 1 To ordered.Count
+        For j = 1 To ordered.count
             If currentRow < CLng(ordered(j)) Then
                 ordered.Add currentRow, , j
                 inserted = True
@@ -3745,7 +3938,7 @@ Private Function Dashboard_IsPlanningOverviewVisibleRow(ByRef arr As Variant, By
     Dim durationVal As Variant
     Dim summaryDisplayVal As String
 
-    If mapTbl.Exists("S") Then
+    If mapTbl.exists("S") Then
         summaryDisplayVal = UCase$(Trim$(CStr(Dashboard_ArrayVal(arr, mapTbl, r, "S"))))
         Dashboard_IsPlanningOverviewVisibleRow = (summaryDisplayVal = "Y")
         Exit Function
@@ -3756,7 +3949,7 @@ Private Function Dashboard_IsPlanningOverviewVisibleRow(ByRef arr As Variant, By
         Exit Function
     End If
 
-    If mapTbl.Exists("Calculated Duration") Then
+    If mapTbl.exists("Calculated Duration") Then
         durationVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Calculated Duration"))
         If IsNumeric(durationVal) Then
             Dashboard_IsPlanningOverviewVisibleRow = (CDbl(durationVal) <= 1#)
@@ -3940,13 +4133,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_UpdateKpiCard(ByVal ws As Worksheet, ByVal kpiIndex As Long, ByVal titleText As String, ByVal valueText As String, ByVal subText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal accentColor As Long)
+Private Sub Dashboard_UpdateKpiCard(ByVal ws As Worksheet, ByVal kpiIndex As Long, ByVal titleText As String, ByVal valueText As String, ByVal subText As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal accentColor As Long)
 
-    Dim bg As Shape
-    Dim accent As Shape
-    Dim titleBox As Shape
-    Dim valueBox As Shape
-    Dim subBox As Shape
+    Dim bg As shape
+    Dim accent As shape
+    Dim titleBox As shape
+    Dim valueBox As shape
+    Dim subBox As shape
     Dim prefixName As String
 
     prefixName = DASH_PREFIX & "KPI_" & CStr(kpiIndex) & "_"
@@ -3958,39 +4151,39 @@ Private Sub Dashboard_UpdateKpiCard(ByVal ws As Worksheet, ByVal kpiIndex As Lon
     Set subBox = Dashboard_GetShape(ws, prefixName & "SUB")
 
     If bg Is Nothing Or accent Is Nothing Or titleBox Is Nothing Or valueBox Is Nothing Or subBox Is Nothing Then
-        Dashboard_DeleteShapesInRect ws, x - 2, y - 2, w + 4, h + 4
+        Dashboard_DeleteShapesInRect ws, X - 2, Y - 2, w + 4, h + 4
 
-        Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-        bg.Name = prefixName & "BG"
-        bg.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+        bg.name = prefixName & "BG"
+        bg.fill.ForeColor.RGB = RGB(255, 255, 255)
         bg.Line.ForeColor.RGB = RGB(224, 230, 237)
 
-        Set accent = ws.Shapes.AddShape(msoShapeRectangle, x, y, 6, h)
-        accent.Name = prefixName & "ACCENT"
+        Set accent = ws.Shapes.AddShape(msoShapeRectangle, X, Y, 6, h)
+        accent.name = prefixName & "ACCENT"
         accent.Line.Visible = msoFalse
 
-        Set titleBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x + 16, y + 8, w - 24, 16)
-        titleBox.Name = prefixName & "TITLE"
+        Set titleBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X + 16, Y + 8, w - 24, 16)
+        titleBox.name = prefixName & "TITLE"
         Dashboard_FormatStableTextBox titleBox, 9, RGB(96, 111, 128), False
 
-        Set valueBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x + 16, y + 24, w - 24, 34)
-        valueBox.Name = prefixName & "HERO"
+        Set valueBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X + 16, Y + 24, w - 24, 34)
+        valueBox.name = prefixName & "HERO"
         Dashboard_FormatStableTextBox valueBox, 21, RGB(20, 34, 51), True
 
-        Set subBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x + 16, y + h - 20, w - 24, 18)
-        subBox.Name = prefixName & "SUB"
+        Set subBox = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X + 16, Y + h - 20, w - 24, 18)
+        subBox.name = prefixName & "SUB"
         Dashboard_FormatStableTextBox subBox, 8, RGB(96, 111, 128), False
     End If
 
-    Dashboard_PositionKpiShape bg, x, y, w, h
-    Dashboard_PositionKpiShape accent, x, y, 6, h
-    Dashboard_PositionKpiShape titleBox, x + 16, y + 8, w - 24, 16
-    Dashboard_PositionKpiShape valueBox, x + 16, y + 24, w - 24, 34
-    Dashboard_PositionKpiShape subBox, x + 16, y + h - 20, w - 24, 18
+    Dashboard_PositionKpiShape bg, X, Y, w, h
+    Dashboard_PositionKpiShape accent, X, Y, 6, h
+    Dashboard_PositionKpiShape titleBox, X + 16, Y + 8, w - 24, 16
+    Dashboard_PositionKpiShape valueBox, X + 16, Y + 24, w - 24, 34
+    Dashboard_PositionKpiShape subBox, X + 16, Y + h - 20, w - 24, 18
 
-    bg.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    bg.fill.ForeColor.RGB = RGB(255, 255, 255)
     bg.Line.ForeColor.RGB = RGB(224, 230, 237)
-    accent.Fill.ForeColor.RGB = accentColor
+    accent.fill.ForeColor.RGB = accentColor
     accent.Line.Visible = msoFalse
 
     Dashboard_SetStableText titleBox, titleText, 9, RGB(96, 111, 128), False
@@ -4006,7 +4199,7 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Function Dashboard_GetShape(ByVal ws As Worksheet, ByVal shapeName As String) As Shape
+Private Function Dashboard_GetShape(ByVal ws As Worksheet, ByVal shapeName As String) As shape
 
     On Error Resume Next
     Set Dashboard_GetShape = ws.Shapes(shapeName)
@@ -4019,12 +4212,12 @@ End Function
 ' EN: Handles the Position Kpi Shape reference without mutating input data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_PositionKpiShape(ByVal shp As Shape, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_PositionKpiShape(ByVal shp As shape, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    shp.Left = x
-    shp.Top = y
-    shp.Width = w
-    shp.Height = h
+    shp.left = X
+    shp.top = Y
+    shp.width = w
+    shp.height = h
 
 End Sub
 
@@ -4035,19 +4228,19 @@ End Sub
 ' EN - Side effect: clears only data or objects targeted by the contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_DeleteShapesInRect(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_DeleteShapesInRect(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
     Dim i As Long
-    Dim shp As Shape
+    Dim shp As shape
     Dim rightEdge As Double
     Dim bottomEdge As Double
 
-    rightEdge = x + w
-    bottomEdge = y + h
+    rightEdge = X + w
+    bottomEdge = Y + h
 
-    For i = ws.Shapes.Count To 1 Step -1
+    For i = ws.Shapes.count To 1 Step -1
         Set shp = ws.Shapes(i)
-        If shp.Left >= x And shp.Left <= rightEdge And shp.Top >= y And shp.Top <= bottomEdge Then
+        If shp.left >= X And shp.left <= rightEdge And shp.top >= Y And shp.top <= bottomEdge Then
             shp.Delete
         End If
     Next i
@@ -4059,9 +4252,9 @@ End Sub
 ' EN: Normalizes or formats Format Stable Text Box according to the component contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_FormatStableTextBox(ByVal shp As Shape, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
+Private Sub Dashboard_FormatStableTextBox(ByVal shp As shape, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
-    shp.Fill.Visible = msoFalse
+    shp.fill.Visible = msoFalse
     shp.Line.Visible = msoFalse
     shp.TextFrame2.MarginLeft = 0
     shp.TextFrame2.MarginRight = 0
@@ -4069,10 +4262,10 @@ Private Sub Dashboard_FormatStableTextBox(ByVal shp As Shape, ByVal fontSize As 
     shp.TextFrame2.MarginBottom = 0
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
     shp.TextFrame2.WordWrap = msoFalse
-    shp.TextFrame2.TextRange.Font.Name = "Segoe UI"
-    shp.TextFrame2.TextRange.Font.Size = fontSize
-    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = colorVal
-    shp.TextFrame2.TextRange.Font.Bold = isBold
+    shp.TextFrame2.TextRange.font.name = "Segoe UI"
+    shp.TextFrame2.TextRange.font.size = fontSize
+    shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = colorVal
+    shp.TextFrame2.TextRange.font.bold = isBold
 
 End Sub
 
@@ -4081,9 +4274,9 @@ End Sub
 ' EN: Activates or initializes Set Stable Text in the component runtime state.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_SetStableText(ByVal shp As Shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
+Private Sub Dashboard_SetStableText(ByVal shp As shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
-    shp.TextFrame2.TextRange.Text = txt
+    shp.TextFrame2.TextRange.text = txt
     Dashboard_FormatStableTextBox shp, fontSize, colorVal, isBold
 
 End Sub
@@ -4094,13 +4287,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddPanel(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long)
+Private Sub Dashboard_AddPanel(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    shp.Name = DASH_PREFIX & "PANEL"
-    shp.Fill.ForeColor.RGB = fillColor
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    shp.name = DASH_PREFIX & "PANEL"
+    shp.fill.ForeColor.RGB = fillColor
     shp.Line.ForeColor.RGB = RGB(224, 230, 237)
 
 End Sub
@@ -4112,13 +4305,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddSlideSurface(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_AddSlideSurface(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddShape(msoShapeRectangle, x, y, w, h)
-    shp.Name = DASH_PREFIX & "SLIDE"
-    shp.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    Set shp = ws.Shapes.AddShape(msoShapeRectangle, X, Y, w, h)
+    shp.name = DASH_PREFIX & "SLIDE"
+    shp.fill.ForeColor.RGB = RGB(255, 255, 255)
     shp.Line.ForeColor.RGB = RGB(224, 230, 237)
     shp.ZOrder msoSendToBack
 
@@ -4131,11 +4324,11 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_AddSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, 20)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, 20)
     Dashboard_FormatTextBox shp, titleText, 12, RGB(20, 34, 51), True
 
 End Sub
@@ -4147,13 +4340,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddCenteredSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_AddCenteredSectionTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, 20)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, 20)
     Dashboard_FormatTextBox shp, titleText, 12, RGB(20, 34, 51), True
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
 
 End Sub
 
@@ -4164,11 +4357,11 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddTableTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_AddTableTitle(ByVal ws As Worksheet, ByVal titleText As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, 18)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, 18)
     Dashboard_FormatTextBox shp, titleText, 11, RGB(20, 34, 51), True
 
 End Sub
@@ -4178,11 +4371,11 @@ End Sub
 ' EN: Writes or synchronizes Write Hotspot Header in the store owned by the domain.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_WriteHotspotHeader(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal headers As Variant)
+Private Sub Dashboard_WriteHotspotHeader(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal headers As Variant)
 
-    Dashboard_AddTinyText ws, CStr(headers(0)), x, y, 54, 14, RGB(96, 111, 128)
-    Dashboard_AddTinyText ws, CStr(headers(1)), x + 58, y, 138, 14, RGB(96, 111, 128)
-    Dashboard_AddTinyText ws, CStr(headers(2)), x + 202, y, 52, 14, RGB(96, 111, 128)
+    Dashboard_AddTinyText ws, CStr(headers(0)), X, Y, 54, 14, RGB(96, 111, 128)
+    Dashboard_AddTinyText ws, CStr(headers(1)), X + 58, Y, 138, 14, RGB(96, 111, 128)
+    Dashboard_AddTinyText ws, CStr(headers(2)), X + 202, Y, 52, 14, RGB(96, 111, 128)
 
 End Sub
 
@@ -4191,11 +4384,11 @@ End Sub
 ' EN: Writes or synchronizes Write Hotspot Row in the store owned by the domain.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_WriteHotspotRow(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal wbsVal As String, ByVal nameVal As String, ByVal metricText As String, ByVal metricColor As Long)
+Private Sub Dashboard_WriteHotspotRow(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal wbsVal As String, ByVal nameVal As String, ByVal metricText As String, ByVal metricColor As Long)
 
-    Dashboard_AddTinyText ws, wbsVal, x, y, 54, 16, RGB(20, 34, 51)
-    Dashboard_AddTinyText ws, nameVal, x + 58, y, 138, 16, RGB(42, 52, 65)
-    Dashboard_AddTinyText ws, metricText, x + 202, y, 52, 16, metricColor
+    Dashboard_AddTinyText ws, wbsVal, X, Y, 54, 16, RGB(20, 34, 51)
+    Dashboard_AddTinyText ws, nameVal, X + 58, Y, 138, 16, RGB(42, 52, 65)
+    Dashboard_AddTinyText ws, metricText, X + 202, Y, 52, 16, metricColor
 
 End Sub
 
@@ -4206,14 +4399,14 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddMiniGanttLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal fontSize As Double)
+Private Sub Dashboard_AddMiniGanttLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal fontSize As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, fontSize + 4)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, fontSize + 4)
     Dashboard_FormatTextBox shp, txt, fontSize, RGB(42, 52, 65), False
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignLeft
+    shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignLeft
 
 End Sub
 
@@ -4227,9 +4420,9 @@ Private Function Dashboard_TruncateText(ByVal txt As String, ByVal maxLen As Lon
     If Len(txt) <= maxLen Then
         Dashboard_TruncateText = txt
     ElseIf maxLen <= 3 Then
-        Dashboard_TruncateText = Left$(txt, maxLen)
+        Dashboard_TruncateText = left$(txt, maxLen)
     Else
-        Dashboard_TruncateText = Left$(txt, maxLen - 3) & "..."
+        Dashboard_TruncateText = left$(txt, maxLen - 3) & "..."
     End If
 
 End Function
@@ -4239,9 +4432,9 @@ End Function
 ' EN: Adds the Tiny Label reference to the target structure supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddTinyLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_AddTinyLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
-    Dashboard_AddTinyText ws, txt, x, y, w, 14, RGB(96, 111, 128)
+    Dashboard_AddTinyText ws, txt, X, Y, w, 14, RGB(96, 111, 128)
 
 End Sub
 
@@ -4252,11 +4445,11 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddTinyText(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
+Private Sub Dashboard_AddTinyText(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, h)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, h)
     Dashboard_FormatTextBox shp, txt, 8, colorVal, False
 
 End Sub
@@ -4268,13 +4461,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddAxisTickLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
+Private Sub Dashboard_AddAxisTickLabel(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, h)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, h)
     Dashboard_FormatTextBox shp, txt, 8, colorVal, False
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
 
 End Sub
 
@@ -4283,9 +4476,9 @@ End Sub
 ' EN: Writes or synchronizes Write Empty State in the store owned by the domain.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_WriteEmptyState(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal txt As String)
+Private Sub Dashboard_WriteEmptyState(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal txt As String)
 
-    Dashboard_AddTinyText ws, TextCatalog_Format("DASHBOARD.STATUS.OK_DETAIL", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Details", txt)), x, y, w, 16, RGB(0, 145, 112)
+    Dashboard_AddTinyText ws, TextCatalog_Format("DASHBOARD.STATUS.OK_DETAIL", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Details", txt)), X, Y, w, 16, RGB(0, 145, 112)
 
 End Sub
 
@@ -4296,13 +4489,13 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_WriteDashboardEmptyState(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_WriteDashboardEmptyState(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
-    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x, y, w, 18)
+    Set shp = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X, Y, w, 18)
     Dashboard_FormatTextBox shp, Dashboard_NoProjectLoadedText(), 9, RGB(96, 111, 128), True
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    shp.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
 
 End Sub
 
@@ -4313,19 +4506,19 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddBadge(ByVal ws As Worksheet, ByVal txt As String, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long, ByVal textColor As Long)
+Private Sub Dashboard_AddBadge(ByVal ws As Worksheet, ByVal txt As String, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal fillColor As Long, ByVal textColor As Long)
 
-    Dim bg As Shape
-    Dim t As Shape
+    Dim bg As shape
+    Dim t As shape
 
-    Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    bg.Name = DASH_PREFIX & "BADGE"
-    bg.Fill.ForeColor.RGB = fillColor
+    Set bg = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    bg.name = DASH_PREFIX & "BADGE"
+    bg.fill.ForeColor.RGB = fillColor
     bg.Line.Visible = msoFalse
 
-    Set t = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, x + 8, y + 3, w - 16, h - 6)
+    Set t = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, X + 8, Y + 3, w - 16, h - 6)
     Dashboard_FormatTextBox t, txt, 8, textColor, True
-    t.TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    t.TextFrame2.TextRange.ParagraphFormat.alignment = msoAlignCenter
 
 End Sub
 
@@ -4336,14 +4529,14 @@ End Sub
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddBar(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
+Private Sub Dashboard_AddBar(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal colorVal As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     If w < 2 Then w = 2
-    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
-    shp.Name = DASH_PREFIX & "BAR"
-    shp.Fill.ForeColor.RGB = colorVal
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, X, Y, w, h)
+    shp.name = DASH_PREFIX & "BAR"
+    shp.fill.ForeColor.RGB = colorVal
     shp.Line.Visible = msoFalse
 
 End Sub
@@ -4357,12 +4550,12 @@ End Sub
 
 Private Sub Dashboard_AddMilestoneDiamond(ByVal ws As Worksheet, ByVal centerX As Double, ByVal centerY As Double, ByVal sizeVal As Double, ByVal colorVal As Long)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     If sizeVal < 7 Then sizeVal = 7
     Set shp = ws.Shapes.AddShape(msoShapeDiamond, centerX - (sizeVal / 2), centerY - (sizeVal / 2), sizeVal, sizeVal)
-    shp.Name = DASH_PREFIX & "MILESTONE"
-    shp.Fill.ForeColor.RGB = colorVal
+    shp.name = DASH_PREFIX & "MILESTONE"
+    shp.fill.ForeColor.RGB = colorVal
     shp.Line.Visible = msoFalse
 
 End Sub
@@ -4389,27 +4582,31 @@ End Function
 ' EN - Side effect: creates or updates Excel shapes.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_AddProgressBar(ByVal ws As Worksheet, ByVal x As Double, ByVal y As Double, ByVal w As Double, ByVal h As Double, ByVal progressVal As Double, ByVal startVal As Variant, ByVal finishVal As Variant)
+Private Sub Dashboard_AddProgressBar(ByVal ws As Worksheet, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal progressVal As Double, ByVal startVal As Variant, ByVal finishVal As Variant, Optional ByVal consolidatedColor As Variant)
 
     Dim baseColor As Long
     Dim progressColor As Variant
     Dim progressWidth As Double
-    Dim shp As Shape
+    Dim shp As shape
 
     baseColor = Dashboard_MiniGanttCurrentColor(progressVal)
 
-    Dashboard_AddBar ws, x, y, w, h, baseColor
+    Dashboard_AddBar ws, X, Y, w, h, baseColor
 
     If progressVal > 0# And progressVal < 1# Then
-        progressColor = Dashboard_ProgressFillColor(startVal, finishVal, progressVal)
+            If IsMissing(consolidatedColor) Or IsEmpty(consolidatedColor) Then
+                progressColor = GetProgressFillColor(Dashboard_DateNumber(startVal), Dashboard_DateNumber(finishVal), progressVal)
+            Else
+                progressColor = consolidatedColor
+            End If
         If Not IsEmpty(progressColor) Then
             progressWidth = w * progressVal
             If progressWidth >= 6 Then
                 If progressWidth > w - 2 Then progressWidth = w - 2
-                Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, x + 1, y + 1, progressWidth, h - 2)
-                shp.Name = DASH_PREFIX & "BAR_PROGRESS"
-                shp.Fill.ForeColor.RGB = CLng(progressColor)
-                shp.Fill.Transparency = 0.25
+                Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, X + 1, Y + 1, progressWidth, h - 2)
+                shp.name = DASH_PREFIX & "BAR_PROGRESS"
+                shp.fill.ForeColor.RGB = CLng(progressColor)
+                shp.fill.Transparency = 0.25
                 shp.Line.Visible = msoFalse
             End If
         End If
@@ -4418,44 +4615,11 @@ Private Sub Dashboard_AddProgressBar(ByVal ws As Worksheet, ByVal x As Double, B
 End Sub
 
 '------------------------------------------------------------------------------
-' FR: Retourne la valeur Progress Fill Color sans modifier les donnees d'entree.
-' EN: Returns the Progress Fill Color value without mutating input data.
-'------------------------------------------------------------------------------
-
-Private Function Dashboard_ProgressFillColor(ByVal startVal As Variant, ByVal finishVal As Variant, ByVal progressVal As Double) As Variant
-
-    Dim durationVal As Double
-    Dim coveredDays As Long
-    Dim progressFinish As Double
-
-    If progressVal <= 0# Then Exit Function
-    If progressVal >= 1# Then
-        Dashboard_ProgressFillColor = RGB(112, 180, 71)
-        Exit Function
-    End If
-    If Not Dashboard_HasDateValue(startVal) Or Not Dashboard_HasDateValue(finishVal) Then Exit Function
-
-    durationVal = Dashboard_DateNumber(finishVal) - Dashboard_DateNumber(startVal) + 1
-    If durationVal <= 0 Then Exit Function
-
-    coveredDays = Int(durationVal * progressVal + 0.999999)
-    If coveredDays < 1 Then coveredDays = 1
-
-    progressFinish = Dashboard_DateNumber(startVal) + coveredDays - 1
-    If progressFinish >= CDbl(Date) - 1 Then
-        Dashboard_ProgressFillColor = RGB(112, 180, 71)
-    Else
-        Dashboard_ProgressFillColor = RGB(237, 125, 49)
-    End If
-
-End Function
-
-'------------------------------------------------------------------------------
 ' FR: Actualise Render Time Axis sans modifier les regles metier qui produisent les donnees.
 ' EN: Refreshes Render Time Axis without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Double, ByVal maxDate As Double, ByVal x As Double, ByVal y As Double, ByVal w As Double)
+Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Double, ByVal maxDate As Double, ByVal X As Double, ByVal Y As Double, ByVal w As Double)
 
     Dim spanDays As Double
     Dim tickDate As Date
@@ -4467,7 +4631,7 @@ Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Dou
 
     If maxDate <= minDate Then Exit Sub
 
-    Dashboard_AddLine ws, x, y + 12, x + w, y + 12, RGB(224, 230, 237), 0.75
+    Dashboard_AddLine ws, X, Y + 12, X + w, Y + 12, RGB(224, 230, 237), 0.75
 
     spanDays = maxDate - minDate
     If spanDays <= 14 Then
@@ -4490,9 +4654,9 @@ Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Dou
 
     tickEnd = CDate(maxDate)
     Do While CDbl(tickDate) <= CDbl(tickEnd)
-        tickX = Dashboard_DateToX(CDbl(tickDate), minDate, maxDate, x, w)
-        If tickX >= x - 1 And tickX <= x + w + 1 Then
-            Dashboard_AddLine ws, tickX, y + 8, tickX, y + 15, RGB(189, 198, 208), 0.75
+        tickX = Dashboard_DateToX(CDbl(tickDate), minDate, maxDate, X, w)
+        If tickX >= X - 1 And tickX <= X + w + 1 Then
+            Dashboard_AddLine ws, tickX, Y + 8, tickX, Y + 15, RGB(189, 198, 208), 0.75
             Select Case stepKind
                 Case "d"
                     labelText = Dashboard_FormatDate(tickDate, False)
@@ -4503,7 +4667,7 @@ Private Sub Dashboard_RenderTimeAxis(ByVal ws As Worksheet, ByVal minDate As Dou
                 Case Else
                     labelText = Format$(tickDate, "yyyy")
             End Select
-            Dashboard_AddAxisTickLabel ws, labelText, tickX - 21, y - 5, 42, 12, RGB(96, 111, 128)
+            Dashboard_AddAxisTickLabel ws, labelText, tickX - 21, Y - 5, 42, 12, RGB(96, 111, 128)
         End If
 
         tickDate = DateAdd(stepKind, stepCount, tickDate)
@@ -4520,12 +4684,12 @@ End Sub
 
 Private Sub Dashboard_AddLine(ByVal ws As Worksheet, ByVal x1 As Double, ByVal y1 As Double, ByVal x2 As Double, ByVal y2 As Double, ByVal colorVal As Long, ByVal weightVal As Double)
 
-    Dim shp As Shape
+    Dim shp As shape
 
     Set shp = ws.Shapes.AddLine(x1, y1, x2, y2)
-    shp.Name = DASH_PREFIX & "LINE"
+    shp.name = DASH_PREFIX & "LINE"
     shp.Line.ForeColor.RGB = colorVal
-    shp.Line.Weight = weightVal
+    shp.Line.weight = weightVal
     shp.Line.DashStyle = msoLineDash
 
 End Sub
@@ -4535,20 +4699,20 @@ End Sub
 ' EN: Normalizes or formats Format Text Box according to the component contract.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_FormatTextBox(ByVal shp As Shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
+Private Sub Dashboard_FormatTextBox(ByVal shp As shape, ByVal txt As String, ByVal fontSize As Double, ByVal colorVal As Long, ByVal isBold As Boolean)
 
-    shp.Name = DASH_PREFIX & "TXT"
-    shp.Fill.Visible = msoFalse
+    shp.name = DASH_PREFIX & "TXT"
+    shp.fill.Visible = msoFalse
     shp.Line.Visible = msoFalse
     shp.TextFrame2.MarginLeft = 0
     shp.TextFrame2.MarginRight = 0
     shp.TextFrame2.MarginTop = 0
     shp.TextFrame2.MarginBottom = 0
-    shp.TextFrame2.TextRange.Text = txt
-    shp.TextFrame2.TextRange.Font.Name = "Segoe UI"
-    shp.TextFrame2.TextRange.Font.Size = fontSize
-    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = colorVal
-    shp.TextFrame2.TextRange.Font.Bold = IIf(isBold, msoTrue, msoFalse)
+    shp.TextFrame2.TextRange.text = txt
+    shp.TextFrame2.TextRange.font.name = "Segoe UI"
+    shp.TextFrame2.TextRange.font.size = fontSize
+    shp.TextFrame2.TextRange.font.fill.ForeColor.RGB = colorVal
+    shp.TextFrame2.TextRange.font.bold = IIf(isBold, msoTrue, msoFalse)
 
 End Sub
 
@@ -4803,8 +4967,8 @@ End Function
 
 Private Function Dashboard_IsTimestampText(ByVal txt As String) As Boolean
 
-    Dashboard_IsTimestampText = (Left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN") Or _
-        Left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))
+    Dashboard_IsTimestampText = (left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "EN") Or _
+        left$(txt, Len(TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))) = TextCatalog_Get("DASHBOARD.TIMESTAMP.PREFIX", "FR"))
 
 End Function
 
@@ -4856,3 +5020,7 @@ Private Function Dashboard_DriftColor(ByVal driftDays As Variant) As Long
     End If
 
 End Function
+
+
+
+

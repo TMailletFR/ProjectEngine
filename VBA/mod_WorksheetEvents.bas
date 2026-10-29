@@ -6,11 +6,11 @@ Option Explicit
 ' DOMAINE / DOMAIN : Workbook / Sheet Events
 '
 ' FR
-' Dispatch les changements de feuille Excel vers WBS, Constraints ou Gantt.
+' Dispatch les changements de feuille Excel vers leur domaine.
 ' Ne doit pas contourner les contrats publics des autres domaines.
 '
 ' EN
-' Dispatches Excel sheet changes to WBS, Constraints or Gantt.
+' Dispatches Excel sheet changes to their functional domain.
 ' Must not bypass public contracts owned by other domains.
 '
 ' CONTRATS / CONTRACTS : Handle_Worksheet_Change
@@ -24,26 +24,31 @@ Option Explicit
 ' FR: Dispatche un changement de feuille vers le domaine fonctionnel concerne.
 ' EN: Dispatches a sheet change to the matching functional domain.
 '------------------------------------------------------------------------------
-Public Sub Handle_Worksheet_Change(ByVal Sh As Object, ByVal Target As Range)
+Public Sub Handle_Worksheet_Change(ByVal Sh As Object, ByVal target As Range)
 
     If Sh Is Nothing Then Exit Sub
-    If Target Is Nothing Then Exit Sub
-    If Not (Sh.Parent Is ThisWorkbook) Then Exit Sub
+    If target Is Nothing Then Exit Sub
+    If Not (Sh.parent Is ThisWorkbook) Then Exit Sub
+    If Finance_ExpenseSheetChanged(Sh, target) Then Exit Sub
 
-    Select Case CStr(Sh.Name)
+    Select Case CStr(Sh.name)
         Case "WBS"
             WorkflowCommand_InputsChanged
-            Handle_WBS_Change Sh, Target
-            ProjectWelcome_ObserveTutorialEdit Sh, Target
+            Handle_WBS_Change Sh, target
+            ProjectWelcome_ObserveTutorialEdit Sh, target
         Case "GANTT"
-            Handle_Gantt_Change Sh, Target
+            Handle_Gantt_Change Sh, target
         Case "DASHBOARD"
-            Dashboard_HandleSnapshotSelectionChange Sh, Target
+            Dashboard_HandleSnapshotSelectionChange Sh, target
         Case "CONSTRAINTS"
             WorkflowCommand_InputsChanged
-            Handle_Constraints_Change Sh, Target
+            Handle_Constraints_Change Sh, target
+        Case "FINANCE", "FINANCE SUMMARY"
+            Handle_Finance_Change Sh, target
         Case "CALC_ALARM", "EVENT_HISTORY", "EVENT_ACK"
-            Handle_EventHistory_Change Sh, Target
+            Handle_EventHistory_Change Sh, target
     End Select
 
 End Sub
+
+

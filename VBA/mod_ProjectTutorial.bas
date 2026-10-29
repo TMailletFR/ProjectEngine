@@ -1,13 +1,13 @@
 Attribute VB_Name = "mod_ProjectTutorial"
 Option Explicit
 
-Private Const VERSION As String = "4"
+Private Const version As String = "5"
 Private Const HIGHLIGHT_NAME As String = "PE_TUTORIAL_HIGHLIGHT"
 Private Const HIGHLIGHT_MARKER As String = "ProjectEngine.TutorialHighlight.v1"
 Private mActive As Boolean
 Private mPresenting As Boolean
 Private mStep As Long
-Private mWindow As Excel.Window
+Private mWindow As Excel.window
 Private mOriginalSelection As Range
 Private mOriginalSheet As Worksheet
 Private mOriginalRow As Long
@@ -51,6 +51,10 @@ Private Function ProjectTutorial_RibbonCommands(ByVal stepNumber As Long) As Str
         Case "SCURVE_BUILD": ProjectTutorial_RibbonCommands = "peSCurve"
         Case "GANTT_BUILD": ProjectTutorial_RibbonCommands = "peGantt"
         Case "GENERAL": ProjectTutorial_RibbonCommands = "peSettings|peImport|peTutorial|peFullTimeline|peSelectedTask|peClearHistory|peClearAck|peCleanDashboard|peResetPlanning|peFullReset"
+        Case "FINANCE": ProjectTutorial_RibbonCommands = "peFinanceManage|peFinanceRefresh"
+        Case "FINANCE_EXPENSES": ProjectTutorial_RibbonCommands = "peFinanceExpenses"
+        Case "FINANCE_SUMMARY": ProjectTutorial_RibbonCommands = "peFinanceRefresh"
+        Case "FINANCE_EXTRACT": ProjectTutorial_RibbonCommands = "peFinanceExtract"
     End Select
 End Function
 
@@ -160,9 +164,9 @@ End Function
 
 Public Function ProjectTutorial_IsOwnerWindowActive() As Boolean
     On Error GoTo NotOwner
-    If mWindow Is Nothing Or Application.ActiveWindow Is Nothing Then Exit Function
-    If Application.ActiveWindow.Hwnd <> mWindow.Hwnd Then Exit Function
-    ProjectTutorial_IsOwnerWindowActive = (Application.ActiveWindow.ActiveSheet.Parent Is ThisWorkbook)
+    If mWindow Is Nothing Or Application.activeWindow Is Nothing Then Exit Function
+    If Application.activeWindow.hwnd <> mWindow.hwnd Then Exit Function
+    ProjectTutorial_IsOwnerWindowActive = (Application.activeWindow.ActiveSheet.parent Is ThisWorkbook)
 NotOwner:
 End Function
 
@@ -170,16 +174,17 @@ End Function
 Public Sub ProjectTutorial_RequestClose()
     On Error GoTo Failed
     If Not mActive Or mClosing Then Exit Sub
+    PEConsole_WheelDetach frmProjectTutorial
     frmProjectTutorial.Hide
     ProjectTutorial_Cleanup
     Ribbon_SetTutorialPresentation vbNullString
     mClosing = True
     mCloseAt = Now + TimeSerial(0, 0, 1)
-    mCloseProcedure = "'" & Replace(ThisWorkbook.Name, "'", "''") & "'!ProjectTutorial_FinishClose"
+    mCloseProcedure = "'" & Replace(ThisWorkbook.name, "'", "''") & "'!ProjectTutorial_FinishClose"
     Application.OnTime mCloseAt, mCloseProcedure
     Exit Sub
 Failed:
-    mLastDiagnostic = "TUTORIAL_CLOSE_REQUEST:" & CStr(Err.Number) & ":" & Err.Description
+    mLastDiagnostic = "TUTORIAL_CLOSE_REQUEST:" & CStr(Err.number) & ":" & Err.description
     mClosing = False
     ' Keep the hidden form loaded rather than unload it inside its own handler.
     mActive = False
@@ -191,8 +196,8 @@ Private Function ProjectTutorial_CancelClose() As Boolean
     If mClosing Then
         On Error Resume Next
         Application.OnTime mCloseAt, mCloseProcedure, Schedule:=False
-        If Err.Number <> 0 Then
-            mLastDiagnostic = "TUTORIAL_CLOSE_CANCEL:" & CStr(Err.Number) & ":" & Err.Description
+        If Err.number <> 0 Then
+            mLastDiagnostic = "TUTORIAL_CLOSE_CANCEL:" & CStr(Err.number) & ":" & Err.description
             Debug.Print mLastDiagnostic
             ProjectTutorial_CancelClose = False
         End If
@@ -257,7 +262,7 @@ Public Function ProjectTutorial_StepCount() As Long
 End Function
 
 Public Function ProjectTutorial_StepDefinitions() As Variant
-    Dim definitions(0 To 28) As Variant
+    Dim definitions(0 To 32) As Variant
     ' StepKey, semantic target, sheet context: no image dependency.
     definitions(0) = Array("NAVIGATION", "WBS.STRUCTURE", "WBS")
     definitions(1) = Array("WBS_STRUCTURE", "WBS.IDENTITY", "WBS")
@@ -287,7 +292,11 @@ Public Function ProjectTutorial_StepDefinitions() As Variant
     definitions(25) = Array("DISPLAY", "SETTINGS.CONFIGURATION", "SETTINGS")
     definitions(26) = Array("CONSTRAINTS", "CONSTRAINTS.DATE_RULES", "CONSTRAINTS")
     definitions(27) = Array("DEADLINE", "CONSTRAINTS.DEADLINE", "CONSTRAINTS")
-    definitions(28) = Array("FINISH", "NONE", "WBS")
+    definitions(28) = Array("FINANCE", "FINANCE.INPUTS", "FINANCE")
+    definitions(29) = Array("FINANCE_EXPENSES", "FINANCE.EXPENSES", "FINANCE")
+    definitions(30) = Array("FINANCE_SUMMARY", "FINANCE.SUMMARY", "FINANCE SUMMARY")
+    definitions(31) = Array("FINANCE_EXTRACT", "RIBBON.FINANCE_EXTRACT", "FINANCE")
+    definitions(32) = Array("FINISH", "NONE", "WBS")
     ProjectTutorial_StepDefinitions = definitions
 End Function
 
@@ -316,10 +325,34 @@ Public Function ProjectTutorial_Text(ByVal key As String, Optional ByVal languag
                 Case "CONSTRAINTS": value = SchemaColumnTitle("tbl_CONSTRAINTS", CStr(binding(2)), language)
                 Case Else: value = TextCatalog_Get(CStr(binding(2)), language)
             End Select
+            If ProjectTutorial_ButtonBinding(binding) Then value = UCase$(value)
             arguments(CStr(binding(0))) = Replace$(Replace$(value, vbCrLf, " "), vbLf, " ")
         End If
     Next binding
     ProjectTutorial_Text = Replace$(TextCatalog_Format("TUTORIAL." & key, language, arguments), "\n", vbCrLf)
+End Function
+
+Private Function ProjectTutorial_ButtonBinding(ByVal binding As Variant) As Boolean
+    ProjectTutorial_ButtonBinding = (CStr(binding(1)) = "RIBBON" Or InStr("|NewSnapshot|Compare|Next|Previous|HomeButton|FinishButton|Confirm|Cancel|AddExpense|SaveExpense|DeleteExpense|AddFinancialProject|BulkExpenses|", "|" & CStr(binding(0)) & "|") > 0)
+End Function
+
+Public Function ProjectTutorial_ButtonLabels() As Object
+    Dim labels As Object, bindings As Collection, binding As Variant, value As String, language As String
+    Set labels = CreateObject("Scripting.Dictionary")
+    language = Settings_GetGlobalDisplayLanguage()
+    Set bindings = ProjectTutorial_LabelBindings()
+    For Each binding In bindings
+        If CStr(binding(1)) = "RIBBON" Or CStr(binding(0)) = "NewSnapshot" Or CStr(binding(0)) = "Compare" Then
+            If CStr(binding(1)) = "RIBBON" Then
+                value = Ribbon_CommandLabel(CStr(binding(2)), language)
+            Else
+                value = TextCatalog_Get(CStr(binding(2)), language)
+            End If
+            value = Replace$(Replace$(value, vbCrLf, " "), vbLf, " ")
+            labels(UCase$(value)) = True
+        End If
+    Next binding
+    Set ProjectTutorial_ButtonLabels = labels
 End Function
 
 Private Function ProjectTutorial_LabelBindings() As Collection
@@ -340,6 +373,22 @@ Private Function ProjectTutorial_LabelBindings() As Collection
     bindings.Add Array("Test", "RIBBON", "peTest")
     bindings.Add Array("ResetPlanning", "RIBBON", "peResetPlanning")
     bindings.Add Array("FullReset", "RIBBON", "peFullReset")
+    bindings.Add Array("ManageFinance", "RIBBON", "peFinanceManage")
+    bindings.Add Array("RefreshFinance", "RIBBON", "peFinanceRefresh")
+    bindings.Add Array("ManageExpenses", "RIBBON", "peFinanceExpenses")
+    bindings.Add Array("ExtractFinance", "RIBBON", "peFinanceExtract")
+    bindings.Add Array("CleanFinance", "RIBBON", "peFinanceClean")
+    bindings.Add Array("AddFinancialProject", "CATALOG", "FINANCE.PROJECT_ADD")
+    bindings.Add Array("Next", "CATALOG", "TUTORIAL.NEXT")
+    bindings.Add Array("Previous", "CATALOG", "TUTORIAL.PREVIOUS")
+    bindings.Add Array("HomeButton", "CATALOG", "TUTORIAL.HOME")
+    bindings.Add Array("FinishButton", "CATALOG", "TUTORIAL.FINISH")
+    bindings.Add Array("Confirm", "CATALOG", "FINANCE.CONFIRM")
+    bindings.Add Array("Cancel", "CATALOG", "FINANCE.CANCEL")
+    bindings.Add Array("AddExpense", "CATALOG", "FINANCE.ADD")
+    bindings.Add Array("SaveExpense", "CATALOG", "FINANCE.MODIFY")
+    bindings.Add Array("BulkExpenses", "CATALOG", "FINANCE.BULK")
+    bindings.Add Array("DeleteExpense", "CATALOG", "FINANCE.DELETE")
     bindings.Add Array("TaskID", "WBS", "ID")
     bindings.Add Array("TaskName", "WBS", "TASK_NAME")
     bindings.Add Array("Cal", "WBS", "CAL")
@@ -387,21 +436,21 @@ Public Sub ProjectTutorial_Show(Optional ByVal returnWelcome As Boolean = False)
     Dim resumeStep As Long
     On Error GoTo Failed
     If mActive Then Exit Sub
-    If Application.ActiveWindow Is Nothing Then Exit Sub
+    If Application.activeWindow Is Nothing Then Exit Sub
     If TypeName(Application.ActiveSheet) <> "Worksheet" Then Exit Sub
-    If Not (Application.ActiveSheet.Parent Is ThisWorkbook) Then Exit Sub
+    If Not (Application.ActiveSheet.parent Is ThisWorkbook) Then Exit Sub
     If Not Application.EnableEvents Then
         mLastDiagnostic = "TUTORIAL_EVENTS_DISABLED"
         Exit Sub
     End If
     If Not ProjectTutorial_CancelClose() Then Exit Sub
     Unload frmProjectTutorial
-    Set mWindow = Application.ActiveWindow
+    Set mWindow = Application.activeWindow
     Set mOriginalSheet = mWindow.ActiveSheet
     If TypeName(Application.Selection) = "Range" Then Set mOriginalSelection = Application.Selection
-    mOriginalRow = mWindow.ScrollRow
-    mOriginalColumn = mWindow.ScrollColumn
-    mOriginalZoom = mWindow.Zoom
+    mOriginalRow = mWindow.scrollRow
+    mOriginalColumn = mWindow.scrollColumn
+    mOriginalZoom = mWindow.zoom
     mWasWatching = GanttDrag_IsWatching()
     mActive = True
     mReturnWelcome = returnWelcome
@@ -425,7 +474,7 @@ CleanExit:
     Ribbon_WorksheetActivated
     Exit Sub
 Failed:
-    Debug.Print "ProjectTutorial_Show: " & CStr(Err.Number) & ": " & Err.Description
+    Debug.Print "ProjectTutorial_Show: " & CStr(Err.number) & ": " & Err.description
     Resume CleanExit
 End Sub
 
@@ -438,7 +487,7 @@ Public Function ProjectTutorial_ResolveTarget(ByVal stepNumber As Long) As Range
     Dim firstColumn As Range
     Dim lastColumn As Range
     Dim rowCount As Long
-    On Error GoTo Missing
+    On Error GoTo missing
     Select Case ProjectTutorial_StepKey(stepNumber)
         Case "NAVIGATION": key = "ID": lastKey = "TASK_NAME"
         Case "WBS_STRUCTURE": key = "ID": lastKey = "WBS"
@@ -476,6 +525,21 @@ Public Function ProjectTutorial_ResolveTarget(ByVal stepNumber As Long) As Range
         Case "HISTORY"
             Set ProjectTutorial_ResolveTarget = EventHistory_TutorialMessagesTarget()
             Exit Function
+        Case "FINANCE"
+            Set ProjectTutorial_ResolveTarget = Finance_Table(FIN_TABLE).HeaderRowRange
+            Exit Function
+        Case "FINANCE_EXPENSES"
+            Set tbl = Finance_Table(FIN_TABLE)
+            Set ProjectTutorial_ResolveTarget = tbl.HeaderRowRange.cells(1, 1).Resize(1 + WorksheetFunction.Min(5, tbl.ListRows.count), 3)
+            Exit Function
+        Case "FINANCE_SUMMARY"
+            Set ws = ThisWorkbook.Worksheets("FINANCE SUMMARY")
+            If ws.ChartObjects.count > 0 Then
+                Set ProjectTutorial_ResolveTarget = ws.Range(ws.ChartObjects(1).TopLeftCell, ws.ChartObjects(1).BottomRightCell)
+            Else
+                Set ProjectTutorial_ResolveTarget = ws.Range("A3:L12")
+            End If
+            Exit Function
         Case Else: Exit Function
     End Select
     tableKey = "tbl_WBS"
@@ -486,30 +550,30 @@ Public Function ProjectTutorial_ResolveTarget(ByVal stepNumber As Long) As Range
     End If
     Set tbl = ws.ListObjects(tableKey)
     If Len(lastKey) = 0 Then lastKey = key
-    Set firstColumn = SchemaListColumn(tbl, tableKey, key).Range.Cells(1, 1)
-    Set lastColumn = SchemaListColumn(tbl, tableKey, lastKey).Range.Cells(1, 1)
-    rowCount = tbl.ListRows.Count
+    Set firstColumn = SchemaListColumn(tbl, tableKey, key).Range.cells(1, 1)
+    Set lastColumn = SchemaListColumn(tbl, tableKey, lastKey).Range.cells(1, 1)
+    rowCount = tbl.ListRows.count
     If mMode <> "PRACTICE" Then rowCount = 0
     If rowCount > 5 Then rowCount = 5
     If rowCount > 0 Then
-        Set ProjectTutorial_ResolveTarget = ws.Range(firstColumn.Offset(1, 0), lastColumn.Offset(rowCount, 0))
+        Set ProjectTutorial_ResolveTarget = ws.Range(firstColumn.offset(1, 0), lastColumn.offset(rowCount, 0))
     Else
         Set ProjectTutorial_ResolveTarget = ws.Range(firstColumn, lastColumn)
     End If
-Missing:
+missing:
 End Function
 
 Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVal persistProgress As Boolean = True, _
                                         Optional ByVal navigate As Boolean = True) As Boolean
     Dim target As Range
     Dim visibleTarget As Range
-    Dim pane As Excel.Pane
+    Dim pane As Excel.pane
     Dim paneRange As Range
     Dim paneIndex As Long
     Dim eventsBefore As Boolean
     Dim updatingBefore As Boolean
-    Dim shp As Shape
-    Dim occupied As Shape
+    Dim shp As shape
+    Dim occupied As shape
     Dim created As Boolean
     Dim statesCaptured As Boolean
     Dim definitions As Variant
@@ -520,11 +584,11 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     mLastDiagnostic = "SESSION_INACTIVE"
     If Not mActive Then Exit Function
     mLastDiagnostic = "WINDOW_MISSING"
-    If Application.ActiveWindow Is Nothing Then Exit Function
+    If Application.activeWindow Is Nothing Then Exit Function
     mLastDiagnostic = "WINDOW_NOT_OWNER"
-    If Application.ActiveWindow.Hwnd <> mWindow.Hwnd Then Exit Function
+    If Application.activeWindow.hwnd <> mWindow.hwnd Then Exit Function
     mLastDiagnostic = "WORKBOOK_NOT_OWNER"
-    If Not (mWindow.ActiveSheet.Parent Is ThisWorkbook) Then Exit Function
+    If Not (mWindow.ActiveSheet.parent Is ThisWorkbook) Then Exit Function
     mPresenting = True
     mLastDiagnostic = "TARGET_UNAVAILABLE"
     If mStep <> stepNumber Then
@@ -538,12 +602,12 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     End If
     mStep = stepNumber
     mLastDiagnostic = "PROGRESS"
-    If persistProgress Then Settings_SetTutorialProgress VERSION, ProjectTutorial_StepKey(mStep), "IN_PROGRESS", mMode
+    If persistProgress Then Settings_SetTutorialProgress version, ProjectTutorial_StepKey(mStep), "IN_PROGRESS", mMode
     mLastDiagnostic = "RESOLVE"
     definitions = ProjectTutorial_StepDefinitions()
     Set contextSheet = ThisWorkbook.Worksheets(CStr(definitions(mStep - 1)(2)))
     If navigate Then Ribbon_SetTutorialPresentation ProjectTutorial_RibbonCommands(mStep), True
-    If contextSheet.Visible <> xlSheetVisible Then GoTo CaptureFallback
+    If contextSheet.visible <> xlSheetVisible Then GoTo CaptureFallback
     eventsBefore = Application.EnableEvents
     updatingBefore = Application.ScreenUpdating
     statesCaptured = True
@@ -552,8 +616,8 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     If navigate Then
         GanttDrag_PauseForLifecycle
         contextSheet.Activate
-        mWindow.ScrollColumn = 1
-        mWindow.ScrollRow = 1
+        mWindow.scrollColumn = 1
+        mWindow.scrollRow = 1
     ElseIf Not (mWindow.ActiveSheet Is contextSheet) Then
         GoTo CaptureFallback
     End If
@@ -562,8 +626,8 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     Set target = ProjectTutorial_ResolveTarget(mStep)
     mLastDiagnostic = "TARGET_UNAVAILABLE"
     If target Is Nothing Then GoTo CaptureFallback
-    If target.Worksheet.Visible <> xlSheetVisible Then GoTo CaptureFallback
-    If target.EntireRow.Hidden Or target.EntireColumn.Hidden Then GoTo CaptureFallback
+    If target.Worksheet.visible <> xlSheetVisible Then GoTo CaptureFallback
+    If target.EntireRow.hidden Or target.EntireColumn.hidden Then GoTo CaptureFallback
     If target.MergeCells Then Set target = target.MergeArea
     If target.Worksheet.ProtectDrawingObjects Then GoTo CaptureFallback
     If Not mHighlightSheet Is Nothing Then
@@ -579,8 +643,9 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     Application.ScreenUpdating = True
     If navigate Then
         target.Worksheet.Activate
-        Application.Goto target.Cells(1, 1), True
-        If target.Worksheet.Name = "CONSTRAINTS" Then mWindow.ScrollColumn = 1
+        Application.Goto target.cells(1, 1), (target.Worksheet.name <> "FINANCE")
+        If target.Worksheet.name = "FINANCE" Then mWindow.scrollRow = 1
+        If target.Worksheet.name = "CONSTRAINTS" Then mWindow.scrollColumn = 1
     End If
     Application.EnableEvents = eventsBefore
     Application.ScreenUpdating = updatingBefore
@@ -590,7 +655,7 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     If Not mActive Then GoTo CaptureFallback
     mLastDiagnostic = "PANE_INTERSECTION"
     ' A single pane intersection avoids a rectangle spanning frozen panes.
-    For paneIndex = 1 To mWindow.Panes.Count
+    For paneIndex = 1 To mWindow.Panes.count
         Set pane = mWindow.Panes(paneIndex)
         mLastDiagnostic = "PANE_RANGE"
         Set paneRange = pane.VisibleRange
@@ -598,8 +663,8 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
         Set visibleTarget = Application.Intersect(target, paneRange)
         If Not visibleTarget Is Nothing Then
             mLastDiagnostic = "PANE_AREAS"
-            If visibleTarget.Areas.Count = 1 Then
-                If visibleTarget.Cells.CountLarge = target.Cells.CountLarge Then Exit For
+            If visibleTarget.Areas.count = 1 Then
+                If visibleTarget.cells.CountLarge = target.cells.CountLarge Then Exit For
             End If
         End If
         Set visibleTarget = Nothing
@@ -614,26 +679,26 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     Set mHighlightSheet = target.Worksheet
     mLastDiagnostic = "SHAPE_CREATE"
     If occupied Is Nothing Then
-        Set shp = mHighlightSheet.Shapes.AddShape(msoShapeRectangle, visibleTarget.Left, visibleTarget.Top, _
-            visibleTarget.Width, visibleTarget.Height)
+        Set shp = mHighlightSheet.Shapes.AddShape(msoShapeRectangle, visibleTarget.left, visibleTarget.top, _
+            visibleTarget.width, visibleTarget.height)
         created = True
-        shp.Name = HIGHLIGHT_NAME
+        shp.name = HIGHLIGHT_NAME
         shp.AlternativeText = HIGHLIGHT_MARKER
     Else
         Set shp = occupied
-        shp.Left = visibleTarget.Left: shp.Top = visibleTarget.Top
-        shp.Width = visibleTarget.Width: shp.Height = visibleTarget.Height
+        shp.left = visibleTarget.left: shp.top = visibleTarget.top
+        shp.width = visibleTarget.width: shp.height = visibleTarget.height
     End If
-    shp.Fill.Visible = msoTrue
-    shp.Fill.ForeColor.RGB = RGB(255, 221, 0)
+    shp.fill.visible = msoTrue
+    shp.fill.ForeColor.RGB = RGB(255, 221, 0)
     mLastDiagnostic = "SHAPE_FORMAT"
-    shp.Fill.Transparency = 0.6
+    shp.fill.Transparency = 0.6
     shp.Line.ForeColor.RGB = RGB(205, 165, 0)
-    shp.Line.Weight = 1.25
+    shp.Line.weight = 1.25
     If ProjectTutorial_IsEditableStep(mStep) Then
-        shp.Fill.Visible = msoFalse
+        shp.fill.visible = msoFalse
         shp.Line.ForeColor.RGB = RGB(0, 155, 70)
-        shp.Line.Weight = 2
+        shp.Line.weight = 2
     End If
     shp.Placement = xlFreeFloating
     shp.ZOrder msoBringToFront
@@ -652,8 +717,8 @@ CaptureFallback:
     mPresenting = False
     Exit Function
 Failed:
-    mLastDiagnostic = mLastDiagnostic & ":" & CStr(Err.Number) & ":" & Err.Description
-    Debug.Print "ProjectTutorial_ShowPage: " & CStr(Err.Number) & ": " & Err.Description
+    mLastDiagnostic = mLastDiagnostic & ":" & CStr(Err.number) & ":" & Err.description
+    Debug.Print "ProjectTutorial_ShowPage: " & CStr(Err.number) & ": " & Err.description
     ' The object reference proves ownership before its reserved name is assigned.
     If created Then
         On Error Resume Next
@@ -669,13 +734,13 @@ Failed:
 End Function
 
 Public Sub ProjectTutorial_Complete()
-    Settings_SetTutorialProgress VERSION, ProjectTutorial_StepKey(ProjectTutorial_StepCount()), "COMPLETED", mMode
+    Settings_SetTutorialProgress version, ProjectTutorial_StepKey(ProjectTutorial_StepCount()), "COMPLETED", mMode
 End Sub
 
 Public Function ProjectTutorial_Cleanup() As Boolean
     Dim ws As Worksheet
     Dim remainingSheet As Worksheet
-    Dim shp As Shape
+    Dim shp As shape
     ProjectTutorial_Cleanup = True
     For Each ws In ThisWorkbook.Worksheets
         Set shp = Nothing
@@ -686,8 +751,8 @@ Public Function ProjectTutorial_Cleanup() As Boolean
             If shp.AlternativeText = HIGHLIGHT_MARKER Then
                 On Error Resume Next
                 shp.Delete
-                If Err.Number <> 0 Then
-                    mLastDiagnostic = "CLEANUP:" & CStr(Err.Number) & ":" & Err.Description
+                If Err.number <> 0 Then
+                    mLastDiagnostic = "CLEANUP:" & CStr(Err.number) & ":" & Err.description
                     ProjectTutorial_Cleanup = False
                     Set remainingSheet = ws
                     Err.Clear
@@ -709,7 +774,7 @@ Public Function ProjectTutorial_BeforeSave() As Boolean
     ProjectTutorial_BeforeSave = ProjectTutorial_Cleanup()
 End Function
 
-Public Sub ProjectTutorial_AfterSave(ByVal success As Boolean)
+Public Sub ProjectTutorial_AfterSave(ByVal Success As Boolean)
     If mActive And Not mClosing And mStep > 0 Then ProjectTutorial_ShowPage mStep, False, False
 End Sub
 
@@ -717,7 +782,10 @@ Public Function ProjectTutorial_BeforeClose() As Boolean
     If Not ProjectTutorial_CancelClose() Then Exit Function
     If Not ProjectTutorial_Cleanup() Then Exit Function
     Ribbon_SetTutorialPresentation vbNullString
-    If mActive Then frmProjectTutorial.Hide
+    If mActive Then
+        PEConsole_WheelDetach frmProjectTutorial
+        frmProjectTutorial.Hide
+    End If
     mActive = False
     mReturnWelcome = False
     Set mWindow = Nothing
@@ -744,11 +812,17 @@ Private Sub ProjectTutorial_RestoreView()
     mWindow.Activate
     If Not mOriginalSheet Is Nothing Then mOriginalSheet.Activate
     If Not mOriginalSelection Is Nothing Then Application.Goto mOriginalSelection, False
-    mWindow.Zoom = mOriginalZoom
-    mWindow.ScrollRow = mOriginalRow
-    mWindow.ScrollColumn = mOriginalColumn
+    mWindow.zoom = mOriginalZoom
+    mWindow.scrollRow = mOriginalRow
+    mWindow.scrollColumn = mOriginalColumn
 Finished:
     Application.EnableEvents = oldEvents
     If mWasWatching Then GanttDrag_ReconcileWatchState
     Ribbon_WorksheetActivated
 End Sub
+
+
+
+
+
+
