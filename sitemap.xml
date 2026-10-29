@@ -2,12 +2,18 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/</loc>
+    <lastmod>2026-10-29</lastmod>
   </url>
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/privacy.html</loc>
   </url>
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/releases/</loc>
+    <lastmod>2026-10-29</lastmod>
+  </url>
+  <url>
+    <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-5.html</loc>
+    <lastmod>2026-10-29</lastmod>
   </url>
   <url>
     <loc>https://tmailletfr.github.io/ProjectEngine/releases/v1-4.html</loc>

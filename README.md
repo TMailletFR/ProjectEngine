@@ -67,3 +67,13 @@ The Cloudflare beacon is installed on `index.html`, `download.html`, `404.html` 
 - Publish a fresh `lastmod` only for genuinely updated pages.
 - Do not submit `download.html` to the sitemap: it is deliberately `noindex` and redirects to GitHub.
 - Pages are pure static HTML/CSS; no site generator or additional runtime dependency is needed.
+
+
+## v1.5 website update (October 29, 2026)
+
+- Added `releases/v1-5.html`, a curated public summary of the Financial Project Controls & Multi-Project Management release.
+- Updated `releases/index.html` with v1.5 as latest and added the page to `CollectionPage.hasPart`.
+- Updated the homepage's SEO metadata, feature summary and latest release links to reflect Finance and multi-project cost reporting.
+- Updated `sitemap.xml` with the v1.5 canonical URL and change dates for the pages updated on October 29.
+- The existing `download.html` resolves the latest published `.xlsm` asset through GitHub's API and therefore requires no hardcoded version change. Publish the GitHub release with the `v1.5` tag and a prepared `.xlsm` asset before sending users to the updated site.
+- The stylesheet, analytics configuration, privacy page, robots and legacy release pages were not changed. This patch introduces no new tracking.
