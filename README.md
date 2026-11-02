@@ -77,3 +77,14 @@ The Cloudflare beacon is installed on `index.html`, `download.html`, `404.html` 
 - Updated `sitemap.xml` with the v1.5 canonical URL and change dates for the pages updated on October 29.
 - The existing `download.html` resolves the latest published `.xlsm` asset through GitHub's API and therefore requires no hardcoded version change. Publish the GitHub release with the `v1.5` tag and a prepared `.xlsm` asset before sending users to the updated site.
 - The stylesheet, analytics configuration, privacy page, robots and legacy release pages were not changed. This patch introduces no new tracking.
+
+## Release v1.5.1 site update
+
+- `releases/v1-5-1.html`: indexable release summary focused on reliability, scheduling accuracy, migration integrity and Gantt/S-Curve/Dashboard fixes.
+- `releases/index.html`: v1.5.1 appears as Latest; v1.5 remains in history.
+- `index.html`: current release copy and its link updated without changing existing page anchors.
+- `sitemap.xml`: new permanent release URL added; no speculative publication date supplied.
+- GitHub `v1.5.1` release remains the authority for downloads and detailed notes.
+- Existing release pages, privacy configuration, Cloudflare instrumentation and dynamic `download.html` behavior are unchanged.
+
+Deploy these paths to the root of the existing GitHub Pages branch. Verify that the GitHub release tag and prepared workbook asset exist when publishing the site.
