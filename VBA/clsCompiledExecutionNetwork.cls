@@ -149,6 +149,9 @@ Friend Sub InitializeIndexedArrays( _
 
 End Sub
 
+' Borrowed read-only views: dictionaries/collections below remain owned by this
+' compiled network. Consumers must copy before mutation; VBA does not enforce
+' immutability. Returning references avoids cloning indexes in hot paths.
 ' FR: Expose l'index ID -> ligne compile sans le reconstruire.
 ' EN: Exposes the compiled ID-to-row index without rebuilding it.
 Public Property Get RowById() As Object

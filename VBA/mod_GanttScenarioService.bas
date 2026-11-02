@@ -178,7 +178,7 @@ Public Sub GanttScenarioService_RunScenarioEngine( _
             baseFinish = GetCellValue(dataCalc(calcRow, mapCalc("Calculated Finish")))
 
             If HasValue(baseStart) And HasValue(baseFinish) Then
-                baseDuration = CDbl(baseFinish) - CDbl(baseStart) + 1
+                baseDuration = DateDiffWorkingDays(baseStart, baseFinish, dataWBS(r, mapWBS(VTS_COL_CAL)))
             Else
                 baseDuration = Empty
             End If
@@ -232,7 +232,7 @@ Public Sub GanttScenarioService_RunScenarioEngine( _
         If HasValue(testFinish) Then inputFinish = testFinish
 
         If HasValue(testStart) And HasValue(testFinish) Then
-            inputDuration = CDbl(testFinish) - CDbl(testStart) + 1
+            inputDuration = DateDiffWorkingDays(testStart, testFinish, dataWBS(r, mapWBS(VTS_COL_CAL)))
         End If
 
         If HasValue(testProgressNorm) Then
@@ -595,7 +595,7 @@ Private Sub BuildGanttScenarioCoreDataset( _
 
         If HasValue(testFinish) Then
             If HasValue(testStart) Then
-                inputDuration = CDbl(testFinish) - CDbl(testStart) + 1
+                inputDuration = DateDiffWorkingDays(testStart, testFinish, arrTest(r, GetColumnIndex_GanttLive(tblTest, "Cal")))
             ElseIf HasValue(inputDuration) Then
                 inputStart = SubtractWorkingDays(testFinish, inputDuration, arrTest(r, GetColumnIndex_GanttLive(tblTest, "Cal")))
             End If

@@ -974,9 +974,11 @@ Private Sub CalcBridge_BuildAnalyticsNetworkFromExpandedLinks( _
     Dim linkType As String
     Dim linkLag As Double
     Dim linkKey As String
+    Dim edgeKeys As Object
 
     Set predLagBySuccPred = CreateObject("Scripting.Dictionary")
     Set predTypeBySuccPred = CreateObject("Scripting.Dictionary")
+    Set edgeKeys = CreateObject("Scripting.Dictionary")
 
     If linksBySuccId Is Nothing Then Exit Sub
     If validIds Is Nothing Then Exit Sub
@@ -1003,11 +1005,8 @@ Private Sub CalcBridge_BuildAnalyticsNetworkFromExpandedLinks( _
                         linkType = UCase$(Trim$(linkType))
                         If linkType <> "FS" And linkType <> "SS" And linkType <> "FF" Then GoTo NextLink
 
-                        linkKey = CStr(succId) & "|" & predId
-                        predLagBySuccPred(linkKey) = linkLag
-                        predTypeBySuccPred(linkKey) = linkType
-                        predsById(CStr(succId)).Add predId
-                        childrenById(predId).Add CStr(succId)
+                        CompiledNetwork_AddAnalyticsEdge predsById, childrenById, predLagBySuccPred, _
+                            predTypeBySuccPred, edgeKeys, CStr(succId), predId, linkType, linkLag
                     End If
                 End If
 

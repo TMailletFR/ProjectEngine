@@ -109,6 +109,8 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
     Dim outDV() As Variant
 
     Dim requiredCols As Variant
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Compute_And_Push_Variances", "Variances")
 
@@ -157,7 +159,7 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
         refStartByRow, refFinishByRow, refDurByRow
 
     Variance_RollupParentBaselineReferences _
-        directChildrenRows, parentRows, _
+        tblWBS, mapWBS, directChildrenRows, parentRows, _
         refStartByRow, refFinishByRow, refDurByRow
 
     Variance_BuildOutputArrays _
@@ -170,8 +172,11 @@ Public Sub Compute_And_Push_Variances(Optional ByVal consoleMessages As Collecti
     Exit Sub
 
 ErrHandler:
+    failureNumber = Err.Number
+    failureDescription = Err.Description
     CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.VARIANCES.ERROR", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", failureDescription)
+    Err.Raise failureNumber, "Compute_And_Push_Variances", failureDescription
 
 End Sub
 
@@ -277,14 +282,19 @@ Private Sub Variance_BuildLeafBaselineReferences( _
     Dim predWbs As String
     Dim linkType As String
     Dim lagVal As Double
+    Dim parsedLag As Long
+    Dim rawToken As String
+    Dim parseError As String
     Dim predRow As Long
 
     Dim hasValidPred As Boolean
     Dim hasUnresolvedPred As Boolean
     Dim bestStart As Variant
     Dim candidateStart As Variant
+    Dim data As Variant, calendarType As String
 
     Set remaining = CreateObject("Scripting.Dictionary")
+    data = tblWBS.DataBodyRange.Value2
 
     For Each key In leafRows.Keys
         remaining(CStr(key)) = True
@@ -301,9 +311,10 @@ Private Sub Variance_BuildLeafBaselineReferences( _
 
             r = CLng(key)
 
-            bs = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_BASELINE_START)).value)
-            bf = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_BASELINE_FINISH)).value)
-            bd = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_BASELINE_DURATION)).value)
+            bs = GetCellValue(data(r, mapWBS(VTS_COL_BASELINE_START)))
+            bf = GetCellValue(data(r, mapWBS(VTS_COL_BASELINE_FINISH)))
+            bd = GetCellValue(data(r, mapWBS(VTS_COL_BASELINE_DURATION)))
+            calendarType = NormalizeCalendarType(data(r, mapWBS(VTS_COL_CAL)))
 
             If HasValue(bs) And HasValue(bf) Then
 
@@ -313,7 +324,7 @@ Private Sub Variance_BuildLeafBaselineReferences( _
                 If HasValue(bd) And IsNumeric(bd) Then
                     refDurByRow(CStr(r)) = CLng(CDbl(bd))
                 Else
-                    refDurByRow(CStr(r)) = CLng(CDbl(bf) - CDbl(bs) + 1)
+                    refDurByRow(CStr(r)) = DateDiffWorkingDays(bs, bf, calendarType)
                 End If
 
                 remaining.Remove CStr(r)
@@ -326,7 +337,7 @@ Private Sub Variance_BuildLeafBaselineReferences( _
             If Not IsNumeric(bd) Then GoTo NextRemainingTask
             If CDbl(bd) <= 0 Then GoTo NextRemainingTask
 
-            predText = Trim$(CStr(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_PREDECESSORS_WBS)).value))
+            predText = Trim$(CStr(data(r, mapWBS(VTS_COL_PREDECESSORS_WBS))))
 
             If predText = "" Then GoTo NextRemainingTask
 
@@ -338,7 +349,10 @@ Private Sub Variance_BuildLeafBaselineReferences( _
 
             For Each token In predTokens
 
-                ParsePredecessorToken CStr(token), predWbs, linkType, lagVal
+                If Not mod_Utils.ParsePredecessorToken(CStr(token), predWbs, linkType, parsedLag, rawToken, parseError) Then
+                    Err.Raise vbObjectError + 8615, "Compute_And_Push_Variances", parseError
+                End If
+                lagVal = CDbl(parsedLag)
 
                 predWbs = NormalizeWBSCode(predWbs)
 
@@ -356,13 +370,13 @@ Private Sub Variance_BuildLeafBaselineReferences( _
                                 Select Case UCase$(linkType)
 
                                     Case "SS"
-                                        candidateStart = CDbl(refStartByRow(CStr(predRow))) + lagVal
+                                        candidateStart = ApplyLag(refStartByRow(CStr(predRow)), lagVal, calendarType, "SS")
 
                                     Case "FF"
-                                        candidateStart = CDbl(refFinishByRow(CStr(predRow))) + lagVal - CDbl(bd) + 1
+                                        candidateStart = SubtractWorkingDays(ApplyLag(refFinishByRow(CStr(predRow)), lagVal, calendarType, "FF"), bd, calendarType)
 
                                     Case Else
-                                        candidateStart = CDbl(refFinishByRow(CStr(predRow))) + 1 + lagVal
+                                        candidateStart = ApplyLag(refFinishByRow(CStr(predRow)), lagVal, calendarType, "FS")
 
                                 End Select
 
@@ -385,7 +399,7 @@ Private Sub Variance_BuildLeafBaselineReferences( _
             If hasValidPred And Not hasUnresolvedPred And HasValue(bestStart) Then
 
                 refStartByRow(CStr(r)) = bestStart
-                refFinishByRow(CStr(r)) = CDbl(bestStart) + CDbl(bd) - 1
+                refFinishByRow(CStr(r)) = AddWorkingDays(bestStart, bd, calendarType)
                 refDurByRow(CStr(r)) = CLng(CDbl(bd))
 
                 remaining.Remove CStr(r)
@@ -406,6 +420,8 @@ End Sub
 '------------------------------------------------------------------------------
 
 Private Sub Variance_RollupParentBaselineReferences( _
+    ByVal tblWBS As ListObject, _
+    ByVal mapWBS As Object, _
     ByVal directChildrenRows As Object, _
     ByVal parentRows As Object, _
     ByVal refStartByRow As Object, _
@@ -421,7 +437,9 @@ Private Sub Variance_RollupParentBaselineReferences( _
     Dim minStart As Variant
     Dim maxFinish As Variant
     Dim hasChildRef As Boolean
+    Dim data As Variant
 
+    data = tblWBS.DataBodyRange.Value2
     maxPass = parentRows.Count + 5
     passCount = 0
 
@@ -466,7 +484,7 @@ Private Sub Variance_RollupParentBaselineReferences( _
                 If Not refStartByRow.Exists(CStr(parentKey)) Then
                     refStartByRow(CStr(parentKey)) = minStart
                     refFinishByRow(CStr(parentKey)) = maxFinish
-                    refDurByRow(CStr(parentKey)) = CLng(CDbl(maxFinish) - CDbl(minStart) + 1)
+                    refDurByRow(CStr(parentKey)) = DateDiffWorkingDays(minStart, maxFinish, data(CLng(parentKey), mapWBS(VTS_COL_CAL)))
                     changed = True
 
                 ElseIf CDbl(refStartByRow(CStr(parentKey))) <> CDbl(minStart) _
@@ -474,7 +492,7 @@ Private Sub Variance_RollupParentBaselineReferences( _
 
                     refStartByRow(CStr(parentKey)) = minStart
                     refFinishByRow(CStr(parentKey)) = maxFinish
-                    refDurByRow(CStr(parentKey)) = CLng(CDbl(maxFinish) - CDbl(minStart) + 1)
+                    refDurByRow(CStr(parentKey)) = DateDiffWorkingDays(minStart, maxFinish, data(CLng(parentKey), mapWBS(VTS_COL_CAL)))
                     changed = True
 
                 End If
@@ -506,16 +524,18 @@ Private Sub Variance_BuildOutputArrays( _
     Dim cs As Variant
     Dim cf As Variant
     Dim cd As Variant
+    Dim data As Variant
 
+    data = tblWBS.DataBodyRange.Value2
     ReDim outSV(1 To tblWBS.ListRows.Count, 1 To 1)
     ReDim outFV(1 To tblWBS.ListRows.Count, 1 To 1)
     ReDim outDV(1 To tblWBS.ListRows.Count, 1 To 1)
 
     For r = 1 To tblWBS.ListRows.Count
 
-        cs = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_CALCULATED_START)).value)
-        cf = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_CALCULATED_FINISH)).value)
-        cd = GetCellValue(tblWBS.DataBodyRange.Cells(r, mapWBS(VTS_COL_CALCULATED_DURATION)).value)
+        cs = GetCellValue(data(r, mapWBS(VTS_COL_CALCULATED_START)))
+        cf = GetCellValue(data(r, mapWBS(VTS_COL_CALCULATED_FINISH)))
+        cd = DateDiffWorkingDays(cs, cf, data(r, mapWBS(VTS_COL_CAL)))
 
         If HasValue(cs) And refStartByRow.Exists(CStr(r)) Then
             outSV(r, 1) = CLng(CDbl(cs) - CDbl(refStartByRow(CStr(r))))
@@ -648,67 +668,3 @@ End Function
 ' FR: Analyse Predecessor Token et extrait les informations utiles.
 ' EN: Parses Predecessor Token and extracts useful information.
 '------------------------------------------------------------------------------
-Private Sub ParsePredecessorToken( _
-    ByVal token As String, _
-    ByRef predWbs As String, _
-    ByRef linkType As String, _
-    ByRef lagVal As Double)
-
-    Dim posSS As Long
-    Dim posFF As Long
-    Dim posSign As Long
-    Dim posPlus As Long
-    Dim posMinus As Long
-    Dim logicPos As Long
-
-    token = Trim$(CStr(token))
-    token = Replace(token, ",", ".")
-
-    linkType = "FS"
-    lagVal = 0#
-
-    posSS = InStr(1, UCase$(token), "SS", vbTextCompare)
-    posFF = InStr(1, UCase$(token), "FF", vbTextCompare)
-
-    If posSS > 0 Then
-        logicPos = posSS
-        linkType = "SS"
-        predWbs = Left$(token, logicPos - 1)
-        token = Mid$(token, logicPos + 2)
-    ElseIf posFF > 0 Then
-        logicPos = posFF
-        linkType = "FF"
-        predWbs = Left$(token, logicPos - 1)
-        token = Mid$(token, logicPos + 2)
-    Else
-        posPlus = InStrRev(token, "+")
-        posMinus = InStrRev(token, "-")
-
-        posSign = 0
-        If posPlus > 0 Then posSign = posPlus
-        If posMinus > 0 Then
-            If posMinus > posSign Then posSign = posMinus
-        End If
-
-        If posSign > 0 Then
-            predWbs = Left$(token, posSign - 1)
-            lagVal = CDbl(Mid$(token, posSign))
-        Else
-            predWbs = token
-        End If
-
-        predWbs = NormalizeWBSCode(predWbs)
-        Exit Sub
-    End If
-
-    token = Trim$(token)
-
-    If token <> "" Then
-        If Left$(token, 1) = "+" Or Left$(token, 1) = "-" Then
-            lagVal = CDbl(token)
-        End If
-    End If
-
-    predWbs = NormalizeWBSCode(predWbs)
-
-End Sub

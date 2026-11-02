@@ -67,6 +67,15 @@ InvalidValue:
 
 End Function
 
+' Excel formula adapter: aliases and validation remain owned by NormalizeCalendarType.
+Public Function Calendar_ExcelWeekendPattern(ByVal calendarType As Variant) As String
+    Select Case NormalizeCalendarType(calendarType)
+        Case CALENDAR_5D: Calendar_ExcelWeekendPattern = "0000011"
+        Case CALENDAR_6D: Calendar_ExcelWeekendPattern = "0000001"
+        Case CALENDAR_7D: Calendar_ExcelWeekendPattern = "0000000"
+    End Select
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Indique si Working Day est vrai pour le contexte courant.
 ' EN: Returns whether Working Day is true for the current context.

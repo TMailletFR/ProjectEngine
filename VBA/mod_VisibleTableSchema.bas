@@ -417,8 +417,13 @@ Public Function SchemaStructuredRowReference( _
     ByVal tableKey As String, _
     ByVal columnKey As String) As String
 
-    SchemaStructuredRowReference = "[@[" & _
-        SchemaCurrentColumnTitle(tableKey, columnKey) & "]]"
+    Dim title As String
+    title = SchemaCurrentColumnTitle(tableKey, columnKey)
+    If Len(title) > 0 And Not (title Like "*[!A-Za-z0-9_]*") Then
+        SchemaStructuredRowReference = "[@" & title & "]"
+    Else
+        SchemaStructuredRowReference = "[@[" & title & "]]"
+    End If
 End Function
 
 Private Function SchemaUseFrench( _

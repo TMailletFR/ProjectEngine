@@ -52,15 +52,23 @@ Public Sub VisibleHeaders_RestoreSnapshot(ByVal snapshot As Object)
     Dim tableObject As ListObject
     Dim keys As Variant
     Dim i As Long
+    Dim transactionId As String
 
     If snapshot Is Nothing Then Exit Sub
     tables = snapshot("Tables")
+    transactionId = "RESTORE_" & Format$(Now, "yyyymmddhhnnss")
 
     On Error Resume Next
     For Each tableKey In tables
+          Set tableSnapshot = Nothing
+          Set tableObject = Nothing
         Set tableSnapshot = snapshot(CStr(tableKey))
         Set tableObject = VisibleHeaders_FindTable(CStr(tableKey))
         keys = tableSnapshot("ColumnKeys")
+        For i = LBound(keys) To UBound(keys)
+            tableObject.ListColumns(i + 1).Name = VisibleHeaders_TemporaryTitle( _
+                CStr(tableKey), CStr(tableSnapshot("Key:" & CStr(i + 1))), transactionId)
+        Next i
         For i = LBound(keys) To UBound(keys)
             If tableObject.ListColumns(i + 1).name <> CStr(tableSnapshot("Header:" & CStr(i + 1))) Then
                 tableObject.ListColumns(i + 1).name = CStr(tableSnapshot("Header:" & CStr(i + 1)))
@@ -69,6 +77,33 @@ Public Sub VisibleHeaders_RestoreSnapshot(ByVal snapshot As Object)
         Schema_SetPhysicalHeaderLanguageOverride CStr(tableKey), CStr(tableSnapshot("PhysicalLanguage"))
     Next tableKey
     On Error GoTo 0
+    VisibleHeaders_VerifySnapshot snapshot
+End Sub
+
+Public Sub VisibleHeaders_VerifySnapshot(ByVal snapshot As Object)
+    Dim tableKey As Variant, tbl As ListObject, saved As Object, keys As Variant, i As Long
+    Dim arguments As Object
+    If snapshot Is Nothing Then Exit Sub
+    For Each tableKey In snapshot("Tables")
+        Set saved = snapshot(CStr(tableKey))
+        Set tbl = VisibleHeaders_FindTable(CStr(tableKey))
+        keys = saved("ColumnKeys")
+        If tbl.ListColumns.Count <> UBound(keys) - LBound(keys) + 1 Then
+              Set arguments = TextCatalog_Arguments("Table", CStr(tableKey), "Actual", tbl.ListColumns.Count, "Expected", UBound(keys) - LBound(keys) + 1)
+            Err.Raise VHL_ERROR_BASE + 16, "VisibleHeaders_VerifySnapshot", _
+                PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.COLUMN_COUNT", _
+                      arguments, arguments)
+        End If
+        For i = LBound(keys) To UBound(keys)
+            If StrComp(tbl.ListColumns(i + 1).Name, CStr(saved("Header:" & CStr(i + 1))), vbBinaryCompare) <> 0 Then
+                  Set arguments = TextCatalog_Arguments("Table", CStr(tableKey), "Column", i + 1, "Expected", CStr(saved("Header:" & CStr(i + 1))), "Actual", tbl.ListColumns(i + 1).Name)
+                Err.Raise VHL_ERROR_BASE + 17, "VisibleHeaders_VerifySnapshot", _
+                    PlanningMessageText_Format("VISIBLE_HEADERS.ERROR.RESTORE_FAILED", _
+                          arguments, arguments)
+            End If
+        Next i
+        VisibleHeaders_ValidateTable CStr(tableKey), CStr(saved("PhysicalLanguage"))
+    Next tableKey
 End Sub
 
 Public Function VisibleHeaders_CurrentTableLanguage(ByVal tableKey As String) As String
@@ -166,6 +201,7 @@ Private Sub VisibleHeaders_ApplyTablesFromSnapshot( _
     Dim keys As Variant
     Dim i As Long
     Dim normalizedLanguage As String
+    Dim failureNumber As Long, failureDescription As String
 
     On Error GoTo Failed
 
@@ -205,8 +241,13 @@ Private Sub VisibleHeaders_ApplyTablesFromSnapshot( _
     Exit Sub
 
 Failed:
+    failureNumber = Err.Number
+    failureDescription = Err.Description
+    On Error Resume Next
     VisibleHeaders_RestoreSnapshot snapshot
-    Err.Raise Err.number, "VisibleHeaders_ApplyTablesFromSnapshot", Err.description
+    If Err.Number <> 0 Then failureDescription = failureDescription & vbCrLf & Err.Description
+    On Error GoTo 0
+    Err.Raise failureNumber, "VisibleHeaders_ApplyTablesFromSnapshot", failureDescription
 End Sub
 
 Private Function VisibleHeaders_SnapshotAlreadyInLanguage( _

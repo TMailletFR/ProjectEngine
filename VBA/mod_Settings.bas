@@ -582,6 +582,9 @@ CleanExit:
 
 ApplyFailed:
     errorDescription = Err.source & ": " & Err.description
+    Resume Rollback
+
+Rollback:
     On Error Resume Next
     If headersApplied Then VisibleHeaders_RestoreSnapshot headerSnapshot
     If applyStarted Then Settings_ApplySingleModule moduleKey, oldLanguage
@@ -589,6 +592,9 @@ ApplyFailed:
     ws.Range(CELL_GLOBAL_ACTIVATED).Value2 = oldGlobalActivated
     Settings_RefreshVisuals ws
     Schema_ClearPhysicalHeaderLanguageOverrides
+    Err.Clear
+    VisibleHeaders_VerifySnapshot headerSnapshot
+    If Err.Number <> 0 Then errorDescription = errorDescription & vbCrLf & Err.Description
     On Error GoTo 0
     If stateCaptured Then
         Application.ScreenUpdating = oldScreenUpdating
@@ -703,6 +709,9 @@ CleanExit:
 
 ApplyFailed:
     errorDescription = Err.source & ": " & Err.description
+    Resume Rollback
+
+Rollback:
     On Error Resume Next
     If headersApplied Then VisibleHeaders_RestoreSnapshot headerSnapshot
     If applyStarted Then
@@ -717,6 +726,9 @@ ApplyFailed:
     ws.Range(CELL_GLOBAL_ACTIVATED).Value2 = oldGlobalActivated
     Settings_RefreshVisuals ws
     Schema_ClearPhysicalHeaderLanguageOverrides
+    Err.Clear
+    VisibleHeaders_VerifySnapshot headerSnapshot
+    If Err.Number <> 0 Then errorDescription = errorDescription & vbCrLf & Err.Description
     On Error GoTo 0
     If stateCaptured Then
         Application.ScreenUpdating = oldScreenUpdating
@@ -1729,6 +1741,8 @@ Private Sub Settings_PreflightDateDisplaySurfaces()
     Dim scurveTbl As ListObject
     Dim ch As chart
 
+    Finance_ApplyDateNumberFormat "", True
+
     Set tbl = Settings_RequireTable("WBS", "tbl_WBS")
     Settings_RequireColumns tbl, VTS_TABLE_WBS, Array( _
         VTS_COL_BASELINE_START, VTS_COL_BASELINE_FINISH, VTS_COL_ACTUAL_START, VTS_COL_ACTUAL_FINISH, _
@@ -1775,6 +1789,8 @@ Private Sub Settings_ApplyDateDisplayFormatsForMode(ByVal modeValue As String)
     dateFormat = Settings_DateNumberFormatForMode(modeValue)
     dateTimeFormat = Settings_DateTimeNumberFormatForMode(modeValue)
     compactFormat = Settings_CompactDateNumberFormatForMode(modeValue)
+
+    Finance_ApplyDateNumberFormat dateFormat
 
     Set tbl = Settings_RequireTable("WBS", "tbl_WBS")
     Settings_ApplyTableColumnFormats tbl, VTS_TABLE_WBS, Array( _

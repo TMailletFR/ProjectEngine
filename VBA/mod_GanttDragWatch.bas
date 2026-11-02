@@ -1522,7 +1522,7 @@ Private Function GanttDrag_WrittenCellsContainColumn( _
     If writtenCells Is Nothing Then Exit Function
 
     For Each item In writtenCells
-        If CLng(item.Column) = columnIndex Then
+        If CLng(item("Cell").Column) = columnIndex Then
             GanttDrag_WrittenCellsContainColumn = True
             Exit Function
         End If
@@ -1863,6 +1863,9 @@ Private Sub GanttDrag_WriteTestCell( _
 
     Dim oldEnableEvents As Boolean
     Dim oldInternalWrite As Boolean
+    Dim snapshot As Collection
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
     If targetCell Is Nothing Then Exit Sub
     If writtenCells Is Nothing Then Exit Sub
@@ -1871,24 +1874,33 @@ Private Sub GanttDrag_WriteTestCell( _
     oldInternalWrite = GetGanttInternalWrite()
 
     On Error GoTo CleanExit
+    Set snapshot = New Collection
+    snapshot.Add targetCell, "Cell"
+    snapshot.Add CBool(targetCell.HasFormula), "HasFormula"
+    If targetCell.HasFormula Then
+        snapshot.Add targetCell.Formula, "Content"
+    Else
+        snapshot.Add targetCell.Value2, "Content"
+    End If
     Application.EnableEvents = False
     SetGanttInternalWrite True
 
     targetCell.value = DateValue(testDate)
     If gMetricsEnabled Then gMetricExcelWrites = gMetricExcelWrites + 1
-    writtenCells.Add targetCell
+    writtenCells.Add snapshot
 
 CleanExit:
+    failureNumber = Err.Number
+    failureDescription = Err.Description
     SetGanttInternalWrite oldInternalWrite
     Application.EnableEvents = oldEnableEvents
+    If failureNumber <> 0 Then Err.Raise failureNumber, "GanttDrag_WriteTestCell", failureDescription
 
 End Sub
 
 '------------------------------------------------------------------------------
-' FR: Reinitialise Clear Written Cells dans le perimetre possede par le composant.
-' EN: Resets Clear Written Cells within the state owned by the component.
-' FR - Effet de bord : efface uniquement les donnees ou objets cibles du contrat.
-' EN - Side effect: clears only data or objects targeted by the contract.
+' FR: Restaure les saisies precedentes en cas d'echec de la simulation.
+' EN: Restores previous inputs when the simulation fails.
 '------------------------------------------------------------------------------
 
 Private Sub GanttDrag_ClearWrittenCells(ByVal writtenCells As Collection)
@@ -1896,6 +1908,9 @@ Private Sub GanttDrag_ClearWrittenCells(ByVal writtenCells As Collection)
     Dim oldEnableEvents As Boolean
     Dim oldInternalWrite As Boolean
     Dim item As Variant
+    Dim targetCell As Range
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
     If writtenCells Is Nothing Then Exit Sub
 
@@ -1907,13 +1922,21 @@ Private Sub GanttDrag_ClearWrittenCells(ByVal writtenCells As Collection)
     SetGanttInternalWrite True
 
     For Each item In writtenCells
-        item.ClearContents
+        Set targetCell = item("Cell")
+        If CBool(item("HasFormula")) Then
+            targetCell.Formula = item("Content")
+        Else
+            targetCell.Value2 = item("Content")
+        End If
         If gMetricsEnabled Then gMetricExcelWrites = gMetricExcelWrites + 1
     Next item
 
 CleanExit:
+    failureNumber = Err.Number
+    failureDescription = Err.Description
     SetGanttInternalWrite oldInternalWrite
     Application.EnableEvents = oldEnableEvents
+    If failureNumber <> 0 Then Err.Raise failureNumber, "GanttDrag_ClearWrittenCells", failureDescription
 
 End Sub
 
@@ -1931,7 +1954,7 @@ Private Function GanttDrag_CellList(ByVal cells As Collection) As String
 
     For Each item In cells
         If result <> "" Then result = result & ","
-        result = result & item.Address(False, False)
+        result = result & item("Cell").Address(False, False)
     Next item
 
     GanttDrag_CellList = result

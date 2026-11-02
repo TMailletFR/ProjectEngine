@@ -346,6 +346,7 @@ Private Sub CurrentRexForensic_WriteRexFormulaTerms( _
     Dim tfValue As Variant
     Dim requiredDate As Variant
     Dim candidateFF As Variant
+    Dim analyticsEdge As Long
 
     Set reverseTopo = New Collection
     Set networkFinishById = CompiledNetwork_BuildFinishByIdFromValues(net, rexFinishById)
@@ -374,41 +375,43 @@ Private Sub CurrentRexForensic_WriteRexFormulaTerms( _
             If net.ValidLeafIds.Exists(CStr(succId)) Then
                 linkKey = CStr(succId) & "|" & taskId
                 If net.PredLagBySuccPred.Exists(linkKey) And net.PredTypeBySuccPred.Exists(linkKey) Then
-                    effectiveLag = CDbl(net.PredLagBySuccPred(linkKey))
-                    linkType = CStr(net.PredTypeBySuccPred(linkKey))
-                    succCal = NormalizeCalendarType(dataArr(CLng(net.RowById(CStr(succId))), mapCalc("Cal")))
-
-                    Select Case linkType
-                        Case "SS"
-                            If rexLateStartById.Exists(CStr(succId)) Then
-                                candidateLateStart = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                If Not HasValue(candidateLateFinish) Then
-                                    candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
-                                ElseIf CDbl(AddWorkingDays(candidateLateStart, baselineDuration, taskCal)) < CDbl(candidateLateFinish) Then
-                                    candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                    For analyticsEdge = 0 To CompiledNetwork_EdgeCount(net.PredTypeBySuccPred, linkKey) - 1
+                        effectiveLag = CompiledNetwork_EdgeLag(net.PredLagBySuccPred, linkKey, analyticsEdge)
+                        linkType = CompiledNetwork_EdgeType(net.PredTypeBySuccPred, linkKey, analyticsEdge)
+                        succCal = NormalizeCalendarType(dataArr(CLng(net.RowById(CStr(succId))), mapCalc("Cal")))
+    
+                        Select Case linkType
+                            Case "SS"
+                                If rexLateStartById.Exists(CStr(succId)) Then
+                                    candidateLateStart = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                    If Not HasValue(candidateLateFinish) Then
+                                        candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                                    ElseIf CDbl(AddWorkingDays(candidateLateStart, baselineDuration, taskCal)) < CDbl(candidateLateFinish) Then
+                                        candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                                    End If
                                 End If
-                            End If
-
-                        Case "FF"
-                            If rexLateFinishById.Exists(CStr(succId)) Then
-                                If Not HasValue(candidateLateFinish) Then
-                                    candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
-                                ElseIf CDbl(OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
-                                    candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+    
+                            Case "FF"
+                                If rexLateFinishById.Exists(CStr(succId)) Then
+                                    If Not HasValue(candidateLateFinish) Then
+                                        candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                    ElseIf CDbl(OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
+                                        candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                    End If
                                 End If
-                            End If
-
-                        Case Else
-                            If rexLateStartById.Exists(CStr(succId)) Then
-                                If Not HasValue(candidateLateFinish) Then
-                                    candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
-                                ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
-                                    candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+    
+                            Case Else
+                                If rexLateStartById.Exists(CStr(succId)) Then
+                                    If Not HasValue(candidateLateFinish) Then
+                                        candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                        candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                    ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
+                                        candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                        candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                    End If
                                 End If
-                            End If
-                    End Select
+                        End Select
+                    Next analyticsEdge
                 End If
             End If
         Next succId
@@ -463,41 +466,43 @@ NextBackward:
                 If net.PredLagBySuccPred.Exists(linkKey) And net.PredTypeBySuccPred.Exists(linkKey) Then
                     succRowIndex = CLng(net.RowById(CStr(succId)))
                     succCal = NormalizeCalendarType(dataArr(succRowIndex, mapCalc("Cal")))
-                    effectiveLag = CDbl(net.PredLagBySuccPred(linkKey))
-                    linkType = CStr(net.PredTypeBySuccPred(linkKey))
-                    Select Case linkType
-                        Case "SS"
-                            requiredDate = ApplyLag(rexStartById(targetId), effectiveLag, succCal, "SS")
-                            candidateFF = SignedWorkingDayOffset(requiredDate, rexStartById(CStr(succId)), succCal)
-                        Case "FF"
-                            requiredDate = ApplyLag(rexFinishById(targetId), effectiveLag, succCal, "FF")
-                            candidateFF = SignedWorkingDayOffset(requiredDate, rexFinishById(CStr(succId)), succCal)
-                        Case Else
-                            requiredDate = ApplyLag(rexFinishById(targetId), effectiveLag, succCal, "FS")
-                            candidateFF = SignedWorkingDayOffset(requiredDate, rexStartById(CStr(succId)), succCal)
-                    End Select
-
-                    Print #f, "TARGET_FREE_FLOAT_CANDIDATE" & vbTab & _
-                        CurrentRexForensic_Tsv(targetId) & vbTab & _
-                        CurrentRexForensic_Tsv(CStr(dataArr(rowIndex, mapCalc("WBS")))) & vbTab & _
-                        CurrentRexForensic_Tsv(taskCal) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Start")) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Finish")) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Duration")) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexStartById, targetId)) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexFinishById, targetId)) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexLateStartById, targetId)) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexLateFinishById, targetId)) & vbTab & _
-                        "" & vbTab & "" & vbTab & _
-                        CurrentRexForensic_Tsv(CStr(succId)) & vbTab & _
-                        CurrentRexForensic_Tsv(CStr(dataArr(succRowIndex, mapCalc("WBS")))) & vbTab & _
-                        CurrentRexForensic_Tsv(linkType) & vbTab & _
-                        CStr(effectiveLag) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_ValueText(requiredDate)) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexStartById, CStr(succId))) & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexFinishById, CStr(succId))) & vbTab & _
-                        CurrentRexForensic_Tsv("SignedWorkingDayOffset(RequiredDate,SuccRexDate,SuccCal)") & vbTab & _
-                        CurrentRexForensic_Tsv(CurrentRexForensic_ValueText(candidateFF))
+                    For analyticsEdge = 0 To CompiledNetwork_EdgeCount(net.PredTypeBySuccPred, linkKey) - 1
+                        effectiveLag = CompiledNetwork_EdgeLag(net.PredLagBySuccPred, linkKey, analyticsEdge)
+                        linkType = CompiledNetwork_EdgeType(net.PredTypeBySuccPred, linkKey, analyticsEdge)
+                        Select Case linkType
+                            Case "SS"
+                                requiredDate = ApplyLag(rexStartById(targetId), effectiveLag, succCal, "SS")
+                                candidateFF = SignedWorkingDayOffset(requiredDate, rexStartById(CStr(succId)), succCal)
+                            Case "FF"
+                                requiredDate = ApplyLag(rexFinishById(targetId), effectiveLag, succCal, "FF")
+                                candidateFF = SignedWorkingDayOffset(requiredDate, rexFinishById(CStr(succId)), succCal)
+                            Case Else
+                                requiredDate = ApplyLag(rexFinishById(targetId), effectiveLag, succCal, "FS")
+                                candidateFF = SignedWorkingDayOffset(requiredDate, rexStartById(CStr(succId)), succCal)
+                        End Select
+    
+                        Print #f, "TARGET_FREE_FLOAT_CANDIDATE" & vbTab & _
+                            CurrentRexForensic_Tsv(targetId) & vbTab & _
+                            CurrentRexForensic_Tsv(CStr(dataArr(rowIndex, mapCalc("WBS")))) & vbTab & _
+                            CurrentRexForensic_Tsv(taskCal) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Start")) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Finish")) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_Cell(dataArr, rowIndex, mapCalc, "Baseline Duration")) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexStartById, targetId)) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexFinishById, targetId)) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexLateStartById, targetId)) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexLateFinishById, targetId)) & vbTab & _
+                            "" & vbTab & "" & vbTab & _
+                            CurrentRexForensic_Tsv(CStr(succId)) & vbTab & _
+                            CurrentRexForensic_Tsv(CStr(dataArr(succRowIndex, mapCalc("WBS")))) & vbTab & _
+                            CurrentRexForensic_Tsv(linkType) & vbTab & _
+                            CStr(effectiveLag) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_ValueText(requiredDate)) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexStartById, CStr(succId))) & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_DictValue(rexFinishById, CStr(succId))) & vbTab & _
+                            CurrentRexForensic_Tsv("SignedWorkingDayOffset(RequiredDate,SuccRexDate,SuccCal)") & vbTab & _
+                            CurrentRexForensic_Tsv(CurrentRexForensic_ValueText(candidateFF))
+                    Next analyticsEdge
                 End If
             End If
         Next succId

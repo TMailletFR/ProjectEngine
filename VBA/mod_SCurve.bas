@@ -311,7 +311,7 @@ Public Sub Run_SCurve_Engine(Optional ByVal propagateErrors As Boolean = False)
         includedIds(taskId) = True
         totalRawWeight = totalRawWeight + CDbl(rawWeight)
 
-        If Not HasValue(baselineFinish) Then baselineFinish = CDbl(baselineStart) + CDbl(baselineDuration) - 1
+        If Not HasValue(baselineFinish) Then baselineFinish = AddWorkingDays(baselineStart, baselineDuration, dataCalc(calcRow, mapCalc("Cal")))
         baselineDaily = 1# / CDbl(baselineDuration)
         calculatedDaily = 1# / (CDbl(calcFinish) - CDbl(calcStart) + 1)
 
@@ -413,8 +413,9 @@ NextPass1Row:
         Dim calcDays As Long
         Dim dailyCalcUnit As Double
         Dim dailyBaselineUnit As Double
-        Dim actualDays As Long
-        Dim remainingDays As Long
+        Dim actualDays As Double
+        Dim completedPart As Double
+        Dim rowCalendar As String
         Dim daySerial As Long
         Dim i As Long
 
@@ -433,42 +434,39 @@ NextPass1Row:
         rowCalcFinish = outCalc(r, mapCalcSCurve("SCurve Calculated Finish"))
         rowProgress = ProgressToDoubleLocal(outCalc(r, mapCalcSCurve("SCurve Progress")))
 
-        baselineDays = CLng(CDbl(rowBaselineFinish) - CDbl(rowBaselineStart) + 1)
-        calcDays = CLng(CDbl(rowCalcFinish) - CDbl(rowCalcStart) + 1)
+        rowCalendar = NormalizeCalendarType(dataCalc(CLng(calcRowById(currentId)), mapCalc("Cal")))
+        baselineDays = CLng(DateDiffWorkingDays(rowBaselineStart, rowBaselineFinish, rowCalendar))
+        calcDays = CLng(DateDiffWorkingDays(rowCalcStart, rowCalcFinish, rowCalendar))
 
         dailyBaselineUnit = normWeight / baselineDays
         dailyCalcUnit = normWeight / calcDays
 
-        actualDays = CLng(Fix(calcDays * rowProgress + 0.0000001))
+        actualDays = CDbl(calcDays) * rowProgress
         If actualDays < 0 Then actualDays = 0
         If actualDays > calcDays Then actualDays = calcDays
 
-        remainingDays = calcDays - actualDays
 
         outCalc(r, mapCalcSCurve("SCurve Baseline Daily")) = dailyBaselineUnit
         outCalc(r, mapCalcSCurve("SCurve Calculated Daily")) = dailyCalcUnit
-        outCalc(r, mapCalcSCurve("SCurve Actualized Weight")) = dailyCalcUnit * actualDays
+        outCalc(r, mapCalcSCurve("SCurve Actualized Weight")) = normWeight * rowProgress
 
         For daySerial = CLng(CDbl(rowBaselineStart)) To CLng(CDbl(rowBaselineFinish))
-            AddValueByDate baselineDailyByDate, daySerial, dailyBaselineUnit
+            If IsWorkingDay(daySerial, rowCalendar) Then AddValueByDate baselineDailyByDate, daySerial, dailyBaselineUnit
             allDates(CStr(daySerial)) = True
         Next daySerial
 
-        If actualDays > 0 Then
-            For i = 0 To actualDays - 1
-                daySerial = CLng(CDbl(rowCalcStart)) + i
-                AddValueByDate actualizedDailyByDate, daySerial, dailyCalcUnit
-                allDates(CStr(daySerial)) = True
-            Next i
-        End If
-
-        If remainingDays > 0 Then
-            For i = actualDays To calcDays - 1
-                daySerial = CLng(CDbl(rowCalcStart)) + i
-                AddValueByDate remainingDailyByDate, daySerial, dailyCalcUnit
-                allDates(CStr(daySerial)) = True
-            Next i
-        End If
+        i = 0
+        For daySerial = CLng(CDbl(rowCalcStart)) To CLng(CDbl(rowCalcFinish))
+            allDates(CStr(daySerial)) = True
+            If IsWorkingDay(daySerial, rowCalendar) Then
+                completedPart = actualDays - CDbl(i)
+                If completedPart < 0# Then completedPart = 0#
+                If completedPart > 1# Then completedPart = 1#
+                If completedPart > 0# Then AddValueByDate actualizedDailyByDate, daySerial, dailyCalcUnit * completedPart
+                If completedPart < 1# Then AddValueByDate remainingDailyByDate, daySerial, dailyCalcUnit * (1# - completedPart)
+                i = i + 1
+            End If
+        Next daySerial
 
 NextPass2Row:
     Next r
@@ -559,6 +557,7 @@ Private Sub ValidateSCurveSourceColumns(ByVal mapWBS As Object, ByVal mapCalc As
 
     requiredCalcCols = Array( _
         "ID", _
+        "Cal", _
         "WBS", _
         "Task Type", _
         "Baseline Start", _

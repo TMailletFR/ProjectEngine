@@ -3,7 +3,7 @@ Option Explicit
 
 ' Preserve historical spelling/whitespace: these texts participate in event hashes.
 Public Function TextCatalogDiagnostics_Definitions() As Variant
-    Dim definitions(0 To 255) As Variant
+    Dim definitions(0 To 258) As Variant
     definitions(0) = Array("DIAG.LOE.EXPLICIT.MESSAGE", _
             "LOE used as predecessor" & vbCrLf & vbCrLf & "{Details}" & vbCrLf & vbCrLf & _
             "A LOE is driven by the network but must not drive other tasks." & vbCrLf & vbCrLf & _
@@ -532,6 +532,9 @@ Public Function TextCatalogDiagnostics_Definitions() As Variant
     definitions(253) = Array("DIAG.CONSTRAINT.TYPE.MUST_START_ON_CANONICAL", "Must Start On", "Must Start On")
     definitions(254) = Array("DIAG.CONSTRAINT.TYPE.MUST_FINISH_ON_CANONICAL", "Must Finish On", "Must Finish On")
     definitions(255) = Array("DIAG.COMMON.ID_TASK_LABEL", "ID {Id}", "ID {Id}")
+    definitions(256) = Array("DIAG.DATASYNC.DUPLICATE_ID", "Duplicate task ID: {Value}. Each task must have a unique ID.", "ID de tâche dupliqué : {Value}. Chaque tâche doit avoir un ID unique.")
+    definitions(257) = Array("DIAG.DATASYNC.TASK_ID_INVALID", "Invalid task ID: {Value}. Use a positive integer without leading zeros (maximum 1048575).", "ID de tâche invalide : {Value}. Utilisez un entier positif sans zéro initial (maximum 1048575).")
+    definitions(258) = Array("DIAG.DATASYNC.SYNC_REJECTED", "WBS synchronization was rejected. Correct the reported errors before recalculating.", "La synchronisation WBS a été refusée. Corrigez les erreurs signalées avant de recalculer.")
     TextCatalogDiagnostics_Definitions = definitions
 End Function
 

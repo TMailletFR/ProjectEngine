@@ -160,6 +160,10 @@ End Function
 
 Private Function MigrationData_PhysicalKeys(ByVal tbl As ListObject) As Variant
     Dim keys() As Variant, i As Long
+    If tbl.Name = "tbl_DASHBOARD_SNAPSHOTS" Then
+        MigrationData_PhysicalKeys = Dashboard_SnapshotKeys()
+        Exit Function
+    End If
     ReDim keys(0 To tbl.ListColumns.count - 1)
     For i = 1 To tbl.ListColumns.count
         keys(i - 1) = tbl.ListColumns(i).name
@@ -171,16 +175,19 @@ Private Function MigrationData_ReadBlock(ByVal tbl As ListObject, ByVal keys As 
     Dim block As Object, map As Object, data As Variant, formulas As Variant, output() As Variant
     Dim r As Long, c As Long, n As Long, count As Long, key As String, Index As Long, value As Variant
     Dim summaries As Object, emptyWbsRow As Boolean, hasFormula As Variant, inputFormulas As Object, preservedFormulas As Object, formula As String
+    Dim expectedColumns As Long
     Set block = CreateObject("Scripting.Dictionary")
     If wbs Then Set preservedFormulas = CreateObject("Scripting.Dictionary")
     Set map = MigrationData_ColumnMap(tbl)
     If Not SchemaIsVisibleTable(tbl.name) Then
-        If tbl.ListColumns.count <> UBound(keys) - LBound(keys) + 1 Then Migration_Reject "MIGRATION.PROFILE", tbl.name & " column count"
+        expectedColumns = UBound(keys) - LBound(keys) + 1
+        If tbl.Name = "tbl_DASHBOARD_SNAPSHOTS" And Not map.Exists("AnalyticsStatus") Then expectedColumns = expectedColumns - 1
+        If tbl.ListColumns.count <> expectedColumns Then Migration_Reject "MIGRATION.PROFILE", tbl.name & " column count"
     End If
     For c = LBound(keys) To UBound(keys)
         key = CStr(keys(c))
         If Not map.exists(key) Then
-            If Not (wbs And key = "S") Then Migration_Reject "MIGRATION.PROFILE", tbl.name & ": " & key
+            If Not (wbs And key = "S") And Not (tbl.Name = "tbl_DASHBOARD_SNAPSHOTS" And key = "AnalyticsStatus") Then Migration_Reject "MIGRATION.PROFILE", tbl.name & ": " & key
         End If
     Next c
     count = tbl.ListRows.count
@@ -210,10 +217,12 @@ Private Function MigrationData_ReadBlock(ByVal tbl As ListObject, ByVal keys As 
             Else
                 emptyWbsRow = True
                 For c = LBound(keys) To UBound(keys)
-                    If isError(data(r, map(keys(c)))) Then
-                        emptyWbsRow = False: Exit For
-                    ElseIf Len(CStr(data(r, map(keys(c))))) > 0 Then
-                        emptyWbsRow = False: Exit For
+                    If map.Exists(CStr(keys(c))) Then
+                        If isError(data(r, map(keys(c)))) Then
+                            emptyWbsRow = False: Exit For
+                        ElseIf Len(CStr(data(r, map(keys(c))))) > 0 Then
+                            emptyWbsRow = False: Exit For
+                        End If
                     End If
                 Next c
             End If
@@ -249,6 +258,13 @@ Private Function MigrationData_ReadBlock(ByVal tbl As ListObject, ByVal keys As 
                     If wbs And key = "S" And Not map.exists(key) Then
                             value = UCase$(NormalizeTaskTypeValue(data(r, map("TASK_TYPE"))))
                             output(n, c - LBound(keys) + 1) = IIf(summaries.exists(NormalizeWBS(CStr(data(r, map("WBS"))))) Or value = "MILESTONE", "Y", "N")
+                    End If
+                    If tbl.Name = "tbl_DASHBOARD_SNAPSHOTS" And key = "AnalyticsStatus" Then
+                        If Not map.Exists(key) Then
+                            output(n, c - LBound(keys) + 1) = "UNKNOWN"
+                        ElseIf Len(CStr(output(n, c - LBound(keys) + 1))) = 0 Then
+                            output(n, c - LBound(keys) + 1) = "UNKNOWN"
+                        End If
                     End If
                 Next c
             End If
@@ -338,8 +354,9 @@ Private Sub MigrationData_Validate(ByVal snapshot As Object)
     Set wbsIds = CreateObject("Scripting.Dictionary")
     data = block("Values")
     For r = 1 To CLng(block("Count"))
-        id = CStr(data(r, MigrationData_Index(block, "ID")))
-        If Len(Trim$(id)) = 0 Or ids.exists(id) Then Migration_Reject "MIGRATION.INVALID", "ID " & id
+        If Not CanonicalIdentity_TryTaskId(data(r, MigrationData_Index(block, "ID")), id) Then _
+            Migration_Reject "MIGRATION.INVALID", "ID " & CStr(data(r, MigrationData_Index(block, "ID")))
+        If ids.exists(id) Then Migration_Reject "MIGRATION.INVALID", "ID " & id
         ids.Add id, True
         wbs = CStr(data(r, MigrationData_Index(block, "WBS")))
         If Len(Trim$(wbs)) = 0 Or wbsIds.exists(wbs) Then Migration_Reject "MIGRATION.INVALID", "WBS " & wbs
@@ -357,7 +374,8 @@ Private Sub MigrationData_Validate(ByVal snapshot As Object)
     data = block("Values")
     Set seen = CreateObject("Scripting.Dictionary")
     For r = 1 To CLng(block("Count"))
-        id = CStr(data(r, MigrationData_Index(block, "ID")))
+        If Not CanonicalIdentity_TryTaskId(data(r, MigrationData_Index(block, "ID")), id) Then _
+            Migration_Reject "MIGRATION.INVALID", "Constraint ID " & CStr(data(r, MigrationData_Index(block, "ID")))
         If Not ids.exists(id) Then Migration_Reject "MIGRATION.ORPHAN", id
         If seen.exists(id) Then Migration_Reject "MIGRATION.INVALID", "Constraint ID " & id
         seen.Add id, True
@@ -387,6 +405,10 @@ Private Sub MigrationData_ValidateLedger(ByVal block As Object, ByVal tableName 
                     If Not IsNumeric(id) Then Migration_Reject "MIGRATION.INVALID", "SnapshotId"
                     If CDbl(id) < 1 Or CDbl(id) <> Fix(CDbl(id)) Then Migration_Reject "MIGRATION.INVALID", "SnapshotId"
                     MigrationData_Date data(r, MigrationData_Index(block, "SnapshotDateTime")), "SnapshotDateTime"
+                    Select Case CStr(data(r, MigrationData_Index(block, "AnalyticsStatus")))
+                        Case "ON", "OFF", "UNKNOWN"
+                        Case Else: Migration_Reject "MIGRATION.INVALID", "AnalyticsStatus " & id
+                    End Select
                 Case Else
                     id = CStr(data(r, MigrationData_Index(block, "Event ID")))
                     MigrationData_Date data(r, MigrationData_Index(block, "Timestamp")), "Timestamp"

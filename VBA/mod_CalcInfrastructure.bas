@@ -42,9 +42,13 @@ Public Sub Ensure_Calc_Infrastructure(Optional ByVal consoleMessages As Collecti
     Dim calcSheetWasCreated As Boolean
     Dim calcTableWasCreated As Boolean
     Dim logicTableWasCreated As Boolean
+    Dim previousScreenUpdating As Boolean
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Ensure_Calc_Infrastructure", "Excel Infrastructure")
 
+    previousScreenUpdating = Application.ScreenUpdating
     On Error GoTo ErrHandler
 
     Application.ScreenUpdating = False
@@ -74,14 +78,17 @@ Public Sub Ensure_Calc_Infrastructure(Optional ByVal consoleMessages As Collecti
     End If
 
 SafeExit:
-    Application.ScreenUpdating = True
+    Application.ScreenUpdating = previousScreenUpdating
     Exit Sub
 
 ErrHandler:
-    Application.ScreenUpdating = True
+    failureNumber = Err.Number
+    failureDescription = Err.Description
+    Application.ScreenUpdating = previousScreenUpdating
 
     CalcBridge_AddOrShowConsoleMessage consoleMessages, "STOP", "DIAG.INFRASTRUCTURE.ERROR", _
-        TextCatalog_Arguments("Details", Err.Description)
+        TextCatalog_Arguments("Details", failureDescription)
+    Err.Raise failureNumber, "Ensure_Calc_Infrastructure", failureDescription
 
 End Sub
 

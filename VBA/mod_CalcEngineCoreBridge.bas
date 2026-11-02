@@ -137,6 +137,13 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
                 Debug.Print "NO CHANGE DETECTED - CORE SKIPPED"
 
                 CalcBridge_AppendTaskTypeWarnings consoleMessages, tblWBS, mapWBS, tblCalc, mapCalc
+                If CalcState_GetAnalyticsStatus() <> IIf(IsAnalyticsEnabled(), "ON", "OFF") Then
+                    If IsAnalyticsEnabled() Then
+                        Run_Analytics_Only consoleMessages
+                    Else
+                        Clear_Analytics_Outputs consoleMessages
+                    End If
+                End If
                 Write_CalcState_Snapshot_Console "OK", consoleMessages
 
                 CalcBridge_AddInfoMessage consoleMessages, _
@@ -289,6 +296,7 @@ Public Sub Run_Calc_Engine_CoreBridge(Optional ByVal forceFullRecalcOverride As 
 
 SafeExit:
     If IsMacroAbortRequested() Then
+        CalcState_MarkDirty
         ShowAbortMessageOnce
         EndMacroRun
         Exit Sub

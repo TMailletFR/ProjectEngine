@@ -33,7 +33,7 @@ Private Const COL_TASK As Long = 2
 Private Const COLOR_TASK_BLUE As Long = 12874308
 Private Const COLOR_TASK_CRITICAL As Long = 192
 Private Const COLOR_PROGRESS_GREEN As Long = 4699504
-Private Const COLOR_PROGRESS_ORANGE As Long = 3248093
+Public Const COLOR_PROGRESS_ORANGE As Long = 3248093
 
 Private Const GANTT_VIEW_DETAIL As String = "DETAIL"
 Private Const GANTT_VIEW_SUMMARY As String = "SUMMARY"

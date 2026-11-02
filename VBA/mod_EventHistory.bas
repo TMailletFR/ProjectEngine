@@ -540,6 +540,8 @@ Public Sub SetPlanningWarningAckState( _
     Dim wsHistory As Worksheet
     Dim wsAck As Worksheet
     Dim internalWriteStarted As Boolean
+    Dim tblAck As ListObject, previousValues As Variant, previousCount As Long
+    Dim snapshotTaken As Boolean
 
     Dim errorNumber As Long, errorSource As String, errorDescription As String
 
@@ -549,6 +551,10 @@ Public Sub SetPlanningWarningAckState( _
 
     BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     internalWriteStarted = True
+    Set tblAck = wsAck.ListObjects(EVENT_ACK_TABLE)
+    previousCount = tblAck.ListRows.Count
+    If Not tblAck.DataBodyRange Is Nothing Then previousValues = tblAck.DataBodyRange.Formula
+    snapshotTaken = True
 
     ackTokens = PlanningMessage_BuildAckTokens(item)
     tokens = Split(ackTokens, ";")
@@ -564,19 +570,50 @@ Public Sub SetPlanningWarningAckState( _
     Next oneToken
 
     item("Acknowledged") = PlanningMessage_IsAcknowledged(item)
-    Refresh_EventHistory_View
+    Refresh_EventHistory_View True, True
 
 SafeExit:
+    If errorNumber <> 0 And snapshotTaken Then
+        On Error Resume Next
+        RestorePlanningAckRows tblAck, previousValues, previousCount
+        If Err.Number = 0 Then
+            item("Acknowledged") = PlanningMessage_IsAcknowledged(item, False)
+            Refresh_EventHistory_View True, True
+        End If
+        If Err.Number <> 0 Then errorDescription = errorDescription & vbCrLf & "ROLLBACK: " & Err.Description
+        On Error GoTo 0
+    End If
     If internalWriteStarted Then
         EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
     End If
     If errorNumber <> 0 And propagateErrors Then
         Err.Raise errorNumber, errorSource, errorDescription
     End If
+    If errorNumber <> 0 Then CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "SetPlanningWarningAckState", "Details", errorDescription)
     Exit Sub
 Failed:
     errorNumber = Err.Number: errorSource = Err.Source: errorDescription = Err.Description
     Resume SafeExit
+End Sub
+
+Private Sub RestorePlanningAckRows(ByVal tbl As ListObject, ByRef previousValues As Variant, ByVal previousCount As Long)
+    Dim actual As Variant, r As Long, c As Long
+    ClearPlanningEventTableRows tbl
+    If previousCount > 0 Then
+        tbl.Resize tbl.HeaderRowRange.Resize(previousCount + 1, tbl.ListColumns.Count)
+        If tbl.DataBodyRange Is Nothing Then tbl.ListRows.Add
+        If tbl.ListRows.Count <> previousCount Then Err.Raise 5, , "ACK_RESTORE_ROW_COUNT"
+        tbl.DataBodyRange.Formula = previousValues
+        actual = tbl.DataBodyRange.Formula
+        For r = 1 To previousCount
+            For c = 1 To tbl.ListColumns.Count
+                If Not DataSync_ValuesEqual(actual(r, c), previousValues(r, c)) Then Err.Raise 5, , "ACK_RESTORE_CONTENT"
+            Next c
+        Next r
+    ElseIf tbl.ListRows.Count <> 0 Then
+        Err.Raise 5, , "ACK_RESTORE_EMPTY_FAILED"
+    End If
 End Sub
 
 '------------------------------------------------------------------------------
@@ -968,6 +1005,8 @@ Public Function LogPlanningEvent( _
     Dim errorNumber As Long
     Dim errorSource As String
     Dim errorDescription As String
+    Dim eventValues() As Variant
+    Dim ownedRowIndex As Long
 
     On Error GoTo CleanFail
     If Trim$(severity) = "" Then Err.Raise 5, "LogPlanningEvent", "Severity is required."
@@ -980,8 +1019,8 @@ Public Function LogPlanningEvent( _
     enDetails = TrimPlanningMessageLineEdges(enDetails)
     normalizedWbs = NormalizeWBS(wbsValue)
 
-    internalWriteStarted = True
     BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
+    internalWriteStarted = True
     Set tblAlarm = wsAlarm.ListObjects(CALC_ALARM_TABLE)
     Set tblHistory = wsHistory.ListObjects(EVENT_HISTORY_TABLE)
 
@@ -993,30 +1032,31 @@ Public Function LogPlanningEvent( _
             sourceProcedure, sourceSheet, sourceTable, taskId, normalizedWbs, taskName)
     End If
 
+    ownedRowIndex = tblAlarm.ListRows.Count + 1
     Set alarmRow = tblAlarm.ListRows.Add
     eventId = BuildPlanningEventId(tblAlarm.ListRows.Count, eventTs)
-    With alarmRow.Range
-        .Cells(1, 1).value = eventId
-        .Cells(1, 2).value = gPlanningEventRunId
-        .Cells(1, 3).value = eventTs
-        .Cells(1, 4).value = dateValue(eventTs)
-        .Cells(1, 5).value = TimeValue(eventTs)
-        .Cells(1, 6).value = UCase$(Trim$(severity))
-        .Cells(1, 7).value = Trim$(eventType)
-        .Cells(1, 8).value = finalHash
-        .Cells(1, 9).value = False
-        .Cells(1, 10).value = Trim$(sourceSheet)
-        .Cells(1, 11).value = Trim$(sourceTable)
-        .Cells(1, 12).value = Trim$(taskId)
-        .Cells(1, 13).NumberFormat = "@"
-        .Cells(1, 13).value = normalizedWbs
-        .Cells(1, 14).value = Trim$(taskName)
-        .Cells(1, 15).value = frMessage
-        .Cells(1, 16).value = enMessage
-        .Cells(1, 17).value = frDetails
-        .Cells(1, 18).value = enDetails
-        .Cells(1, 19).value = Trim$(sourceProcedure)
-    End With
+    ReDim eventValues(1 To 1, 1 To 19)
+    eventValues(1, 1) = eventId
+    eventValues(1, 2) = gPlanningEventRunId
+    eventValues(1, 3) = CDbl(eventTs)
+    eventValues(1, 4) = CDbl(DateValue(eventTs))
+    eventValues(1, 5) = CDbl(TimeValue(eventTs))
+    eventValues(1, 6) = UCase$(Trim$(severity))
+    eventValues(1, 7) = Trim$(eventType)
+    eventValues(1, 8) = finalHash
+    eventValues(1, 9) = False
+    eventValues(1, 10) = Trim$(sourceSheet)
+    eventValues(1, 11) = Trim$(sourceTable)
+    eventValues(1, 12) = Trim$(taskId)
+    eventValues(1, 13) = normalizedWbs
+    eventValues(1, 14) = Trim$(taskName)
+    eventValues(1, 15) = frMessage
+    eventValues(1, 16) = enMessage
+    eventValues(1, 17) = frDetails
+    eventValues(1, 18) = enDetails
+    eventValues(1, 19) = Trim$(sourceProcedure)
+    alarmRow.Range.Cells(1, 13).NumberFormat = "@"
+    alarmRow.Range.Value2 = eventValues
 
     If refreshView Then
         Refresh_EventHistory_View True, True
@@ -1042,9 +1082,31 @@ CleanFail:
     errorNumber = Err.Number
     errorSource = Err.Source
     errorDescription = Err.Description
-    Resume CleanExit
+    If Not alarmRow Is Nothing Then
+        On Error Resume Next
+        DeleteOwnedPlanningEventTail tblAlarm, ownedRowIndex, eventId, finalHash, True
+        If Err.Number = 0 Then
+            If refreshView Then Refresh_EventHistory_View True, True
+        End If
+        If Err.Number <> 0 Then errorDescription = errorDescription & vbCrLf & "ROLLBACK: " & Err.Description
+        On Error GoTo 0
+    End If
+    GoTo CleanExit
 
 End Function
+
+Private Sub DeleteOwnedPlanningEventTail(ByVal tbl As ListObject, ByVal ownedRowIndex As Long, _
+    ByVal eventId As String, ByVal eventHash As String, Optional ByVal allowIncomplete As Boolean = False)
+    Dim last As Range, actualId As String, actualHash As String
+    If Not (tbl.Parent.Parent Is ThisWorkbook) Then Err.Raise 5, , "EVENT_WORKBOOK_IDENTITY_MISMATCH"
+    If ownedRowIndex < 1 Or tbl.ListRows.Count <> ownedRowIndex Then Err.Raise 5, , "EVENT_TAIL_OWNERSHIP_MISMATCH"
+    Set last = tbl.ListRows(ownedRowIndex).Range
+    actualId = CStr(last.Cells(1, 1).Value2): actualHash = CStr(last.Cells(1, 8).Value2)
+    If actualId <> eventId And Not (allowIncomplete And actualId = "") Then Err.Raise 5, , "EVENT_IDENTITY_MISMATCH"
+    If actualHash <> eventHash And Not (allowIncomplete And actualHash = "") Then Err.Raise 5, , "EVENT_HASH_MISMATCH"
+    tbl.ListRows(ownedRowIndex).Delete
+    If tbl.ListRows.Count <> ownedRowIndex - 1 Then Err.Raise 5, , "EVENT_TAIL_DELETE_FAILED"
+End Sub
 
 ' The migration owns the following workbook save; only its unsaved tail event
 ' can be cancelled. Existing ledger rows and ACK records are never rewritten.
@@ -1066,7 +1128,7 @@ Public Sub PlanningEvents_DiscardUncommittedMigrationReceipt(ByVal receipt As Ob
         Or CStr(last.Cells(1, 19).Value2) <> "Migration_ImportFile" Then
         Err.Raise 5, , "PENDING_EVENT_IDENTITY_MISMATCH"
     End If
-    tbl.ListRows(tbl.ListRows.Count).Delete
+    DeleteOwnedPlanningEventTail tbl, tbl.ListRows.Count, CStr(receipt("EventId")), CStr(receipt("Hash"))
     Refresh_EventHistory_View True, True
 Cleanup:
     If internalWriteStarted Then EndPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
@@ -1156,9 +1218,9 @@ Private Sub LogPlanningConsoleMessages( _
     If consoleMessages Is Nothing Then Exit Sub
     If consoleMessages.Count = 0 Then Exit Sub
 
-    internalWriteStarted = True
     On Error GoTo CleanFail
     BeginPlanningEventInternalWrite wsAlarm, wsHistory, wsAck
+    internalWriteStarted = True
     EnsurePlanningEventRunId sourceProcedure
 
     For Each item In consoleMessages
@@ -2450,7 +2512,12 @@ Private Sub BeginPlanningEventInternalWrite( _
     ByRef wsHistory As Worksheet, _
     ByRef wsAck As Worksheet)
 
+    Dim failureNumber As Long
+    Dim failureDescription As String
+    Dim failureSource As String
+
     gEventHistoryInternalWriteDepth = gEventHistoryInternalWriteDepth + 1
+    On Error GoTo Failed
 
     If Not IsPlanningEventInfrastructureReady() Then
         EnsurePlanningEventHistoryInfrastructure
@@ -2459,6 +2526,14 @@ Private Sub BeginPlanningEventInternalWrite( _
     Set wsAlarm = ThisWorkbook.Worksheets(CALC_ALARM_SHEET)
     Set wsHistory = ThisWorkbook.Worksheets(EVENT_HISTORY_SHEET)
     Set wsAck = ThisWorkbook.Worksheets(EVENT_ACK_SHEET)
+    Exit Sub
+
+Failed:
+    failureNumber = Err.Number
+    failureDescription = Err.Description
+    failureSource = Err.Source
+    gEventHistoryInternalWriteDepth = gEventHistoryInternalWriteDepth - 1
+    Err.Raise failureNumber, failureSource, failureDescription
 
 End Sub
 
@@ -2492,6 +2567,8 @@ Private Function IsPlanningEventInfrastructureReady() As Boolean
     Dim tblAlarm As ListObject
     Dim tblHistory As ListObject
     Dim tblAck As ListObject
+    Dim historyColumns As Object
+    Dim ackColumns As Object
 
     On Error GoTo SafeExit
 
@@ -2501,13 +2578,15 @@ Private Function IsPlanningEventInfrastructureReady() As Boolean
     Set tblAlarm = wsAlarm.ListObjects(CALC_ALARM_TABLE)
     Set tblHistory = wsHistory.ListObjects(EVENT_HISTORY_TABLE)
     Set tblAck = wsAck.ListObjects(EVENT_ACK_TABLE)
+    Set historyColumns = SchemaBuildColumnKeyMap(tblHistory, VTS_TABLE_EVENT_HISTORY)
+    Set ackColumns = SchemaBuildColumnKeyMap(tblAck, VTS_TABLE_EVENT_ACK)
 
     IsPlanningEventInfrastructureReady = _
         TableHasColumn(tblAlarm, "Event ID") And _
         TableHasColumn(tblAlarm, "Source Procedure") And _
-        TableHasColumn(tblHistory, "Acknowledged") And _
-        TableHasColumn(tblAck, "Hash") And _
-        TableHasColumn(tblAck, "EN Message")
+        historyColumns.Exists(VTS_COL_ACKNOWLEDGED) And _
+        ackColumns.Exists(VTS_COL_HASH) And _
+        ackColumns.Exists(VTS_COL_EN_MESSAGE)
 
 SafeExit:
 End Function

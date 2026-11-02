@@ -83,6 +83,8 @@ Public Function CompileExecutionNetwork( _
     Dim topoId As Variant
     Dim componentRoot As Long
     Dim componentCount As Long
+    Dim edgeKeys As Object
+    Dim analyticsEdge As Long
 
     Set perfScope = Profiler_BeginScope("CompileExecutionNetwork", "Network Compile")
 
@@ -107,6 +109,7 @@ Public Function CompileExecutionNetwork( _
     Set analyticsChildrenById = CompiledNetwork_CreateEmptyCollections(validLeafIds)
     Set predLagBySuccPred = CreateObject("Scripting.Dictionary")
     Set predTypeBySuccPred = CreateObject("Scripting.Dictionary")
+    Set edgeKeys = CreateObject("Scripting.Dictionary")
 
     For Each succId In linksBySuccId.Keys
         If validLeafIds.Exists(CStr(succId)) Then
@@ -116,11 +119,8 @@ Public Function CompileExecutionNetwork( _
                     linkType = Core_GetLinkType(oneLink)
                     If linkType = "FS" Or linkType = "SS" Or linkType = "FF" Then
                         linkLag = Core_GetLinkLag(oneLink)
-                        linkKey = CStr(succId) & "|" & predId
-                        predLagBySuccPred(linkKey) = linkLag
-                        predTypeBySuccPred(linkKey) = linkType
-                        analyticsPredsById(CStr(succId)).Add predId
-                        analyticsChildrenById(predId).Add CStr(succId)
+                        CompiledNetwork_AddAnalyticsEdge analyticsPredsById, analyticsChildrenById, _
+                            predLagBySuccPred, predTypeBySuccPred, edgeKeys, CStr(succId), predId, linkType, linkLag
                     End If
                 End If
             Next oneLink
@@ -209,7 +209,11 @@ Public Function CompileExecutionNetwork( _
     For nodeIndex = 1 To rowById.Count
         predOffsets(nodeIndex) = edgeIndex + 1
         idVal = nodeIds(nodeIndex)
-        If analyticsPredsById.Exists(idVal) Then edgeIndex = edgeIndex + analyticsPredsById(idVal).Count
+        If analyticsPredsById.Exists(idVal) Then
+            For Each topoId In analyticsPredsById(idVal)
+                edgeIndex = edgeIndex + CompiledNetwork_EdgeCount(predTypeBySuccPred, idVal & "|" & CStr(topoId))
+            Next topoId
+        End If
     Next nodeIndex
     predOffsets(rowById.Count + 1) = edgeIndex + 1
 
@@ -228,12 +232,14 @@ Public Function CompileExecutionNetwork( _
         idVal = nodeIds(nodeIndex)
         If analyticsPredsById.Exists(idVal) Then
             For Each topoId In analyticsPredsById(idVal)
-                edgeIndex = edgeIndex + 1
-                predNodes(edgeIndex) = CLng(nodeIndexById(CStr(topoId)))
-                CompiledNetwork_Union componentParents, nodeIndex, predNodes(edgeIndex)
                 linkKey = idVal & "|" & CStr(topoId)
-                predTypes(edgeIndex) = CStr(predTypeBySuccPred(linkKey))
-                predLags(edgeIndex) = CDbl(predLagBySuccPred(linkKey))
+                For analyticsEdge = 0 To CompiledNetwork_EdgeCount(predTypeBySuccPred, linkKey) - 1
+                    edgeIndex = edgeIndex + 1
+                    predNodes(edgeIndex) = CLng(nodeIndexById(CStr(topoId)))
+                    CompiledNetwork_Union componentParents, nodeIndex, predNodes(edgeIndex)
+                    predTypes(edgeIndex) = CompiledNetwork_EdgeType(predTypeBySuccPred, linkKey, analyticsEdge)
+                    predLags(edgeIndex) = CompiledNetwork_EdgeLag(predLagBySuccPred, linkKey, analyticsEdge)
+                Next analyticsEdge
             Next topoId
         End If
     Next nodeIndex
@@ -431,7 +437,7 @@ Public Function CompiledNetwork_BuildSemanticAnalyticsViewsFromValues( _
                             End If
                         End If
                     Else
-                        CompiledNetwork_AddSemanticEdge predsById, childrenById, lagByEdge, typeByEdge, edgeKeys, _
+                        CompiledNetwork_AddAnalyticsEdge predsById, childrenById, lagByEdge, typeByEdge, edgeKeys, _
                             succId, predId, linkType, CDbl(predLags(edgeIndex))
                     End If
                 End If
@@ -444,7 +450,7 @@ Public Function CompiledNetwork_BuildSemanticAnalyticsViewsFromValues( _
                     Set members = groupMembers(CStr(group))
                 End If
                 For Each member In members
-                    CompiledNetwork_AddSemanticEdge predsById, childrenById, lagByEdge, typeByEdge, edgeKeys, _
+                    CompiledNetwork_AddAnalyticsEdge predsById, childrenById, lagByEdge, typeByEdge, edgeKeys, _
                         succId, CStr(member), CStr(groupTypes(CStr(group))), CDbl(groupLags(CStr(group)))
                 Next member
             Next group
@@ -459,7 +465,7 @@ Public Function CompiledNetwork_BuildSemanticAnalyticsViewsFromValues( _
 
 End Function
 
-Private Sub CompiledNetwork_AddSemanticEdge( _
+Public Sub CompiledNetwork_AddAnalyticsEdge( _
     ByVal predsById As Object, _
     ByVal childrenById As Object, _
     ByVal lagByEdge As Object, _
@@ -472,17 +478,48 @@ Private Sub CompiledNetwork_AddSemanticEdge( _
 
     Dim edgeKey As String
     Dim semanticKey As String
+    Dim lags As Variant, types As Variant
+    Dim count As Long
 
     edgeKey = succId & "|" & predId
     semanticKey = edgeKey & "|" & linkType & "|" & CStr(lagValue)
     If edgeKeys.Exists(semanticKey) Then Exit Sub
     edgeKeys(semanticKey) = True
-    predsById(succId).Add predId
-    childrenById(predId).Add succId
-    lagByEdge(edgeKey) = lagValue
-    typeByEdge(edgeKey) = linkType
+    If lagByEdge.Exists(edgeKey) Then
+        lags = lagByEdge(edgeKey): types = typeByEdge(edgeKey)
+        count = UBound(lags) + 1
+        ReDim Preserve lags(0 To count)
+        ReDim Preserve types(0 To count)
+        lags(count) = lagValue: types(count) = linkType
+    Else
+        lags = Array(lagValue): types = Array(linkType)
+        If Not predsById.Exists(succId) Then Set predsById(succId) = New Collection
+        If Not childrenById.Exists(predId) Then Set childrenById(predId) = New Collection
+        predsById(succId).Add predId
+        childrenById(predId).Add succId
+    End If
+    lagByEdge(edgeKey) = lags
+    typeByEdge(edgeKey) = types
 
 End Sub
+
+Public Function CompiledNetwork_EdgeCount(ByVal typesByPair As Object, ByVal pairKey As String) As Long
+    Dim values As Variant
+    values = typesByPair(pairKey)
+    CompiledNetwork_EdgeCount = UBound(values) - LBound(values) + 1
+End Function
+
+Public Function CompiledNetwork_EdgeType(ByVal typesByPair As Object, ByVal pairKey As String, ByVal index As Long) As String
+    Dim values As Variant
+    values = typesByPair(pairKey)
+    CompiledNetwork_EdgeType = CStr(values(index))
+End Function
+
+Public Function CompiledNetwork_EdgeLag(ByVal lagsByPair As Object, ByVal pairKey As String, ByVal index As Long) As Double
+    Dim values As Variant
+    values = lagsByPair(pairKey)
+    CompiledNetwork_EdgeLag = CDbl(values(index))
+End Function
 
 Public Function CompiledNetwork_BuildCurrentFinishById( _
     ByVal executionNetwork As clsCompiledExecutionNetwork, _

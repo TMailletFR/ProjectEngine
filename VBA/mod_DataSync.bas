@@ -50,6 +50,7 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     Dim wbsData As Variant
     Dim inputColumns As Object
     Dim missingIdRows As Object
+    Dim sortedIds As Variant, retainedOutputs As Object
 
     Dim i As Long
     Dim r As Long
@@ -230,22 +231,29 @@ Sub Sync_WBS_To_CALC(Optional ByVal preserveCalcOutputs As Boolean = False)
     'once before constructing CALC so the observable legacy result is preserved.
     If Not tblWBS.DataBodyRange Is Nothing Then wbsData = tblWBS.DataBodyRange.value
 
-    targetRows = maxId
+    targetRows = wbsIdRows.Count
 
     If targetRows = 0 Then
         DataSync_ResizeCalcTable tblCalc, 0, resizeOperations
         GoTo SafeExit
     End If
 
+    sortedIds = wbsIdRows.Keys
+    DataSync_SortTaskIds sortedIds, LBound(sortedIds), UBound(sortedIds)
+    If preserveCalcOutputs Then Set retainedOutputs = DataSync_RetainedOutputs(tblCalc, mapCalc, sortedIds, colsToClear)
     DataSync_ResizeCalcTable tblCalc, targetRows, resizeOperations
 
     DataSync_BuildCalcInputColumns _
         wbsData, mapWBS, mapCalc, wbsIdRows, summaryWbsByWbs, _
-        targetRows, colsToCopy, inputColumns, missingIdRows
+        targetRows, sortedIds, colsToCopy, inputColumns, missingIdRows
 
-    DataSync_WriteCalcInputBlocks _
+    DataSync_WriteCalcColumnBlocks _
         tblCalc, mapCalc, inputColumns, _
         valueBlockWrites, skippedValueBlocks
+
+    If Not retainedOutputs Is Nothing Then
+        DataSync_WriteCalcColumnBlocks tblCalc, mapCalc, retainedOutputs, valueBlockWrites, skippedValueBlocks
+    End If
 
     DataSync_ApplyCalcInputFormats tblCalc, formatRangeWrites
 
@@ -286,7 +294,13 @@ SafeExit:
 
     If Not consoleMessages Is Nothing Then
         CalcBridge_ShowPlanningConsole consoleMessages
+        If consoleMessages.Count > 0 And errorNumber = 0 Then
+            errorNumber = vbObjectError + 2103
+            errorDescription = PlanningMessageText_Format("DIAG.DATASYNC.SYNC_REJECTED")
+        End If
     End If
+
+    If errorNumber <> 0 Then Err.Raise errorNumber, "Sync_WBS_To_CALC", errorDescription
 
 End Sub
 
@@ -350,24 +364,23 @@ Private Function DataSync_IndexWBSRows( _
         wbsValue = Replace$(Trim$(CStr(wbsData(r, mapWBS(VTS_COL_WBS)))), ",", ".")
 
         If Trim$(CStr(idValue)) <> "" Then
-            If Not IsNumeric(idValue) Then
+            If Not CanonicalIdentity_TryTaskId(idValue, idKey) Then
                 DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                    "DIAG.DATASYNC.NON_NUMERIC_ID", _
+                    "DIAG.DATASYNC.TASK_ID_INVALID", _
                     TextCatalog_Arguments("Value", CStr(idValue))
                 DataSync_IndexWBSRows = -1
                 Exit Function
             End If
 
-            idNumber = CLng(idValue)
-            If idNumber < 1 Then
+            idNumber = CLng(idKey)
+            If wbsIdRows.Exists(idKey) Then
                 DataSync_AddConsoleMessage consoleMessages, "STOP", _
-                    "DIAG.DATASYNC.INVALID_ID", _
+                    "DIAG.DATASYNC.DUPLICATE_ID", _
                     TextCatalog_Arguments("Value", CStr(idValue))
                 DataSync_IndexWBSRows = -1
                 Exit Function
             End If
 
-            idKey = CStr(idNumber)
             wbsIdRows(idKey) = r
             If idNumber > DataSync_IndexWBSRows Then DataSync_IndexWBSRows = idNumber
 
@@ -390,16 +403,77 @@ End Function
 ' FR: Redimensionne tbl_CALC en une operation lorsque la taille cible change.
 ' EN: Resizes tbl_CALC in one operation when the target size changes.
 '------------------------------------------------------------------------------
+Private Sub DataSync_SortTaskIds(ByRef ids As Variant, ByVal first As Long, ByVal last As Long)
+    Dim left As Long, right As Long, pivot As Long, swap As Variant
+    left = first: right = last: pivot = CLng(ids((first + last) \ 2))
+    Do While left <= right
+        Do While CLng(ids(left)) < pivot: left = left + 1: Loop
+        Do While CLng(ids(right)) > pivot: right = right - 1: Loop
+        If left <= right Then
+            swap = ids(left): ids(left) = ids(right): ids(right) = swap
+            left = left + 1: right = right - 1
+        End If
+    Loop
+    If first < right Then DataSync_SortTaskIds ids, first, right
+    If left < last Then DataSync_SortTaskIds ids, left, last
+End Sub
+
+Private Function DataSync_RetainedOutputs(ByVal tbl As ListObject, ByVal columns As Object, ByVal ids As Variant, ByVal outputKeys As Variant) As Object
+    Dim oldIds As Variant, oldData As Variant, values() As Variant, oldRows As Object, snapshot As Object
+    Dim r As Long, key As Variant, sameLayout As Boolean, value As Variant, count As Long
+    Dim result As Object
+    count = UBound(ids) - LBound(ids) + 1
+    sameLayout = (tbl.ListRows.Count = count)
+    If sameLayout Then
+        oldIds = tbl.ListColumns("ID").DataBodyRange.Value2
+        For r = 1 To count
+            If count = 1 Then value = oldIds Else value = oldIds(r, 1)
+            If IsError(value) Then
+                sameLayout = False: Exit For
+            ElseIf Trim$(CStr(value)) <> CStr(ids(r - 1)) Then
+                sameLayout = False: Exit For
+            End If
+        Next r
+    End If
+    If sameLayout Then Exit Function
+
+    Set result = CreateObject("Scripting.Dictionary")
+    Set oldRows = CreateObject("Scripting.Dictionary")
+    If Not tbl.DataBodyRange Is Nothing Then
+        oldData = tbl.DataBodyRange.Value2
+        Set oldRows = Core_BuildRowById(oldData, columns)
+    End If
+    ' Relocation retains derived values by identity, never by physical position.
+    For Each key In outputKeys
+        If columns.Exists(CStr(key)) Then
+            ReDim values(1 To count, 1 To 1)
+            For r = 1 To count
+                If oldRows.Exists(CStr(ids(r - 1))) Then values(r, 1) = oldData(CLng(oldRows(CStr(ids(r - 1)))), columns(CStr(key)))
+            Next r
+            result(CStr(key)) = values
+        End If
+    Next key
+    For r = 1 To count
+        If Not oldRows.Exists(CStr(ids(r - 1))) Then
+            If snapshot Is Nothing Then Set snapshot = CalcState_GetSignatureByIdMap()
+            If snapshot.Exists(CStr(ids(r - 1))) Then CalcState_MarkDirty
+        End If
+    Next r
+    Set DataSync_RetainedOutputs = result
+End Function
+
 Private Sub DataSync_ResizeCalcTable( _
     ByVal tblCalc As ListObject, _
     ByVal targetRows As Long, _
     ByRef resizeCount As Long)
 
     Dim targetRange As Range
+    Dim previousRows As Long
 
     If tblCalc Is Nothing Then Exit Sub
     If targetRows < 0 Then targetRows = 0
     If tblCalc.ListRows.Count = targetRows Then Exit Sub
+    previousRows = tblCalc.ListRows.Count
 
     If targetRows = 0 Then
         Do While tblCalc.ListRows.Count > 0
@@ -412,6 +486,14 @@ Private Sub DataSync_ResizeCalcTable( _
     Set targetRange = tblCalc.HeaderRowRange.Cells(1, 1).Resize( _
         targetRows + 1, tblCalc.ListColumns.Count)
     tblCalc.Resize targetRange
+    If tblCalc.ListRows.Count < targetRows Then tblCalc.ListRows.Add
+    If tblCalc.ListRows.Count <> targetRows Or tblCalc.DataBodyRange Is Nothing Then
+        Err.Raise 5, "DataSync_ResizeCalcTable", "CALC_RESIZE_INCOMPLETE"
+    End If
+    If previousRows > targetRows Then
+        tblCalc.HeaderRowRange.Cells(1, 1).Offset(targetRows + 1, 0).Resize( _
+            previousRows - targetRows, tblCalc.ListColumns.Count).ClearContents
+    End If
     resizeCount = resizeCount + 1
 
 End Sub
@@ -427,6 +509,7 @@ Private Sub DataSync_BuildCalcInputColumns( _
     ByVal wbsIdRows As Object, _
     ByVal summaryWbsByWbs As Object, _
     ByVal targetRows As Long, _
+    ByVal sortedIds As Variant, _
     ByVal copiedColumns As Variant, _
     ByVal inputColumns As Object, _
     ByVal missingIdRows As Object)
@@ -442,7 +525,7 @@ Private Sub DataSync_BuildCalcInputColumns( _
 
     ReDim columnValues(1 To targetRows, 1 To 1)
     For calcRow = 1 To targetRows
-        columnValues(calcRow, 1) = calcRow
+        columnValues(calcRow, 1) = CLng(sortedIds(calcRow - 1))
     Next calcRow
     inputColumns("ID") = columnValues
 
@@ -457,8 +540,8 @@ Private Sub DataSync_BuildCalcInputColumns( _
         ReDim columnValues(1 To targetRows, 1 To 1)
 
         For calcRow = 1 To targetRows
-            If wbsIdRows.Exists(CStr(calcRow)) Then
-                wbsRow = CLng(wbsIdRows(CStr(calcRow)))
+            If wbsIdRows.Exists(CStr(sortedIds(calcRow - 1))) Then
+                wbsRow = CLng(wbsIdRows(CStr(sortedIds(calcRow - 1))))
                 sourceValue = wbsData(wbsRow, mapWBS(CStr(columnKey)))
 
                 Select Case CStr(columnKey)
@@ -503,7 +586,7 @@ End Sub
 ' FR: Ecrit les colonnes d'entree CALC par groupes contigus seulement si elles divergent.
 ' EN: Writes CALC input columns in contiguous groups only when they differ.
 '------------------------------------------------------------------------------
-Private Sub DataSync_WriteCalcInputBlocks( _
+Private Sub DataSync_WriteCalcColumnBlocks( _
     ByVal tblCalc As ListObject, _
     ByVal mapCalc As Object, _
     ByVal inputColumns As Object, _

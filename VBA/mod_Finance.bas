@@ -1544,6 +1544,23 @@ Public Function Finance_Table(ByVal name As String, Optional ByVal wb As Workboo
     Set Finance_Table = wb.Worksheets("FINANCE").ListObjects(name)
 End Function
 
+' Date-only projection shared by Finance presentation and Settings; no calculation.
+Public Sub Finance_ApplyDateNumberFormat(ByVal dateFormat As String, Optional ByVal validateOnly As Boolean = False)
+    Dim tbl As ListObject, map As Object, key As Variant, dates As Range, target As Range
+    Set tbl = Finance_Table(FIN_TABLE): Set map = Finance_Map(tbl)
+    For Each key In Array("START", "FINISH")
+        Set target = tbl.ListColumns(CLng(map(key))).Range
+        If dates Is Nothing Then Set dates = target Else Set dates = Union(dates, target)
+    Next key
+    Set tbl = Finance_Table(FIN_EXPENSES): Set map = Finance_Map(tbl)
+    Set dates = Union(dates, tbl.ListColumns(CLng(map("DATE"))).Range)
+    If Not mExpenseTable Is Nothing Then
+        Set target = mExpenseTable.ListColumns(2).Range
+        If Not validateOnly Then target.NumberFormat = dateFormat
+    End If
+    If Not validateOnly Then dates.NumberFormat = dateFormat
+End Sub
+
 Private Function Finance_SummarySheet() As Worksheet
     Dim ws As Worksheet
     On Error Resume Next: Set ws = ThisWorkbook.Worksheets(FIN_SUMMARY): On Error GoTo 0
@@ -2129,9 +2146,6 @@ Public Sub Finance_Protect(Optional ByVal regroupTotals As Boolean = False)
             If Not readOnly Then tbl.ListColumns(CLng(map(key))).DataBodyRange.Interior.Pattern = xlPatternNone
         Next key
         tbl.ListColumns(CLng(map("PROGRESS"))).DataBodyRange.numberFormat = "0.0%"
-        For Each key In Array("START", "FINISH")
-            tbl.ListColumns(CLng(map(key))).DataBodyRange.numberFormat = Settings_GetDateNumberFormat()
-        Next key
         For Each key In Array("BUDGET", "ACTUAL", "ETC", "EAC", "VARIANCE")
             phase = "Input money " & CStr(key)
             tbl.ListColumns(CLng(map(key))).DataBodyRange.numberFormat = moneyFormat
@@ -2166,9 +2180,9 @@ Public Sub Finance_Protect(Optional ByVal regroupTotals As Boolean = False)
     tbl.HeaderRowRange.Interior.color = autoHeader: tbl.HeaderRowRange.font.color = vbBlack
     If Not tbl.DataBodyRange Is Nothing Then
         tbl.DataBodyRange.Interior.color = autoBody: tbl.DataBodyRange.font.color = vbBlack
-        tbl.ListColumns(CLng(map("DATE"))).DataBodyRange.numberFormat = Settings_GetDateNumberFormat()
         tbl.ListColumns(CLng(map("AMOUNT"))).DataBodyRange.numberFormat = moneyFormat
     End If
+    Finance_ApplyDateNumberFormat Settings_GetDateNumberFormat()
     For Each name In Array("tbl_FINANCE_MONTHS", "tbl_FINANCE_TOTALS")
         Set tbl = Nothing
         On Error Resume Next: Set tbl = Finance_Table(CStr(name)): On Error GoTo Failed

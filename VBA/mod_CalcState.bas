@@ -48,7 +48,11 @@ Public Sub Ensure_CalcState_Table_Console(ByVal consoleMessages As Collection)
     Dim tblState As ListObject
     Dim wasSheetCreated As Boolean
     Dim wasTableCreated As Boolean
+    Dim previousScreenUpdating As Boolean
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
+    previousScreenUpdating = Application.ScreenUpdating
     On Error GoTo SafeExit
 
     Application.ScreenUpdating = False
@@ -66,12 +70,16 @@ Public Sub Ensure_CalcState_Table_Console(ByVal consoleMessages As Collection)
     End If
 
 SafeExit:
-    Application.ScreenUpdating = True
+    failureNumber = Err.Number
+    failureDescription = Err.Description
+    Application.ScreenUpdating = previousScreenUpdating
 
-    If Err.Number <> 0 Then
+    If failureNumber <> 0 Then
         CalcState_AddStopToConsole consoleMessages, _
             "DIAG.CALC_STATE.ENSURE_ERROR", _
-            TextCatalog_Arguments("Details", Err.Description)
+            TextCatalog_Arguments("Details", failureDescription)
+        On Error GoTo 0
+        Err.Raise failureNumber, "Ensure_CalcState_Table_Console", failureDescription
     End If
 
 End Sub
@@ -117,9 +125,15 @@ Public Sub Write_CalcState_Snapshot_Console( _
 
     Dim rowCount As Long
     Dim r As Long
+    Dim previousEnableEvents As Boolean
+    Dim previousScreenUpdating As Boolean
+    Dim failureNumber As Long
+    Dim failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Write_CalcState_Snapshot_Console", "Excel Table Write")
 
+    previousEnableEvents = Application.EnableEvents
+    previousScreenUpdating = Application.ScreenUpdating
     On Error GoTo SafeExit
 
     Application.ScreenUpdating = False
@@ -173,6 +187,7 @@ Public Sub Write_CalcState_Snapshot_Console( _
 
         arrOut(r, mapState("Row Signature")) = IncrementalSignature_BuildRow(arrCalc, r, mapCalc)
         arrOut(r, mapState("Run Status")) = UCase$(Trim$(runStatus))
+        arrOut(r, mapState("Analytics Status")) = IIf(UCase$(Trim$(runStatus)) = "OK", IIf(IsAnalyticsEnabled(), "ON", "OFF"), "UNKNOWN")
 
     Next r
 
@@ -180,13 +195,18 @@ Public Sub Write_CalcState_Snapshot_Console( _
     ApplyCalcStateFormats tblState
 
 SafeExit:
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
+    failureNumber = Err.Number
+    failureDescription = Err.Description
+    Application.EnableEvents = previousEnableEvents
+    Application.ScreenUpdating = previousScreenUpdating
 
-    If Err.Number <> 0 Then
+    If failureNumber <> 0 Then
+        CalcState_MarkDirty
         CalcState_AddStopToConsole consoleMessages, _
             "DIAG.CALC_STATE.WRITE_ERROR", _
-            TextCatalog_Arguments("Details", Err.Description)
+            TextCatalog_Arguments("Details", failureDescription)
+        On Error GoTo 0
+        Err.Raise failureNumber, "Write_CalcState_Snapshot_Console", failureDescription
     End If
 
 End Sub
@@ -237,7 +257,8 @@ Private Function BuildCalcStateHeaders() As Variant
         "Finish Constraint Type", _
         "Finish Constraint Date", _
         "Row Signature", _
-        "Run Status")
+        "Run Status", _
+        "Analytics Status")
 
     BuildCalcStateHeaders = arr
 
@@ -568,7 +589,7 @@ End Sub
 ' FR: Lit le snapshot incremental sous forme ID -> signature sans exposer le schema CALC_STATE.
 ' EN: Reads the incremental snapshot as ID -> signature without exposing the CALC_STATE schema.
 '------------------------------------------------------------------------------
-Public Function CalcState_GetSignatureByIdMap() As Object
+Public Function CalcState_GetSignatureByIdMap(Optional ByVal parentById As Object = Nothing) As Object
 
     Dim result As Object
     Dim ws As Worksheet
@@ -593,7 +614,12 @@ Public Function CalcState_GetSignatureByIdMap() As Object
 
     For r = 1 To UBound(arrState, 1)
         idVal = Trim$(CStr(arrState(r, mapState("ID"))))
-        If idVal <> "" Then result(idVal) = Trim$(CStr(arrState(r, mapState("Row Signature"))))
+        If idVal <> "" Then
+            result(idVal) = Trim$(CStr(arrState(r, mapState("Row Signature"))))
+            If Not parentById Is Nothing Then
+                parentById(idVal) = Trim$(CStr(arrState(r, mapState("ParentID"))))
+            End If
+        End If
     Next r
 
 SafeExit:
@@ -623,6 +649,27 @@ Public Function CalcState_GetRunStatus() As String
 
 SafeExit:
 End Function
+
+Public Function CalcState_GetAnalyticsStatus() As String
+    Dim tbl As ListObject, column As ListColumn, value As String
+    CalcState_GetAnalyticsStatus = "UNKNOWN"
+    On Error GoTo Missing
+    If UCase$(Trim$(CalcState_GetRunStatus())) <> "OK" Then Exit Function
+    Set tbl = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME).ListObjects(CALC_STATE_TABLE_NAME)
+    Set column = tbl.ListColumns("Analytics Status")
+    If column.DataBodyRange Is Nothing Then Exit Function
+    value = UCase$(Trim$(CStr(column.DataBodyRange.Cells(1, 1).Value2)))
+    If value = "ON" Or value = "OFF" Then CalcState_GetAnalyticsStatus = value
+Missing:
+End Function
+
+Public Sub CalcState_SetAnalyticsStatus(ByVal value As String)
+    Dim tbl As ListObject
+    If value <> "ON" And value <> "OFF" And value <> "UNKNOWN" Then Err.Raise 5, "CalcState_SetAnalyticsStatus", value
+    Ensure_CalcState_Table
+    Set tbl = ThisWorkbook.Worksheets(CALC_STATE_SHEET_NAME).ListObjects(CALC_STATE_TABLE_NAME)
+    If Not tbl.DataBodyRange Is Nothing Then tbl.ListColumns("Analytics Status").DataBodyRange.Value2 = value
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Invalide le snapshot incremental existant en positionnant son statut a DIRTY.

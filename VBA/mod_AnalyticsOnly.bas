@@ -234,10 +234,12 @@ Public Sub Run_Analytics_Only( _
     Dim linksBySuccId As Object
     Dim localConsole As Collection
     Dim showLocalConsole As Boolean
+    Dim failureNumber As Long, failureDescription As String
 
     Set perfScope = Profiler_BeginScope("Run_Analytics_Only", "Analytics")
 
     On Error GoTo ErrHandler
+    CalcState_SetAnalyticsStatus "UNKNOWN"
 
     If consoleMessages Is Nothing Then
         Set localConsole = New Collection
@@ -272,6 +274,7 @@ Public Sub Run_Analytics_Only( _
     CalcBridge_ComputeDeadlineAnalytics tblCalc, mapCalc, localConsole
 
     Push_Analytics_Back_To_WBS
+    CalcState_SetAnalyticsStatus "ON"
 
     If showLocalConsole Then
         CalcBridge_ShowPlanningConsole localConsole
@@ -280,14 +283,18 @@ Public Sub Run_Analytics_Only( _
     Exit Sub
 
 ErrHandler:
+    failureNumber = Err.Number: failureDescription = Err.Description
+    CalcState_MarkDirty
     If localConsole Is Nothing Then Set localConsole = New Collection
 
     CalcBridge_AddConsoleMessage localConsole, "STOP", _
         PlanningMessageText_Format("DIAG.ANALYTICS.RUN_ERROR", _
-            TextCatalog_Arguments("Details", Err.Description), _
-            TextCatalog_Arguments("Details", Err.Description))
+            TextCatalog_Arguments("Details", failureDescription), _
+            TextCatalog_Arguments("Details", failureDescription))
 
     CalcBridge_ShowPlanningConsole localConsole
+    On Error GoTo 0
+    Err.Raise failureNumber, "Run_Analytics_Only", failureDescription
 
 End Sub
 
@@ -308,8 +315,10 @@ Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection 
     Dim showLocalConsole As Boolean
     Dim writeScopeToken As Long
     Dim errorDescription As String
+    Dim failureNumber As Long
 
     On Error GoTo ErrHandler
+    CalcState_SetAnalyticsStatus "UNKNOWN"
 
     If consoleMessages Is Nothing Then
         Set localConsole = New Collection
@@ -350,9 +359,11 @@ Public Sub Clear_Analytics_Outputs(Optional ByVal consoleMessages As Collection 
 
     End If
 
+    CalcState_SetAnalyticsStatus "OFF"
     Exit Sub
 
 ErrHandler:
+    failureNumber = Err.Number
     errorDescription = Err.Description
     On Error Resume Next
     CloseAuthorizedWBSWriteScope writeScopeToken
@@ -366,6 +377,8 @@ ErrHandler:
             TextCatalog_Arguments("Details", errorDescription))
 
     CalcBridge_ShowPlanningConsole localConsole
+    CalcState_MarkDirty
+    Err.Raise failureNumber, "Clear_Analytics_Outputs", errorDescription
 
 End Sub
 

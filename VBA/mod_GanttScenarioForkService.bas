@@ -83,7 +83,7 @@ Public Sub CreateScenarioPlanningFromCurrentScenario()
     Application.EnableEvents = True
 
     macroName = "'" & Replace(newWb.Name, "'", "''") & "'!InitializeScenarioPlanningCopyFromCurrentWorkbook"
-    Application.Run macroName
+    Application.Run macroName, True
 
     newWb.Activate
     Application.ScreenUpdating = oldScreenUpdating
@@ -162,13 +162,15 @@ End Function
 ' Notes:
 ' - API publique callback inter-workbook; conserver un wrapper permanent si refactor.
 '------------------------------------------------------------------------------
-Public Sub InitializeScenarioPlanningCopyFromCurrentWorkbook()
+Public Sub InitializeScenarioPlanningCopyFromCurrentWorkbook(Optional ByVal propagateErrors As Boolean = False)
 
     Dim oldScreenUpdating As Boolean
     Dim oldEvents As Boolean
     Dim oldAlerts As Boolean
     Dim inputGuardToken As Long
     Dim forcedUpdateGuardToken As Long
+    Dim priorReceipt As Variant, updateReceipt As Variant
+    Dim failureNumber As Long, failureSource As String, failureDescription As String
 
     On Error GoTo Fail
 
@@ -202,7 +204,15 @@ Public Sub InitializeScenarioPlanningCopyFromCurrentWorkbook()
     Application.EnableEvents = oldEvents
     forcedUpdateGuardToken = OpenAuthorizedWBSWriteScope( _
         "ScenarioForkForcedUpdate", ScenarioForkCalculatedWBSColumns())
+    priorReceipt = WorkflowCommand_LastResult("Run_Forced_Planning_Update")
     Run_Forced_Planning_Update
+    updateReceipt = WorkflowCommand_LastResult("Run_Forced_Planning_Update")
+    If CLng(updateReceipt(0)) <= CLng(priorReceipt(0)) Or _
+        (CStr(updateReceipt(2)) <> "SUCCESS" And CStr(updateReceipt(2)) <> "WARNING_NONBLOCKING") Or _
+        CalcEngine_HasBlockingErrorsForState() Then
+        Err.Raise 5, "InitializeScenarioPlanningCopyFromCurrentWorkbook", _
+            PlanningMessageText_Format("GANTT.ERROR.UPDATE_NOT_READY")
+    End If
 
     ThisWorkbook.Save
     CloseAuthorizedWBSWriteScope forcedUpdateGuardToken
@@ -216,11 +226,18 @@ CleanExit:
     Application.DisplayAlerts = oldAlerts
     Application.ScreenUpdating = oldScreenUpdating
     Application.EnableEvents = oldEvents
+    If failureNumber <> 0 Then
+        If propagateErrors Then Err.Raise failureNumber, failureSource, failureDescription
+        CalcBridge_ShowSingleConsoleMessage "STOP", "GANTT.SCENARIO.INITIALIZE.ERROR", _
+            TextCatalog_Arguments("Error", failureDescription)
+    End If
     Exit Sub
 
 Fail:
-    CalcBridge_ShowSingleConsoleMessage "STOP", "GANTT.SCENARIO.INITIALIZE.ERROR", _
-        TextCatalog_Arguments("Error", Err.Description)
+    failureNumber = Err.Number
+    failureSource = Err.Source
+    failureDescription = Err.Description
+    CalcState_MarkDirty
     Resume CleanExit
 
 End Sub

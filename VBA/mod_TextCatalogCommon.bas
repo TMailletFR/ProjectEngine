@@ -5,7 +5,7 @@ Public Const TXT_COMMON_RESET_PLANNING_LABEL As String = "COMMON.RESET_PLANNING.
 Public Const TXT_COMMON_RESET_PLANNING_CONFIRMATION As String = "COMMON.RESET_PLANNING.CONFIRMATION"
 
 Public Function TextCatalogCommon_Definitions() As Variant
-    Dim definitions(0 To 43) As Variant
+    Dim definitions(0 To 44) As Variant
 
     definitions(0) = Array(TXT_COMMON_RESET_PLANNING_LABEL, "Reset Planning", "Réinitialiser planning")
     definitions(1) = Array(TXT_COMMON_RESET_PLANNING_CONFIRMATION, _
@@ -60,5 +60,6 @@ Public Function TextCatalogCommon_Definitions() As Variant
     definitions(42) = Array("COMMON.POSITION.BEFORE", "before", "avant")
     definitions(43) = Array("COMMON.POSITION.AFTER", "after", "après")
 
+    definitions(44) = Array("VISIBLE_HEADERS.ERROR.RESTORE_FAILED", "Header restoration failed in table '{Table}', column {Column}: expected '{Expected}', found '{Actual}'.", "Échec de restauration de l'en-tête dans la table '{Table}', colonne {Column} : '{Expected}' attendu, '{Actual}' trouvé.")
     TextCatalogCommon_Definitions = definitions
 End Function

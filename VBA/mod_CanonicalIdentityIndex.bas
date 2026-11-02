@@ -26,6 +26,25 @@ Private Const CANONICAL_WBS_TABLE As String = "tbl_WBS"
 Private Const CANONICAL_CALC_SHEET As String = "CALC"
 Private Const CANONICAL_CALC_TABLE As String = "tbl_CALC"
 
+' Validate before CLng: rounding or alias spellings must not merge identities.
+Public Function CanonicalIdentity_TryTaskId(ByVal value As Variant, ByRef idKey As String) As Boolean
+    Dim number As Double
+    idKey = ""
+    On Error GoTo Invalid
+    If IsError(value) Or IsNull(value) Or IsEmpty(value) Then Exit Function
+    If VarType(value) = vbBoolean Or VarType(value) = vbDate Then Exit Function
+    If Not IsNumeric(value) Then Exit Function
+    number = CDbl(value)
+    If number < 1# Or number > 1048575# Then Exit Function
+    If number <> Fix(number) Then Exit Function
+    idKey = CStr(CLng(number))
+    If Trim$(CStr(value)) <> idKey Then GoTo Invalid
+    CanonicalIdentity_TryTaskId = True
+    Exit Function
+Invalid:
+    idKey = ""
+End Function
+
 '------------------------------------------------------------------------------
 ' FR: Construit une map immuable de cle de schema (tables visibles) ou de nom (tables techniques) vers index.
 ' EN: Builds an immutable schema-key (visible tables) or physical-name (technical tables) to index map.

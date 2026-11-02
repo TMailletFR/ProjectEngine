@@ -610,6 +610,7 @@ Public Sub DrawDependencyLinks( _
     Dim i As Long
     Dim existingName As String
     Dim svgRendered As Boolean
+    Dim historicalCompleted As Boolean
 
     Set perfScope = Profiler_BeginScope("DrawDependencyLinks", "Dependency Render")
 
@@ -716,12 +717,14 @@ NextLink:
         Next linkItem
 
     Next succId
+    historicalCompleted = True
 
 SafeExit:
     If Not aggregatedScale And Not svgRendered Then
         GanttDependency_DeleteStaleSegments wsGantt
         gDependencyVisibilityKnown = True
         gDependenciesVisible = True
+        If historicalCompleted Then GanttDependencySvg_AcceptHistoricalProjection wsGantt
     End If
     Profiler_RecordOperation "GanttDiffDependencySegmentsInspected", gDependencyInspections, 0#
     Profiler_RecordOperation "GanttDiffDependencySegmentsCreated", gDependencyCreates, 0#
@@ -733,6 +736,46 @@ SafeExit:
     gDependencyForceCreate = False
     Set gActiveLogicalRoute = Nothing
 End Sub
+
+Public Function GanttDependency_HistoricalRoutesAreCurrent(ByVal ws As Worksheet, ByVal routes As Object, Optional ByVal respectSummaryVisibility As Boolean = True) As Boolean
+    Dim routeKey As Variant, route As clsGanttDependencyRoute, segment As Object
+    Dim names As Object, used As Object, shapeName As Variant, shp As Shape
+    Dim i As Long, matched As Boolean
+    Dim hiddenProjection As Boolean, geometryMatches As Boolean
+    On Error GoTo Failed
+    If routes Is Nothing Or gSegmentsByLink Is Nothing Then Exit Function
+    hiddenProjection = respectSummaryVisibility And GetGanttViewMode() = "SUMMARY"
+    For Each routeKey In routes.Keys
+        Set route = routes(CStr(routeKey))
+        If Not gSegmentsByLink.Exists(CStr(routeKey)) Then Exit Function
+        Set names = gSegmentsByLink(CStr(routeKey))
+        If names.Count <> route.SegmentCount Then Exit Function
+        Set used = CreateObject("Scripting.Dictionary")
+        For i = 1 To route.SegmentCount
+            Set segment = route.Segments(i)
+            matched = False
+            For Each shapeName In names.Keys
+                If Not used.Exists(CStr(shapeName)) Then
+                    Set shp = ws.Shapes(CStr(shapeName))
+                    geometryMatches = Abs(shp.Left - MinDouble(CDbl(segment("X1")), CDbl(segment("X2")))) <= 0.1 And _
+                        Abs(shp.Top - MinDouble(CDbl(segment("Y1")), CDbl(segment("Y2")))) <= 0.1 And _
+                        Abs(shp.Width - Abs(CDbl(segment("X2")) - CDbl(segment("X1")))) <= 0.1 And _
+                        Abs(shp.Height - Abs(CDbl(segment("Y2")) - CDbl(segment("Y1")))) <= 0.1
+                    If ((shp.Visible = msoTrue) = (Not hiddenProjection)) And (hiddenProjection Or geometryMatches) Then
+                        If (shp.Line.EndArrowheadStyle <> msoArrowheadNone) = CBool(segment("Arrow")) Then
+                            used.Add CStr(shapeName), True
+                            matched = True
+                            Exit For
+                        End If
+                    End If
+                End If
+            Next shapeName
+            If Not matched Then Exit Function
+        Next i
+    Next routeKey
+    GanttDependency_HistoricalRoutesAreCurrent = (routes.Count > 0)
+Failed:
+End Function
 
 Private Function GanttDependency_TryDrawSvgFull( _
     ByVal wsGantt As Worksheet, _

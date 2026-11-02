@@ -314,6 +314,7 @@ End Sub
 Private Sub mLanguage_Change()
     If mBusy Or mLanguageUpdating Then Exit Sub
     If Not ProjectTutorial_IsOwnerWindowActive() Then Exit Sub
+    On Error GoTo Failed
     If Not Settings_SelectGlobalLanguage(IIf(mLanguage.ListIndex = 0, "FR", "EN")) Then
         Localize
         mStatus.caption = ProjectTutorial_Text("LANGUAGE.FAILED")
@@ -332,6 +333,16 @@ Private Sub mLanguage_Change()
     Else
         RenderPage False
     End If
+    Exit Sub
+Failed:
+    Dim failureDescription As String
+    failureDescription = Err.Description
+    On Error Resume Next
+    Localize
+    mStatus.Caption = ProjectTutorial_Text("LANGUAGE.FAILED")
+    On Error GoTo 0
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "Tutorial language", "Details", failureDescription)
 End Sub
 
 Private Sub cmdPrevious_Click()

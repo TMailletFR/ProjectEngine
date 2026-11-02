@@ -651,7 +651,7 @@ Public Function ProjectTutorial_ShowPage(ByVal stepNumber As Long, Optional ByVa
     Application.ScreenUpdating = updatingBefore
     If navigate Then Ribbon_WorksheetActivated
     ' Let Office consume context invalidations only after the final navigation.
-    DoEvents
+    If navigate Or persistProgress Then DoEvents
     If Not mActive Then GoTo CaptureFallback
     mLastDiagnostic = "PANE_INTERSECTION"
     ' A single pane intersection avoids a rectangle spanning frozen panes.
@@ -713,7 +713,7 @@ CaptureFallback:
         Application.ScreenUpdating = updatingBefore
     End If
     If navigate Then Ribbon_WorksheetActivated
-    DoEvents
+    If navigate Or persistProgress Then DoEvents
     mPresenting = False
     Exit Function
 Failed:
@@ -775,7 +775,13 @@ Public Function ProjectTutorial_BeforeSave() As Boolean
 End Function
 
 Public Sub ProjectTutorial_AfterSave(ByVal Success As Boolean)
-    If mActive And Not mClosing And mStep > 0 Then ProjectTutorial_ShowPage mStep, False, False
+    Dim committedBeforeRedraw As Boolean
+    If Not mActive Or mClosing Or mStep <= 0 Then Exit Sub
+    committedBeforeRedraw = Success And ThisWorkbook.Saved
+    ' This path changes only the owned transient highlight: no progress write,
+    ' navigation or message pump may admit unrelated edits during the redraw.
+    ProjectTutorial_ShowPage mStep, False, False
+    If committedBeforeRedraw Then ThisWorkbook.Saved = True
 End Sub
 
 Public Function ProjectTutorial_BeforeClose() As Boolean

@@ -75,6 +75,8 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     Dim oldEvents As Boolean, oldScreen As Boolean, oldAutoFill As Boolean, oldSecurity As Long
     Dim captured As Boolean, sourceOwned As Boolean, watchPaused As Boolean, mutationStarted As Boolean
     Dim errorNumber As Long, errorSource As String, errorDescription As String, finalSaved As Boolean
+    Dim historySkipped As Boolean, successMessage As String
+    Dim formulaReview As Boolean
     On Error GoTo Failed
     mLastResult = "": mLastDiagnostic = ""
     If mRunning Then Err.Raise 5, , "IMPORT_REENTRANT"
@@ -116,6 +118,8 @@ Public Function Migration_ImportFile(ByVal sourcePath As String, Optional ByVal 
     If Not IsEmpty(links) Then Migration_Reject "MIGRATION.UNSAFE"
     Set perfScope = Profiler_BeginScope("Migration.Source.Read", "Migration")
     Set snapshot = MigrationData_Read(source, target)
+    historySkipped = snapshot("Tables")("tbl_CALC_ALARM").Exists("UnavailableDiagnostic")
+    formulaReview = (snapshot("Tables")("tbl_WBS")("Formulas").Count > 0)
     Set perfScope = Nothing
     Migration_AssertIdentity source, fullSource, sourceName
     Set perfScope = Profiler_BeginScope("Migration.Source.Close", "Migration")
@@ -213,7 +217,10 @@ CleanExit:
     Migration_ImportFile = mLastResult
     If Not confirmation Then
         If mLastResult = "SUCCESS" Then
-            MsgBox Migration_Text("MIGRATION.SUCCESS"), vbInformation, Migration_Text("MIGRATION.TITLE")
+            successMessage = Migration_Text("MIGRATION.SUCCESS")
+            If historySkipped Then successMessage = successMessage & vbCrLf & vbCrLf & Migration_Text("MIGRATION.HISTORY_SKIPPED")
+            If formulaReview Then successMessage = successMessage & vbCrLf & vbCrLf & Migration_Text("MIGRATION.FORMULA_REVIEW")
+            MsgBox successMessage, IIf(historySkipped Or formulaReview, vbExclamation, vbInformation), Migration_Text("MIGRATION.TITLE")
         ElseIf mLastResult = "FAILED" Then
             If Not mutationStarted And errorSource = "MigrationValidation" Then
                 MsgBox errorDescription, vbExclamation, Migration_Text("MIGRATION.TITLE")
@@ -314,19 +321,33 @@ End Sub
 
 Private Sub Migration_Log(ByVal severity As String, ByVal key As String, ByVal operation As String, ByVal backup As String, ByVal profile As String, Optional ByVal snapshot As Object = Nothing, Optional ByRef emittedReceipt As Object = Nothing)
     Dim arguments As Object, receipt As Object, hash As String
+    Dim frText As String, enText As String
     Set arguments = TextCatalog_Arguments("Backup", backup, "Operation", operation, "Profile", profile, "MessageKey", key)
     If Not snapshot Is Nothing Then
         arguments.Add "SourceDigest", CStr(snapshot("Digest"))
         arguments.Add "HistoryImported", CBool(snapshot("Tables")("tbl_CALC_ALARM")("Available"))
         If snapshot("Tables")("tbl_CALC_ALARM").exists("UnavailableDiagnostic") Then arguments.Add "HistoryDiagnostic", CStr(snapshot("Tables")("tbl_CALC_ALARM")("UnavailableDiagnostic"))
+        If snapshot("Tables")("tbl_WBS")("Formulas").Count > 0 Then arguments.Add "InputFormulaCount", snapshot("Tables")("tbl_WBS")("Formulas").Count
         Dim name As Variant
         For Each name In Array("tbl_WBS", "tbl_CONSTRAINTS", "tbl_EVENT_ACK", "tbl_DASHBOARD_SNAPSHOTS", "tbl_CALC_ALARM")
             arguments.Add CStr(name) & ".Count", CLng(snapshot("Tables")(name)("Count"))
         Next name
     End If
+    frText = TextCatalog_Format(key, "FR", arguments)
+    enText = TextCatalog_Format(key, "EN", arguments)
+    If key = "MIGRATION.SUCCESS" And arguments.Exists("HistoryDiagnostic") Then
+        severity = "WARNING"
+        frText = frText & vbCrLf & vbCrLf & TextCatalog_Get("MIGRATION.HISTORY_SKIPPED", "FR")
+        enText = enText & vbCrLf & vbCrLf & TextCatalog_Get("MIGRATION.HISTORY_SKIPPED", "EN")
+    End If
+    If key = "MIGRATION.SUCCESS" And arguments.Exists("InputFormulaCount") Then
+        severity = "WARNING"
+        frText = frText & vbCrLf & vbCrLf & TextCatalog_Get("MIGRATION.FORMULA_REVIEW", "FR")
+        enText = enText & vbCrLf & vbCrLf & TextCatalog_Get("MIGRATION.FORMULA_REVIEW", "EN")
+    End If
     hash = BuildPlanningEventIdentityV2(severity, "MIGRATION", "WORKBOOK", operation, arguments)
-    Set receipt = LogPlanningEvent(severity, "MIGRATION", hash, TextCatalog_Format(key, "FR", arguments), _
-        TextCatalog_Format(key, "EN", arguments), IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), "Migration_ImportFile", "SETTINGS", "", "", "", "", True)
+    Set receipt = LogPlanningEvent(severity, "MIGRATION", hash, frText, _
+        enText, IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), IIf(Len(mLastDiagnostic) > 0, "IMPORT_DIAGNOSTIC_AVAILABLE", ""), "Migration_ImportFile", "SETTINGS", "", "", "", "", True)
     If receipt Is Nothing Then Err.Raise 5, , "MIGRATION_LOG_RECEIPT_MISSING"
     If Len(CStr(receipt("EventId"))) = 0 Or CStr(receipt("Hash")) <> hash Then Err.Raise 5, , "MIGRATION_LOG_RECEIPT_INVALID"
     Set emittedReceipt = receipt

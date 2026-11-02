@@ -363,6 +363,7 @@ Private Function Sync_Constraints_To_CALC_Impl( _
     Dim idVal As String
     Dim activeVal As String
     Dim consoleMessages As Collection
+    Dim syncFailed As Boolean
 
     Set perfScope = Profiler_BeginScope("Sync_Constraints_To_CALC_Impl", "Excel Table Sync")
 
@@ -488,7 +489,7 @@ NextConstraintRow:
     ApplyCalcConstraintFormats tblCalc
 
 SafeExit:
-    Sync_Constraints_To_CALC_Impl = (Err.number = 0)
+    Sync_Constraints_To_CALC_Impl = Not syncFailed
 
     If showConsole And Not consoleMessages Is Nothing Then
         If consoleMessages.count > 0 Then CalcBridge_ShowPlanningConsole consoleMessages
@@ -496,6 +497,7 @@ SafeExit:
     Exit Function
 
 ErrHandler:
+    syncFailed = True
     If consoleMessages Is Nothing Then Set consoleMessages = New Collection
 
     If Err.source = "ValidateActiveConstraints" Then

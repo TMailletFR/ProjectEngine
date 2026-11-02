@@ -429,6 +429,12 @@ Private Function Gantt_DependencyDiagnosticsAreReady(ByVal diag As Variant) As B
         Exit Function
     End If
 
+    If GanttDependencySvg_GetActiveMode() = "HISTORICAL" Then
+        Gantt_DependencyDiagnosticsAreReady = _
+            CLng(diag(1, 5)) > 0 And CBool(diag(1, 11)) And CBool(diag(1, 12))
+        Exit Function
+    End If
+
     If CBool(diag(1, 13)) And CLng(diag(1, 5)) = 0 Then
         Gantt_DependencyDiagnosticsAreReady = _
             Not CBool(diag(1, 2)) And _

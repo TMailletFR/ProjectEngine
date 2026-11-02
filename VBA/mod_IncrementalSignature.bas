@@ -6,11 +6,11 @@ Option Explicit
 ' DOMAINE / DOMAIN : Shared Infrastructure
 '
 ' FR
-' Possede les 17 champs, leur ordre, normalisation et serialisation de la signature incrementale.
+' Possede les champs, leur ordre, normalisation et serialisation de la signature incrementale.
 ' Ne doit pas contourner les contrats publics des autres domaines.
 '
 ' EN
-' Owns the 17 fields, ordering, normalization and serialization of the incremental signature.
+' Owns the fields, ordering, normalization and serialization of the incremental signature.
 ' Must not bypass public contracts owned by other domains.
 '
 ' CONTRATS / CONTRACTS : IncrementalSignature_RequiredColumns, IncrementalSignature_BuildRow
@@ -26,6 +26,8 @@ Public Function IncrementalSignature_RequiredColumns() As Variant
 
     IncrementalSignature_RequiredColumns = Array( _
         "ID", _
+        "WBS", _
+        "Task Type", _
         "ParentID", _
         "IsSummary", _
         "Predecessors WBS", _
@@ -59,6 +61,8 @@ Public Function IncrementalSignature_BuildRow( _
 
     s = ""
     s = s & "|ID=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("ID")), "TEXT")
+    s = s & "|WBS=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("WBS")), "TEXT")
+    s = s & "|TaskType=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("Task Type")), "TEXT")
     s = s & "|ParentID=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("ParentID")), "TEXT")
     s = s & "|IsSummary=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("IsSummary")), "BOOLEAN")
     s = s & "|PredWBS=" & IncrementalSignature_NormalizeValue(arrCalc(rowIdx, mapCalc("Predecessors WBS")), "PREDWBS")

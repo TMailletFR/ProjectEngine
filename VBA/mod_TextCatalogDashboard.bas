@@ -2,7 +2,8 @@ Attribute VB_Name = "mod_TextCatalogDashboard"
 Option Explicit
 
 Public Function TextCatalogDashboard_Definitions() As Variant
-    Dim definitions(0 To 110) As Variant
+    Dim definitions(0 To 111) As Variant
+    definitions(111) = Array("DASHBOARD.ANALYTICS.UNAVAILABLE", "Analytics not calculated or provenance unknown. No numerical comparison is available.", "Analytics non calculées ou provenance inconnue. Aucune comparaison chiffrée n'est disponible.")
     definitions(110) = Array("DASHBOARD.SNAPSHOT.INCOMPLETE", _
         "Snapshot not saved: planning or S-Curve data is incomplete. Fix the reported errors and update the Dashboard again.", _
         "Instantané non enregistré : les données du planning ou de la S-Curve sont incomplètes. Corrigez les erreurs signalées puis actualisez le Dashboard.")

@@ -39,6 +39,11 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
     Dim r As Long
     Dim idVal As String
     Dim currentSig As String
+    Dim currentIds As Object
+    Dim previousParents As Object
+    Dim previousId As Variant
+    Dim ancestorId As String
+    Dim visited As Object
 
     Set perfScope = Profiler_BeginScope("Get_Changed_TaskIds", "Incremental")
     Set changedIds = CreateObject("Scripting.Dictionary")
@@ -58,7 +63,9 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
     Set mapCalc = CanonicalIdentity_BuildColumnMap(tblCalc)
     ValidateIncrementalCalcColumns mapCalc
     arrCalc = tblCalc.DataBodyRange.value
-    Set stateSigById = CalcState_GetSignatureByIdMap()
+    Set previousParents = CreateObject("Scripting.Dictionary")
+    Set currentIds = CreateObject("Scripting.Dictionary")
+    Set stateSigById = CalcState_GetSignatureByIdMap(previousParents)
     stateRunStatus = CalcState_GetRunStatus()
 
     If stateSigById.Count = 0 Then GoTo ForceFull
@@ -67,6 +74,7 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
     For r = 1 To UBound(arrCalc, 1)
         idVal = Trim$(CStr(arrCalc(r, mapCalc("ID"))))
         If idVal = "" Then GoTo NextRow
+        currentIds(idVal) = True
         currentSig = IncrementalSignature_BuildRow(arrCalc, r, mapCalc)
         If Not stateSigById.Exists(idVal) Then
             changedIds(idVal) = True
@@ -75,6 +83,26 @@ Public Function Get_Changed_TaskIds(ByRef forceFullRecalc As Boolean) As Object
         End If
 NextRow:
     Next r
+
+    ' Removed tasks must invalidate their nearest surviving roll-up ancestor.
+    ' Follow the previous hierarchy when several generations were removed.
+    For Each previousId In stateSigById.Keys
+        If Not currentIds.Exists(CStr(previousId)) Then
+            changedIds(CStr(previousId)) = True
+            ancestorId = CStr(previousId)
+            Set visited = CreateObject("Scripting.Dictionary")
+            Do While previousParents.Exists(ancestorId)
+                If visited.Exists(ancestorId) Then GoTo ForceFull
+                visited(ancestorId) = True
+                ancestorId = CStr(previousParents(ancestorId))
+                If ancestorId = "" Then Exit Do
+                If currentIds.Exists(ancestorId) Then
+                    changedIds(ancestorId) = True
+                    Exit Do
+                End If
+            Loop
+        End If
+    Next previousId
 
     Debug.Print "INCREMENTAL CHECK - changed tasks count: " & changedIds.Count
     Set Get_Changed_TaskIds = changedIds

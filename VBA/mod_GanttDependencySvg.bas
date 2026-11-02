@@ -480,6 +480,7 @@ Public Function GanttDependencySvg_TryHydratePersistentCache( _
     rowCount = UBound(arr, 1)
     If CStr(arr(2, 1)) <> "META" Then Exit Function
     If CStr(arr(2, 2)) <> SVG_CACHE_VERSION Then Exit Function
+    If CStr(arr(2, 6)) <> GetGanttTimelineScaleMode() Then Exit Function
 
     signature = CStr(arr(2, 3))
     contentHash = CStr(arr(2, 4))
@@ -507,16 +508,20 @@ Public Function GanttDependencySvg_TryHydratePersistentCache( _
     Set routeById = CreateObject("Scripting.Dictionary")
     For rowIndex = 3 To rowCount
         If CStr(arr(rowIndex, 1)) = "ROUTE" Then
+            If CStr(arr(rowIndex, 2)) <> SVG_CACHE_VERSION Then Exit Function
             linkId = CStr(arr(rowIndex, 3))
             If Len(linkId) > 0 Then
                 If routeById.Exists(linkId) Then
                     Set route = routeById(linkId)
+                    If route.PredId <> CStr(arr(rowIndex, 4)) Or route.SuccId <> CStr(arr(rowIndex, 5)) Then Exit Function
+                    If route.LinkType <> CStr(arr(rowIndex, 6)) Or route.Lag <> SvgCacheNumber(arr(rowIndex, 7)) Then Exit Function
                 Else
                     Set route = New clsGanttDependencyRoute
                     route.Initialize linkId, CStr(arr(rowIndex, 4)), CStr(arr(rowIndex, 5)), _
                         CStr(arr(rowIndex, 6)), SvgCacheNumber(arr(rowIndex, 7))
                     routeById.Add linkId, route
                 End If
+                If SvgCacheNumber(arr(rowIndex, 8)) <> route.SegmentCount + 1 Then Exit Function
                 route.AddSegment _
                     SvgCacheNumber(arr(rowIndex, 9)), _
                     SvgCacheNumber(arr(rowIndex, 10)), _
@@ -529,6 +534,12 @@ Public Function GanttDependencySvg_TryHydratePersistentCache( _
     Next rowIndex
 
     If routeById.Count = 0 Or segmentCount = 0 Then Exit Function
+    If SvgCacheNumber(arr(2, 7)) <> routeById.Count Or SvgCacheNumber(arr(2, 8)) <> segmentCount Then Exit Function
+    ' Validate with the same signature used when persisting routes, before publication.
+    If BuildRouteSnapshotSignature(contentHash, routeById) <> signature Then
+        gLastFallbackReason = "SvgCacheRouteSignatureMismatch"
+        Exit Function
+    End If
 
     Set gRoutesById = routeById
     Set gDirtyLinkIds = CreateObject("Scripting.Dictionary")
@@ -802,6 +813,14 @@ Public Sub GanttDependencySvg_ActivateHistorical(ByVal ws As Worksheet, Optional
         Profiler_RecordOperation "GanttDependencySvgFallback_" & reason, 1, 0#
     End If
 
+End Sub
+
+Public Sub GanttDependencySvg_AcceptHistoricalProjection(ByVal ws As Worksheet)
+    If gActiveMode <> HISTORICAL_MODE Then Exit Sub
+    If Not GanttDependency_HistoricalRoutesAreCurrent(ws, gRoutesById, False) Then Exit Sub
+    gLastTaskGeometrySignature = GanttDependencySvg_CurrentTaskGeometrySignature(ws)
+    Set gLastTaskGeometryByShape = GanttDependencySvg_BuildTaskGeometryMap(ws)
+    gFullModelDirty = False
 End Sub
 
 Public Function GanttDependencySvg_RouteCount() As Long
@@ -1111,6 +1130,9 @@ Public Function GanttDependencySvg_GetPersistentCacheDiagnostics(ByVal ws As Wor
     result(1, 10) = GanttDependencySvg_IsTaskGeometryCurrent(ws)
     result(1, 11) = GanttDependencySvg_AllRoutesHaveTerminalArrow()
     result(1, 12) = GanttDependencySvg_IsLayerPhysicalStateCurrent(ws)
+    If gActiveMode = HISTORICAL_MODE And Not IsAggregatedScaleMode() Then
+        result(1, 12) = GanttDependency_HistoricalRoutesAreCurrent(ws, gRoutesById)
+    End If
     result(1, 13) = Not gRoutesById Is Nothing
     GanttDependencySvg_GetPersistentCacheDiagnostics = result
 
@@ -1456,7 +1478,7 @@ Failed:
 
 End Sub
 
-Private Function BuildRouteSnapshotSignature(ByVal contentHash As String) As String
+Private Function BuildRouteSnapshotSignature(ByVal contentHash As String, Optional ByVal routes As Object = Nothing) As String
 
     Dim routeKeys As Variant
     Dim routeKey As Variant
@@ -1466,14 +1488,15 @@ Private Function BuildRouteSnapshotSignature(ByVal contentHash As String) As Str
     Dim segmentCount As Long
     Dim textValue As String
 
-    If gRoutesById Is Nothing Then Exit Function
+    If routes Is Nothing Then Set routes = gRoutesById
+    If routes Is Nothing Then Exit Function
 
     textValue = SVG_CACHE_VERSION & "|" & GetGanttTimelineScaleMode() & "|" & _
-        CStr(gRoutesById.Count) & "|" & contentHash
+        CStr(routes.Count) & "|" & contentHash
 
-    routeKeys = SortedDictionaryKeys(gRoutesById)
+    routeKeys = SortedDictionaryKeys(routes)
     For Each routeKey In routeKeys
-        Set route = gRoutesById(CStr(routeKey))
+        Set route = routes(CStr(routeKey))
         textValue = textValue & "|" & route.LinkId & "," & route.PredId & "," & _
             route.SuccId & "," & route.LinkType & "," & SvgNumber(route.Lag)
         For i = 1 To route.Segments.Count

@@ -94,6 +94,9 @@ End Sub
 Public Function WBSFormulaWriter_ExpectedFormula(ByVal columnKey As String) As String
     Dim firstReference As String
     Dim secondReference As String
+    Dim calendarPattern As String
+
+    calendarPattern = "Calendar_ExcelWeekendPattern(" & SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_CAL) & ")"
 
     Select Case columnKey
         Case VTS_COL_BASELINE_FINISH
@@ -101,19 +104,19 @@ Public Function WBSFormulaWriter_ExpectedFormula(ByVal columnKey As String) As S
             secondReference = SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_BASELINE_DURATION)
             WBSFormulaWriter_ExpectedFormula = _
                 "=IF(OR(" & firstReference & "=""""," & secondReference & "=""""),""""," & _
-                firstReference & "+" & secondReference & "-1)"
+                "IF(" & secondReference & "<=0,"""",WORKDAY.INTL(" & firstReference & "-1," & secondReference & "," & calendarPattern & ")))"
         Case VTS_COL_ACTUAL_DURATION
             firstReference = SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_ACTUAL_START)
             secondReference = SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_ACTUAL_FINISH)
             WBSFormulaWriter_ExpectedFormula = _
                 "=IF(OR(" & firstReference & "=""""," & secondReference & "=""""),""""," & _
-                secondReference & "-" & firstReference & "+1)"
+                "IF(" & secondReference & "<" & firstReference & ","""",NETWORKDAYS.INTL(" & firstReference & "," & secondReference & "," & calendarPattern & ")))"
         Case VTS_COL_CALCULATED_DURATION
             firstReference = SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_CALCULATED_START)
             secondReference = SchemaStructuredRowReference(VTS_TABLE_WBS, VTS_COL_CALCULATED_FINISH)
             WBSFormulaWriter_ExpectedFormula = _
                 "=IF(OR(" & firstReference & "=""""," & secondReference & "=""""),""""," & _
-                secondReference & "-" & firstReference & "+1)"
+                "IF(" & secondReference & "<" & firstReference & ","""",NETWORKDAYS.INTL(" & firstReference & "," & secondReference & "," & calendarPattern & ")))"
         Case Else
             Err.Raise vbObjectError + 5298, "WBSFormulaWriter_ExpectedFormula", _
                 PlanningMessageText_Format("WBS.ERROR.UNKNOWN_FORMULA_KEY", _

@@ -142,6 +142,8 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Dim currentFreeFloatById As Object
     Dim predLagBySuccPred As Object
     Dim predTypeBySuccPred As Object
+    Dim analyticsEdge As Long
+    Dim edgeTypes As Variant, edgeLags As Variant
     Dim reverseTopo As Collection
     Dim networkFinishById As Object
 
@@ -200,14 +202,12 @@ Public Sub ComputeCurrentFloatAndCritical( _
     Set currentLateFinishById = CreateObject("Scripting.Dictionary")
     Set currentTotalFloatById = CreateObject("Scripting.Dictionary")
     Set currentFreeFloatById = CreateObject("Scripting.Dictionary")
-    If analyticsPredLagBySuccPred Is Nothing Then
-        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing And analyticsPredTypeBySuccPred Is Nothing Then
+        BuildAnalyticsEdgeMapsFromLogicLinks predLagBySuccPred, predTypeBySuccPred
     Else
+        If analyticsPredLagBySuccPred Is Nothing Or analyticsPredTypeBySuccPred Is Nothing Then _
+            Err.Raise 5, "Analytics", "Incomplete edge attributes"
         Set predLagBySuccPred = analyticsPredLagBySuccPred
-    End If
-    If analyticsPredTypeBySuccPred Is Nothing Then
-        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
-    Else
         Set predTypeBySuccPred = analyticsPredTypeBySuccPred
     End If
 
@@ -282,44 +282,47 @@ Public Sub ComputeCurrentFloatAndCritical( _
 
                 linkKey = CStr(succId) & "|" & taskId
 
-                effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                linkType = CStr(predTypeBySuccPred(linkKey))
-                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
-
-                Select Case linkType
-
-                    Case "SS"
-                        If currentLateStartById.Exists(CStr(succId)) Then
-                            candidateLateStart = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
-
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
-                            ElseIf CDbl(AddWorkingDays(candidateLateStart, currentDuration, taskCal)) < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
+                edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                    effectiveLag = CDbl(edgeLags(analyticsEdge))
+                    linkType = CStr(edgeTypes(analyticsEdge))
+                        succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+    
+                    Select Case linkType
+    
+                        Case "SS"
+                            If currentLateStartById.Exists(CStr(succId)) Then
+                                candidateLateStart = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
+    
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
+                                ElseIf CDbl(AddWorkingDays(candidateLateStart, currentDuration, taskCal)) < CDbl(candidateLateFinish) Then
+                                    candidateLateFinish = AddWorkingDays(candidateLateStart, currentDuration, taskCal)
+                                End If
                             End If
-                        End If
-
-                    Case "FF"
-                        If currentLateFinishById.Exists(CStr(succId)) Then
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
-                            ElseIf CDbl(OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
+    
+                        Case "FF"
+                            If currentLateFinishById.Exists(CStr(succId)) Then
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                ElseIf CDbl(OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
+                                    candidateLateFinish = OffsetWorkingDays(currentLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                End If
                             End If
-                        End If
-
-                    Case Else
-                        If currentLateStartById.Exists(CStr(succId)) Then
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
-                            ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
-                                candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+    
+                        Case Else
+                            If currentLateStartById.Exists(CStr(succId)) Then
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
+                                    candidateDate = OffsetWorkingDays(currentLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                End If
                             End If
-                        End If
-
-                End Select
+    
+                    End Select
+                Next analyticsEdge
             End If
         Next succId
 
@@ -431,52 +434,55 @@ NextCurrentBackwardTask:
 
                     linkKey = CStr(succId) & "|" & taskId
 
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                    linkType = CStr(predTypeBySuccPred(linkKey))
-                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
-
-                    Select Case linkType
-
-                        Case "SS"
-                            succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
-                            If HasValue(succStartVal) Then
-                                candidateDate = ApplyLag(calcStartVal, effectiveLag, succCal, "SS")
-                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
-
-                                If Not HasValue(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
-                                ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
+                    edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                    For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                        effectiveLag = CDbl(edgeLags(analyticsEdge))
+                        linkType = CStr(edgeTypes(analyticsEdge))
+                        succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+    
+                        Select Case linkType
+    
+                            Case "SS"
+                                succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
+                                If HasValue(succStartVal) Then
+                                    candidateDate = ApplyLag(calcStartVal, effectiveLag, succCal, "SS")
+                                    candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
+    
+                                    If Not HasValue(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    End If
                                 End If
-                            End If
-
-                        Case "FF"
-                            succFinishVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Finish")))
-                            If HasValue(succFinishVal) Then
-                                candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FF")
-                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succFinishVal, succCal))
-
-                                If Not HasValue(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
-                                ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
+    
+                            Case "FF"
+                                succFinishVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Finish")))
+                                If HasValue(succFinishVal) Then
+                                    candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FF")
+                                    candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succFinishVal, succCal))
+    
+                                    If Not HasValue(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    End If
                                 End If
-                            End If
-
-                        Case Else
-                            succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
-                            If HasValue(succStartVal) Then
-                                candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FS")
-                                candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
-
-                                If Not HasValue(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
-                                ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
-                                    minFreeFloat = candidateFreeFloat
+    
+                            Case Else
+                                succStartVal = GetCellValue(dataArr(idToRow(CStr(succId)), mapCalc("Calculated Start")))
+                                If HasValue(succStartVal) Then
+                                    candidateDate = ApplyLag(calcFinishVal, effectiveLag, succCal, "FS")
+                                    candidateFreeFloat = CDbl(SignedWorkingDayOffset(candidateDate, succStartVal, succCal))
+    
+                                    If Not HasValue(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    ElseIf candidateFreeFloat < CDbl(minFreeFloat) Then
+                                        minFreeFloat = candidateFreeFloat
+                                    End If
                                 End If
-                            End If
-
-                    End Select
+    
+                        End Select
+                    Next analyticsEdge
                 End If
             Next succId
 
@@ -597,6 +603,8 @@ Public Sub ComputeLongestPath( _
     Dim queuedById As Object
     Dim predLagBySuccPred As Object
     Dim predTypeBySuccPred As Object
+    Dim analyticsEdge As Long
+    Dim edgeTypes As Variant, edgeLags As Variant
     Dim networkFinishById As Object
     Dim queue As Collection
 
@@ -640,14 +648,12 @@ Public Sub ComputeLongestPath( _
 
     Set lpById = CreateObject("Scripting.Dictionary")
     Set queuedById = CreateObject("Scripting.Dictionary")
-    If analyticsPredLagBySuccPred Is Nothing Then
-        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing And analyticsPredTypeBySuccPred Is Nothing Then
+        BuildAnalyticsEdgeMapsFromLogicLinks predLagBySuccPred, predTypeBySuccPred
     Else
+        If analyticsPredLagBySuccPred Is Nothing Or analyticsPredTypeBySuccPred Is Nothing Then _
+            Err.Raise 5, "Analytics", "Incomplete edge attributes"
         Set predLagBySuccPred = analyticsPredLagBySuccPred
-    End If
-    If analyticsPredTypeBySuccPred Is Nothing Then
-        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
-    Else
         Set predTypeBySuccPred = analyticsPredTypeBySuccPred
     End If
     Set queue = New Collection
@@ -723,11 +729,14 @@ Public Sub ComputeLongestPath( _
                 If validIds.Exists(CStr(predId)) Then
                     linkKey = taskId & "|" & CStr(predId)
 
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                    linkType = CStr(predTypeBySuccPred(linkKey))
-                    If CalcEngine_IsDrivingLongestPathLink(dataArr, mapCalc, idToRow, taskId, CStr(predId), linkType, effectiveLag, startColumnName, finishColumnName) Then
-                        CalcEngine_AddLongestPathTask CStr(predId), lpById, queuedById, queue
-                    End If
+                    edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                    For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                        effectiveLag = CDbl(edgeLags(analyticsEdge))
+                        linkType = CStr(edgeTypes(analyticsEdge))
+                        If CalcEngine_IsDrivingLongestPathLink(dataArr, mapCalc, idToRow, taskId, CStr(predId), linkType, effectiveLag, startColumnName, finishColumnName) Then
+                            CalcEngine_AddLongestPathTask CStr(predId), lpById, queuedById, queue
+                        End If
+                    Next analyticsEdge
                 End If
             Next predId
         End If
@@ -886,6 +895,8 @@ Public Function BuildBaselineRexTemporalState( _
     Dim linkType As String
     Dim effectiveLag As Double
     Dim hasPredInput As Boolean
+    Dim analyticsEdge As Long
+    Dim edgeTypes As Variant, edgeLags As Variant
 
     BuildBaselineRexTemporalState = False
     If mapCalc Is Nothing Then Exit Function
@@ -959,29 +970,32 @@ Public Function BuildBaselineRexTemporalState( _
                     End If
 
                     hasPredInput = True
-                    effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                    linkType = UCase$(Trim$(CStr(predTypeBySuccPred(linkKey))))
-
-                    Select Case linkType
-                        Case "SS"
-                            candidateStart = ApplyLag(rexStartById(CStr(predId)), effectiveLag, taskCal, "SS")
-                            If HasValue(candidateStart) Then
-                                If Not HasValue(bestStart) Or CDbl(candidateStart) > CDbl(bestStart) Then bestStart = candidateStart
-                            End If
-                        Case "FF"
-                            candidateFinish = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FF")
-                            If HasValue(candidateFinish) Then
-                                If Not HasValue(bestFinish) Or CDbl(candidateFinish) > CDbl(bestFinish) Then bestFinish = candidateFinish
-                            End If
-                        Case "FS", ""
-                            candidateStart = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FS")
-                            If HasValue(candidateStart) Then
-                                If Not HasValue(bestStart) Or CDbl(candidateStart) > CDbl(bestStart) Then bestStart = candidateStart
-                            End If
-                        Case Else
-                            diagnosticsById(taskId) = "REX_INVALID_DEPENDENCY_TYPE"
-                            GoTo NextRexTemporalTask
-                    End Select
+                    edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                    For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                        effectiveLag = CDbl(edgeLags(analyticsEdge))
+                        linkType = UCase$(Trim$(CStr(edgeTypes(analyticsEdge))))
+    
+                        Select Case linkType
+                            Case "SS"
+                                candidateStart = ApplyLag(rexStartById(CStr(predId)), effectiveLag, taskCal, "SS")
+                                If HasValue(candidateStart) Then
+                                    If Not HasValue(bestStart) Or CDbl(candidateStart) > CDbl(bestStart) Then bestStart = candidateStart
+                                End If
+                            Case "FF"
+                                candidateFinish = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FF")
+                                If HasValue(candidateFinish) Then
+                                    If Not HasValue(bestFinish) Or CDbl(candidateFinish) > CDbl(bestFinish) Then bestFinish = candidateFinish
+                                End If
+                            Case "FS", ""
+                                candidateStart = ApplyLag(rexFinishById(CStr(predId)), effectiveLag, taskCal, "FS")
+                                If HasValue(candidateStart) Then
+                                    If Not HasValue(bestStart) Or CDbl(candidateStart) > CDbl(bestStart) Then bestStart = candidateStart
+                                End If
+                            Case Else
+                                diagnosticsById(taskId) = "REX_INVALID_DEPENDENCY_TYPE"
+                                GoTo NextRexTemporalTask
+                        End Select
+                    Next analyticsEdge
                 End If
             Next predId
         End If
@@ -1087,6 +1101,8 @@ Public Sub ComputeCriticalPathREX( _
     Dim rexFreeFloatById As Object
     Dim predLagBySuccPred As Object
     Dim predTypeBySuccPred As Object
+    Dim analyticsEdge As Long
+    Dim edgeTypes As Variant, edgeLags As Variant
     Dim reverseTopo As Collection
     Dim networkFinishById As Object
 
@@ -1140,14 +1156,12 @@ Public Sub ComputeCriticalPathREX( _
     Set rexLateFinishById = CreateObject("Scripting.Dictionary")
     Set rexTotalFloatById = CreateObject("Scripting.Dictionary")
     Set rexFreeFloatById = CreateObject("Scripting.Dictionary")
-    If analyticsPredLagBySuccPred Is Nothing Then
-        Set predLagBySuccPred = BuildPredLagMapFromLogicLinks()
+    If analyticsPredLagBySuccPred Is Nothing And analyticsPredTypeBySuccPred Is Nothing Then
+        BuildAnalyticsEdgeMapsFromLogicLinks predLagBySuccPred, predTypeBySuccPred
     Else
+        If analyticsPredLagBySuccPred Is Nothing Or analyticsPredTypeBySuccPred Is Nothing Then _
+            Err.Raise 5, "Analytics", "Incomplete edge attributes"
         Set predLagBySuccPred = analyticsPredLagBySuccPred
-    End If
-    If analyticsPredTypeBySuccPred Is Nothing Then
-        Set predTypeBySuccPred = BuildPredTypeMapFromLogicLinks()
-    Else
         Set predTypeBySuccPred = analyticsPredTypeBySuccPred
     End If
 
@@ -1233,44 +1247,47 @@ Public Sub ComputeCriticalPathREX( _
 
                 linkKey = CStr(succId) & "|" & taskId
 
-                effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                linkType = CStr(predTypeBySuccPred(linkKey))
-                succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
-
-                Select Case linkType
-
-                    Case "SS"
-                        If rexLateStartById.Exists(CStr(succId)) Then
-                            candidateLateStart = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
-                            ElseIf CDbl(AddWorkingDays(candidateLateStart, baselineDuration, taskCal)) < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                    effectiveLag = CDbl(edgeLags(analyticsEdge))
+                    linkType = CStr(edgeTypes(analyticsEdge))
+                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+    
+                    Select Case linkType
+    
+                        Case "SS"
+                            If rexLateStartById.Exists(CStr(succId)) Then
+                                candidateLateStart = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+    
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                                ElseIf CDbl(AddWorkingDays(candidateLateStart, baselineDuration, taskCal)) < CDbl(candidateLateFinish) Then
+                                    candidateLateFinish = AddWorkingDays(candidateLateStart, baselineDuration, taskCal)
+                                End If
                             End If
-                        End If
-
-                    Case "FF"
-                        If rexLateFinishById.Exists(CStr(succId)) Then
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
-                            ElseIf CDbl(OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
-                                candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+    
+                        Case "FF"
+                            If rexLateFinishById.Exists(CStr(succId)) Then
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                ElseIf CDbl(OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)) < CDbl(candidateLateFinish) Then
+                                    candidateLateFinish = OffsetWorkingDays(rexLateFinishById(CStr(succId)), -effectiveLag, succCal)
+                                End If
                             End If
-                        End If
-
-                    Case Else
-                        If rexLateStartById.Exists(CStr(succId)) Then
-                            If Not HasValue(candidateLateFinish) Then
-                                candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
-                            ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
-                                candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
-                                candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+    
+                        Case Else
+                            If rexLateStartById.Exists(CStr(succId)) Then
+                                If Not HasValue(candidateLateFinish) Then
+                                    candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                ElseIf CDbl(PreviousWorkingDay(OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal), succCal)) < CDbl(candidateLateFinish) Then
+                                    candidateDate = OffsetWorkingDays(rexLateStartById(CStr(succId)), -effectiveLag, succCal)
+                                    candidateLateFinish = PreviousWorkingDay(candidateDate, succCal)
+                                End If
                             End If
-                        End If
-
-                End Select
+    
+                    End Select
+                Next analyticsEdge
             End If
         Next succId
 
@@ -1333,24 +1350,27 @@ NextRexBackward:
 
                         linkKey = CStr(succId) & "|" & taskId
 
-                        effectiveLag = CDbl(predLagBySuccPred(linkKey))
-                        linkType = CStr(predTypeBySuccPred(linkKey))
-
-                succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
-
-                Select Case linkType
-                            Case "SS"
-                                candidateDate = ApplyLag(rexStartById(taskId), effectiveLag, succCal, "SS")
-                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
-
-                            Case "FF"
-                                candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FF")
-                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexFinishById(CStr(succId)), succCal))
-
-                            Case Else
-                                candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FS")
-                                candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
-                        End Select
+                        edgeTypes = predTypeBySuccPred(linkKey): edgeLags = predLagBySuccPred(linkKey)
+                        For analyticsEdge = LBound(edgeTypes) To UBound(edgeTypes)
+                            effectiveLag = CDbl(edgeLags(analyticsEdge))
+                            linkType = CStr(edgeTypes(analyticsEdge))
+    
+                    succCal = NormalizeCalendarType(dataArr(idToRow(CStr(succId)), mapCalc("Cal")))
+    
+                    Select Case linkType
+                                Case "SS"
+                                    candidateDate = ApplyLag(rexStartById(taskId), effectiveLag, succCal, "SS")
+                                    candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
+    
+                                Case "FF"
+                                    candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FF")
+                                    candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexFinishById(CStr(succId)), succCal))
+    
+                                Case Else
+                                    candidateDate = ApplyLag(rexFinishById(taskId), effectiveLag, succCal, "FS")
+                                    candidateFF = CDbl(SignedWorkingDayOffset(candidateDate, rexStartById(CStr(succId)), succCal))
+                            End Select
+                        Next analyticsEdge
 
                         If Not HasValue(minFF) Then
                             minFF = candidateFF
@@ -1667,6 +1687,8 @@ Public Sub Push_Analytics_Back_To_WBS()
 
     Set perfScope = Profiler_BeginScope("Push_Analytics_Back_To_WBS", "Excel Table Write")
 
+    Dim previousEnableEvents As Boolean
+    previousEnableEvents = Application.EnableEvents
     On Error GoTo ErrHandler
 
     Set wsWBS = ThisWorkbook.Worksheets("WBS")
@@ -1800,7 +1822,7 @@ Public Sub Push_Analytics_Back_To_WBS()
     writeScopeToken = 0
 
 SafeExit:
-    Application.EnableEvents = True
+    Application.EnableEvents = previousEnableEvents
     Exit Sub
 
 ErrHandler:
@@ -1808,7 +1830,7 @@ ErrHandler:
     errorDescription = Err.Description
     On Error Resume Next
     CloseAuthorizedWBSWriteScope writeScopeToken
-    Application.EnableEvents = True
+    Application.EnableEvents = previousEnableEvents
     On Error GoTo 0
     Err.Raise errorNumber, "Push_Analytics_Back_To_WBS", errorDescription
 
@@ -2485,99 +2507,26 @@ End Sub
 ' EN: Builds the Pred Lag Map From Logic Links map from data supplied by the caller.
 '------------------------------------------------------------------------------
 
-Private Function BuildPredLagMapFromLogicLinks() As Object
-
-    Dim network As clsParsedPlanningNetwork
-    Dim link As clsParsedPlanningLink
-    Dim d As Object
-    Dim r As Long
-    Dim succId As String
-    Dim predId As String
-    Dim linkType As String
-    Dim linkKey As String
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    On Error GoTo SafeExit
-
+Private Sub BuildAnalyticsEdgeMapsFromLogicLinks(ByRef lags As Object, ByRef types As Object)
+    Dim network As clsParsedPlanningNetwork, link As clsParsedPlanningLink
+    Dim preds As Object, children As Object, edgeKeys As Object, r As Long
+    Set lags = CreateObject("Scripting.Dictionary")
+    Set types = CreateObject("Scripting.Dictionary")
+    Set preds = CreateObject("Scripting.Dictionary")
+    Set children = CreateObject("Scripting.Dictionary")
+    Set edgeKeys = CreateObject("Scripting.Dictionary")
     Set network = ParsedPlanningNetwork_LoadCanonical()
-
-    If Not network.HasColumn("Succ ID") Then GoTo SafeExit
-    If Not network.HasColumn("Pred ID") Then GoTo SafeExit
-    If Not network.HasColumn("Link Type") Then GoTo SafeExit
-    If Not network.HasColumn("Lag") Then GoTo SafeExit
-
     For r = 1 To network.Count
-
         Set link = network.Item(r)
-        succId = link.SuccId
-        predId = link.PredId
-        linkType = link.LinkType
-
-        If succId = "" Or predId = "" Then GoTo NextRow
-
-        Select Case linkType
-            Case "FS", "SS", "FF"
-                linkKey = succId & "|" & predId
-                d(linkKey) = link.Lag
-        End Select
-
-NextRow:
+        If link.SuccId <> "" And link.PredId <> "" Then
+            Select Case link.LinkType
+                Case "FS", "SS", "FF"
+                    CompiledNetwork_AddAnalyticsEdge preds, children, lags, types, edgeKeys, _
+                        link.SuccId, link.PredId, link.LinkType, link.Lag
+            End Select
+        End If
     Next r
-
-SafeExit:
-    Set BuildPredLagMapFromLogicLinks = d
-
-End Function
-
-'------------------------------------------------------------------------------
-' FR: Construit la map Pred Type Map From Logic Links a partir des donnees fournies par l'appelant.
-' EN: Builds the Pred Type Map From Logic Links map from data supplied by the caller.
-'------------------------------------------------------------------------------
-
-Private Function BuildPredTypeMapFromLogicLinks() As Object
-
-    Dim network As clsParsedPlanningNetwork
-    Dim link As clsParsedPlanningLink
-    Dim d As Object
-    Dim r As Long
-    Dim succId As String
-    Dim predId As String
-    Dim linkType As String
-    Dim linkKey As String
-
-    Set d = CreateObject("Scripting.Dictionary")
-
-    On Error GoTo SafeExit
-
-    Set network = ParsedPlanningNetwork_LoadCanonical()
-
-    If Not network.HasColumn("Succ ID") Then GoTo SafeExit
-    If Not network.HasColumn("Pred ID") Then GoTo SafeExit
-    If Not network.HasColumn("Link Type") Then GoTo SafeExit
-
-    For r = 1 To network.Count
-
-        Set link = network.Item(r)
-        succId = link.SuccId
-        predId = link.PredId
-        linkType = link.LinkType
-
-        If succId = "" Or predId = "" Then GoTo NextRow
-
-        Select Case linkType
-            Case "FS", "SS", "FF"
-                linkKey = succId & "|" & predId
-                d(linkKey) = linkType
-        End Select
-
-NextRow:
-    Next r
-
-SafeExit:
-    Set BuildPredTypeMapFromLogicLinks = d
-
-End Function
+End Sub
 
 '------------------------------------------------------------------------------
 ' FR: Construit la collection Preds From Logic Links FS SS FF With Lag And Type Expanded To Leafs a partir des donnees fournies par l'appelant.
@@ -2609,8 +2558,10 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
     Dim expandedLeafSuccs As Collection
     Dim leafPredId As Variant
     Dim leafSuccId As Variant
+    Dim edgeKeys As Object
 
     BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeafs = False
+    Set edgeKeys = CreateObject("Scripting.Dictionary")
 
     If tblLinks Is Nothing Then
         hasStructuralError = True
@@ -2701,12 +2652,8 @@ Private Function BuildPredsFromLogicLinks_FS_SS_FF_WithLagAndType_ExpandedToLeaf
         For Each leafSuccId In expandedLeafSuccs
             For Each leafPredId In expandedLeafPreds
 
-                predsById(CStr(leafSuccId)).Add CStr(leafPredId)
-                childrenById(CStr(leafPredId)).Add CStr(leafSuccId)
-
-                linkKey = CStr(leafSuccId) & "|" & CStr(leafPredId)
-                predLagBySuccPred(linkKey) = linkLag
-                predTypeBySuccPred(linkKey) = linkType
+                CompiledNetwork_AddAnalyticsEdge predsById, childrenById, predLagBySuccPred, _
+                    predTypeBySuccPred, edgeKeys, CStr(leafSuccId), CStr(leafPredId), linkType, linkLag
 
             Next leafPredId
         Next leafSuccId
@@ -2832,6 +2779,8 @@ Public Function CalcEngine_HasBlockingErrorsForState() As Boolean
     On Error GoTo FailSafe
 
     CalcEngine_HasBlockingErrorsForState = True
+
+    If UCase$(Trim$(CalcState_GetRunStatus())) <> "OK" Then Exit Function
 
     Set wsCalc = ThisWorkbook.Worksheets("CALC")
     Set tblCalc = wsCalc.ListObjects("tbl_CALC")

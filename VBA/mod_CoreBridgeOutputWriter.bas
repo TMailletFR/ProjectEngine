@@ -249,6 +249,7 @@ SafeExit:
     If errorNumber <> 0 Then
         CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
             TextCatalog_Arguments("Procedure", "Push_Calculated_Back_To_WBS_Partial", "Details", errorDescription)
+        Err.Raise errorNumber, "Push_Calculated_Back_To_WBS_Partial", errorDescription
     End If
 
 End Sub
@@ -515,7 +516,15 @@ SafeExit:
 
     If Not consoleMessages Is Nothing Then
         CalcBridge_ShowPlanningConsole consoleMessages
+        If consoleMessages.Count > 0 And errorNumber = 0 Then
+            errorNumber = vbObjectError + 2102
+            errorDescription = PlanningMessageText_Format("DIAG.OUTPUT.PUSH_ERROR", _
+                TextCatalog_Arguments("Details", "WBS output validation failed"), _
+                TextCatalog_Arguments("Details", "WBS output validation failed"))
+        End If
     End If
+
+    If errorNumber <> 0 Then Err.Raise errorNumber, "Push_Calculated_Back_To_WBS", errorDescription
 
 End Sub
 

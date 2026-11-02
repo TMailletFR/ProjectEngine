@@ -70,7 +70,7 @@ End Sub
 ' FR: Rafraichit Dashboard Full Build a partir de l'etat courant.
 ' EN: Refreshes Dashboard Full Build from the current state.
 '------------------------------------------------------------------------------
-Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False)
+Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False, Optional ByVal hydratePersistedLanguage As Boolean = True)
 
     Dim ws As Worksheet
     Dim readContext As clsDashboardReadContext
@@ -80,7 +80,7 @@ Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection 
     Dim failureNumber As Long, failureDescription As String
 
     On Error GoTo ErrHandler
-    Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
+    If hydratePersistedLanguage Then Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
     Set ws = Dashboard_EnsureSheet()
     If preserveSnapshotSelection Then
         fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
@@ -97,6 +97,7 @@ Public Sub Refresh_Dashboard_FullBuild(Optional ByVal preserveSnapshotSelection 
     Dashboard_RenderSCurveChart ws, readContext.scurveProjection
     Dashboard_RenderPlanningOverview ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
     Dashboard_RenderHotSpots ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
+    Dashboard_UpdateHeaderTimestamp ws
 
 SafeExit:
     Exit Sub
@@ -107,6 +108,8 @@ ErrHandler:
         Err.Raise failureNumber, "Refresh_Dashboard_FullBuild", failureDescription
     End If
     Debug.Print "Refresh_Dashboard_FullBuild error " & Err.number & ": " & Err.description
+    CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "Refresh_Dashboard_FullBuild", "Details", Err.Description)
     Resume SafeExit
 End Sub
 
@@ -114,7 +117,7 @@ End Sub
 ' FR: Rafraichit Dashboard Content Only a partir de l'etat courant.
 ' EN: Refreshes Dashboard Content Only from the current state.
 '------------------------------------------------------------------------------
-Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False)
+Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelection As Boolean = False, Optional ByVal propagateErrors As Boolean = False, Optional ByVal hydratePersistedLanguage As Boolean = True)
 
     Dim ws As Worksheet
     Dim readContext As clsDashboardReadContext
@@ -122,11 +125,12 @@ Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelectio
     Dim toLabel As String
     Dim oldScreenUpdating As Boolean
     Dim failureNumber As Long, failureDescription As String
+    oldScreenUpdating = Application.ScreenUpdating
     On Error GoTo ErrHandler
-    Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
+    If hydratePersistedLanguage Then Dashboard_SetLanguage Settings_GetOwnerLanguage("DASHBOARD")
 
     If Not Dashboard_HasUsableLayout() Then
-        Refresh_Dashboard_FullBuild preserveSnapshotSelection, propagateErrors
+        Refresh_Dashboard_FullBuild preserveSnapshotSelection, propagateErrors, hydratePersistedLanguage
         Exit Sub
     End If
 
@@ -135,12 +139,10 @@ Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelectio
         fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
         toLabel = CStr(ws.Range(DASH_TO_CELL).value)
     End If
-    oldScreenUpdating = Application.ScreenUpdating
     Application.ScreenUpdating = False
 
     Set readContext = DashboardReadContext_Load()
     Dashboard_UpdateHeaderTexts ws
-    Dashboard_UpdateHeaderTimestamp ws
     Dashboard_SetupSnapshotControls ws, fromLabel, toLabel, False
     Dashboard_EnsureResetButton ws
     Dashboard_RemoveLegacyLanguageToggle ws
@@ -149,6 +151,7 @@ Public Sub Refresh_Dashboard_ContentOnly(Optional ByVal preserveSnapshotSelectio
     Dashboard_UpdateSCurveChartInPlace ws, readContext.scurveProjection
     Dashboard_UpdatePlanningOverviewContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
     Dashboard_UpdateHotSpotsContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
+    Dashboard_UpdateHeaderTimestamp ws
 
 SafeExit:
     Application.ScreenUpdating = oldScreenUpdating
@@ -160,6 +163,8 @@ SafeExit:
 ErrHandler:
     failureNumber = Err.number: failureDescription = Err.description
     Debug.Print "Refresh_Dashboard_ContentOnly error " & Err.number & ": " & Err.description
+    If Not propagateErrors Then CalcBridge_ShowSingleConsoleMessage "STOP", "COMMON.ERROR.PROCEDURE_INLINE", _
+        TextCatalog_Arguments("Procedure", "Refresh_Dashboard_ContentOnly", "Details", failureDescription)
     Resume SafeExit
 End Sub
 '------------------------------------------------------------------------------
@@ -474,34 +479,7 @@ End Sub
 ' EN: Refreshes Dashboard Texts And Comparison Only from the current state.
 '------------------------------------------------------------------------------
 Private Sub Refresh_Dashboard_TextsAndComparisonOnly()
-
-    Dim ws As Worksheet
-    Dim readContext As clsDashboardReadContext
-    Dim fromLabel As String
-    Dim toLabel As String
-
-    On Error GoTo ErrHandler
-    Set ws = ThisWorkbook.Worksheets(DASHBOARD_SHEET)
-    fromLabel = CStr(ws.Range(DASH_FROM_CELL).value)
-    toLabel = CStr(ws.Range(DASH_TO_CELL).value)
-    Set readContext = DashboardReadContext_Load()
-
-    Dashboard_UpdateHeaderTexts ws
-    Dashboard_UpdateHeaderTimestamp ws
-    Dashboard_SetupSnapshotControls ws, fromLabel, toLabel, False
-    Dashboard_EnsureResetButton ws
-    Dashboard_RemoveLegacyLanguageToggle ws
-    Dashboard_UpdateKnownShapeTexts ws
-    Dashboard_UpdateKpiCardsInPlace ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns, readContext.scurveProjection
-    Dashboard_UpdateSCurveChartInPlace ws, readContext.scurveProjection
-    Dashboard_UpdatePlanningOverviewContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
-    Dashboard_UpdateHotSpotsContent ws, readContext.wbsTable, readContext.WbsColumns, readContext.CalcTable, readContext.calcColumns
-
-SafeExit:
-    Exit Sub
-ErrHandler:
-    Debug.Print "Refresh_Dashboard_TextsAndComparisonOnly error " & Err.number & ": " & Err.description
-    Err.Raise Err.number, "Refresh_Dashboard_TextsAndComparisonOnly", Err.description
+    Refresh_Dashboard_ContentOnly True, True, False
 End Sub
 
 '------------------------------------------------------------------------------
@@ -905,7 +883,6 @@ Private Sub Dashboard_RenderHeader(ByVal ws As Worksheet, Optional ByVal selecte
     End With
 
     Dashboard_AddUpdateButton ws, ws.Range("Q1").left, ws.Range("Q1").top + 4, 126, 24
-    Dashboard_AddBadge ws, Dashboard_FormatTimestamp(Now), ws.Range("T1").left, ws.Range("T1").top + 5, 150, 22, RGB(226, 240, 255), RGB(29, 91, 158)
     Dashboard_SetupSnapshotControls ws, selectedFromLabel, selectedToLabel, True
     Dashboard_AddResetButton ws, ws.Range("Q3").left, ws.Range("Q3").top + 4, 126, 24
     Dashboard_RemoveLegacyLanguageToggle ws
@@ -1754,6 +1731,7 @@ Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As List
     Dim rightW As Double
     Dim largeW As Double
     Dim smallH As Double
+    Dim progressById As Object
 
     leftPos = ws.Range("B32").left
     topPos = ws.Range("B32").top
@@ -1769,10 +1747,11 @@ Private Sub Dashboard_RenderHotSpots(ByVal ws As Worksheet, ByVal tblWBS As List
     largeW = (widthVal - 44 - rightW - (gapVal * 2)) / 2
     smallH = (cardHeight - gapVal) / 2
 
+    Set progressById = Dashboard_BuildProgressById(tblWBS, mapWBS)
     Dashboard_RenderTopDelays ws, tblWBS, mapWBS, leftPos + 22, cardTop, largeW, cardHeight
-    Dashboard_RenderDeadlineHealth ws, tblCalc, mapCalc, leftPos + 22 + largeW + gapVal, cardTop, largeW, cardHeight
-    Dashboard_RenderNextMilestone ws, tblCalc, mapCalc, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop, rightW, smallH
-    Dashboard_RenderNextCriticalActivity ws, tblCalc, mapCalc, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH
+    Dashboard_RenderDeadlineHealth ws, tblCalc, mapCalc, leftPos + 22 + largeW + gapVal, cardTop, largeW, cardHeight, progressById
+    Dashboard_RenderNextMilestone ws, tblCalc, mapCalc, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop, rightW, smallH, progressById
+    Dashboard_RenderNextCriticalActivity ws, tblCalc, mapCalc, leftPos + 22 + (largeW * 2) + (gapVal * 2), cardTop + smallH + gapVal, rightW, smallH, progressById
 
 End Sub
 
@@ -1805,13 +1784,13 @@ Private Sub Dashboard_RenderTopDelays(ByVal ws As Worksheet, ByVal tblWBS As Lis
 
     arr = tblWBS.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
-        v = Dashboard_ArrayVal(arr, mapWBS, r, "Finish Variance")
+        v = Dashboard_ArrayVal(arr, mapWBS, r, VTS_COL_FINISH_VARIANCE)
         If IsNumeric(v) Then
             If CDbl(v) > 0 Then
                 Dashboard_InsertTopDelay topIds, topWbs, topNames, topVals, _
                     CStr(Dashboard_ArrayVal(arr, mapWBS, r, "ID")), _
                     CStr(Dashboard_ArrayVal(arr, mapWBS, r, "WBS")), _
-                    CStr(Dashboard_ArrayVal(arr, mapWBS, r, "Task Name")), _
+                    CStr(Dashboard_ArrayVal(arr, mapWBS, r, VTS_COL_TASK_NAME)), _
                     CDbl(v)
             End If
         End If
@@ -1858,7 +1837,7 @@ End Sub
 ' EN: Refreshes Render Deadline Health without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal progressById As Object)
 
     Dim arr As Variant
     Dim r As Long
@@ -1881,6 +1860,11 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
     Dim closestY As Double
 
     On Error GoTo RenderFailed
+    If CalcState_GetAnalyticsStatus() <> "ON" Then
+        Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.DEADLINES", Dashboard_CurrentLanguage()), TextCatalog_Get("DASHBOARD.HELP.COMMITMENTS", Dashboard_CurrentLanguage()), RGB(160, 170, 181)
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.ANALYTICS.UNAVAILABLE", Dashboard_CurrentLanguage()), X + 18, Y + 90, w - 36, 44, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Exit Sub
+    End If
 
     If tblCalc Is Nothing Then GoTo NoData
     If mapCalc Is Nothing Then GoTo NoData
@@ -1890,7 +1874,7 @@ Private Sub Dashboard_RenderDeadlineHealth(ByVal ws As Worksheet, ByVal tblCalc 
 
     arr = tblCalc.DataBodyRange.value
     For r = 1 To UBound(arr, 1)
-        If Dashboard_IsActiveDashboardTask(arr, mapCalc, r) Then
+        If Dashboard_IsActiveDashboardTask(arr, mapCalc, r, progressById) Then
             If HasValue(Dashboard_ArrayVal(arr, mapCalc, r, "Deadline")) Then
                 deadlineFloat = Dashboard_ArrayVal(arr, mapCalc, r, "Deadline Float")
                 If IsNumeric(deadlineFloat) Then
@@ -1966,7 +1950,7 @@ End Sub
 ' EN: Refreshes Render Next Milestone without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal progressById As Object)
 
     Dim arr As Variant
     Dim r As Long
@@ -1997,7 +1981,7 @@ Private Sub Dashboard_RenderNextMilestone(ByVal ws As Worksheet, ByVal tblCalc A
     todaySerial = CDbl(Date)
 
     For r = 1 To UBound(arr, 1)
-        If Dashboard_IsMilestoneRow(arr, mapCalc, r) And Dashboard_IsActiveDashboardTask(arr, mapCalc, r) Then
+        If Dashboard_IsMilestoneRow(arr, mapCalc, r) And Dashboard_IsActiveDashboardTask(arr, mapCalc, r, progressById) Then
             finishVal = GetCellValue(Dashboard_ArrayVal(arr, mapCalc, r, "Calculated Finish"))
             If Dashboard_HasDateValue(finishVal) Then
                 finishSerial = Dashboard_DateNumber(finishVal)
@@ -2061,7 +2045,7 @@ End Sub
 ' EN: Refreshes Render Next Critical Activity without changing the business rules that produce the data.
 '------------------------------------------------------------------------------
 
-Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double)
+Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tblCalc As ListObject, ByVal mapCalc As Object, ByVal X As Double, ByVal Y As Double, ByVal w As Double, ByVal h As Double, ByVal progressById As Object)
 
     Dim arr As Variant
     Dim r As Long
@@ -2083,6 +2067,11 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
     Dim daysToStart As Double
 
     On Error GoTo RenderFailed
+    If CalcState_GetAnalyticsStatus() <> "ON" Then
+        Dashboard_AddHotSpotCard ws, X, Y, w, h, TextCatalog_Get("DASHBOARD.CARD.NEXT_CRITICAL", Dashboard_CurrentLanguage()), "", RGB(160, 170, 181)
+        Dashboard_AddHotSpotText ws, TextCatalog_Get("DASHBOARD.ANALYTICS.UNAVAILABLE", Dashboard_CurrentLanguage()), X + 16, Y + 76, w - 32, 44, RGB(96, 111, 128), 8, False, xlHAlignLeft
+        Exit Sub
+    End If
 
     If tblCalc Is Nothing Then GoTo NoData
     If mapCalc Is Nothing Then GoTo NoData
@@ -2094,7 +2083,7 @@ Private Sub Dashboard_RenderNextCriticalActivity(ByVal ws As Worksheet, ByVal tb
     todaySerial = CDbl(Date)
 
     For r = 1 To UBound(arr, 1)
-        If Dashboard_IsActiveDashboardTask(arr, mapCalc, r) Then
+        If Dashboard_IsActiveDashboardTask(arr, mapCalc, r, progressById) Then
             If UCase$(Trim$(CStr(Dashboard_ArrayVal(arr, mapCalc, r, "Critical Path")))) = "CRITICAL" Then
                 If Not Dashboard_IsMilestoneRow(arr, mapCalc, r) Then
                     startVal = GetCellValue(Dashboard_ArrayVal(arr, mapCalc, r, "Calculated Start"))
@@ -2205,6 +2194,9 @@ Private Sub Dashboard_WriteHotSpotRuntimeError( _
 
     On Error Resume Next
     Dashboard_AddHotSpotText ws, msg, X, Y, w, 28, RGB(192, 80, 77), 8, False, xlHAlignLeft
+    On Error GoTo 0
+    If errNum = 0 Then errNum = 5
+    Err.Raise errNum, "Dashboard_RenderHotSpots", msg
 
 End Sub
 
@@ -2539,25 +2531,25 @@ End Function
 ' EN: Returns whether the Active Dashboard Task map satisfies the expected condition without mutating source data.
 '------------------------------------------------------------------------------
 
-Private Function Dashboard_IsActiveDashboardTask(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long) As Boolean
-
-    Dim progressVal As Variant
-    Dim actualFinish As Variant
-
-    If mapTbl.exists("Actual Finish") Then
-        actualFinish = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Actual Finish"))
-        If HasValue(actualFinish) Then Exit Function
-    End If
-
-    If mapTbl.exists("% Progress") Then
-        progressVal = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "% Progress"))
-        If IsNumeric(progressVal) Then
-            If Dashboard_NormalizeProgress(progressVal) >= 1# Then Exit Function
+Private Function Dashboard_TaskIsComplete(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long, ByVal progressById As Object) As Boolean
+    Dim id As String, actualFinish As Variant
+    id = CStr(Dashboard_ArrayVal(arr, mapTbl, r, "ID"))
+    If Not progressById Is Nothing Then
+        If progressById.Exists(id) Then
+            If CDbl(progressById(id)) >= 1# Then
+                Dashboard_TaskIsComplete = True
+                Exit Function
+            End If
         End If
     End If
+    actualFinish = GetCellValue(Dashboard_ArrayVal(arr, mapTbl, r, "Actual Finish"))
+    If Dashboard_HasDateValue(actualFinish) Then
+        Dashboard_TaskIsComplete = (Fix(Dashboard_DateNumber(actualFinish)) <= CDbl(Date))
+    End If
+End Function
 
-    Dashboard_IsActiveDashboardTask = True
-
+Private Function Dashboard_IsActiveDashboardTask(ByRef arr As Variant, ByVal mapTbl As Object, ByVal r As Long, ByVal progressById As Object) As Boolean
+    Dashboard_IsActiveDashboardTask = Not Dashboard_TaskIsComplete(arr, mapTbl, r, progressById)
 End Function
 
 '------------------------------------------------------------------------------
@@ -2777,36 +2769,20 @@ End Function
 '------------------------------------------------------------------------------
 
 Private Function Dashboard_CountMarkerRemaining(ByVal tbl As ListObject, ByVal mapTbl As Object, ByVal colName As String) As Long
-
-    Dim arr As Variant
-    Dim r As Long
-    Dim txt As String
-    Dim progressVal As Double
-    Dim hasProgress As Boolean
-    Dim actualFinish As Variant
-
+    Dim arr As Variant, r As Long, txt As String
+    Dim wbs As ListObject, progressById As Object
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
-    If Not mapTbl.exists(colName) Then Exit Function
-
-    hasProgress = mapTbl.exists("% Progress")
-
-    arr = tbl.DataBodyRange.value
+    If Not mapTbl.Exists(colName) Then Exit Function
+    Set wbs = ThisWorkbook.Worksheets("WBS").ListObjects("tbl_WBS")
+    Set progressById = Dashboard_BuildProgressById(wbs, CanonicalIdentity_BuildColumnMap(wbs))
+    arr = tbl.DataBodyRange.Value2
     For r = 1 To UBound(arr, 1)
         txt = UCase$(Trim$(CStr(arr(r, mapTbl(colName)))))
         If txt <> "" And txt <> "NO" And txt <> "FALSE" And txt <> "0" Then
-            If hasProgress Then
-                progressVal = Dashboard_NormalizeProgress(GetCellValue(arr(r, mapTbl("% Progress"))))
-            ElseIf mapTbl.exists("Actual Finish") Then
-                actualFinish = GetCellValue(arr(r, mapTbl("Actual Finish")))
-                If Dashboard_HasDateValue(actualFinish) Then progressVal = 1# Else progressVal = 0#
-            Else
-                progressVal = 0#
-            End If
-            If progressVal < 1# Then Dashboard_CountMarkerRemaining = Dashboard_CountMarkerRemaining + 1
+            If Not Dashboard_TaskIsComplete(arr, mapTbl, r, progressById) Then Dashboard_CountMarkerRemaining = Dashboard_CountMarkerRemaining + 1
         End If
     Next r
-
 End Function
 
 '------------------------------------------------------------------------------
@@ -2867,6 +2843,13 @@ Private Function Dashboard_BuildMetrics( _
     metrics("LongestPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Longest Path")
     metrics("LongestPathRemaining") = Dashboard_CountMarkerRemaining(tblCalc, mapCalc, "Longest Path")
     metrics("CriticalPathCount") = Dashboard_CountMarker(tblCalc, mapCalc, "Critical Path")
+    metrics("AnalyticsStatus") = CalcState_GetAnalyticsStatus()
+    If CStr(metrics("AnalyticsStatus")) <> "ON" Then
+        metrics("DeadlineRiskCount") = Empty
+        metrics("LongestPathCount") = Empty
+        metrics("LongestPathRemaining") = Empty
+        metrics("CriticalPathCount") = Empty
+    End If
     metrics("ContractStatus") = Dashboard_ContractStatus(metrics("DriftDays"), contractColor)
     Set Dashboard_BuildMetrics = metrics
 
@@ -2928,11 +2911,21 @@ End Function
 
 Private Function Dashboard_SnapshotMetricsComplete(ByVal metrics As Object) As Boolean
     Dim key As Variant
-    For Each key In Array("ActualProgress", "PlannedProgress", "ProgressVariance", "DriftDays", _
-        "DeadlineRiskCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount")
+    If Not metrics.Exists("AnalyticsStatus") Then Exit Function
+    If CStr(metrics("AnalyticsStatus")) <> "ON" And CStr(metrics("AnalyticsStatus")) <> "OFF" Then Exit Function
+    For Each key In Array("ActualProgress", "PlannedProgress", "ProgressVariance", "DriftDays")
         If Not metrics.exists(CStr(key)) Then Exit Function
         If isError(metrics(key)) Then Exit Function
         If Not HasValue(metrics(key)) Or Not IsNumeric(metrics(key)) Then Exit Function
+    Next key
+    For Each key In Array("DeadlineRiskCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount")
+        If Not metrics.Exists(CStr(key)) Then Exit Function
+        If CStr(metrics("AnalyticsStatus")) = "ON" Then
+            If IsError(metrics(key)) Then Exit Function
+            If Not HasValue(metrics(key)) Or Not IsNumeric(metrics(key)) Then Exit Function
+        Else
+            If Not IsEmpty(metrics(key)) Then Exit Function
+        End If
     Next key
     For Each key In Array("ForecastFinish", "BaselineFinish")
         If Not metrics.exists(CStr(key)) Then Exit Function
@@ -2952,6 +2945,10 @@ End Function
 ' EN - Side effect: clears only data or objects targeted by the contract.
 '------------------------------------------------------------------------------
 
+Public Function Dashboard_SnapshotKeys() As Variant
+    Dashboard_SnapshotKeys = Array("SnapshotId", "SnapshotDateTime", "SnapshotLabel", "ActualProgress", "PlannedProgress", "ProgressVariance", "ForecastFinish", "BaselineFinish", "DriftDays", "ContractStatus", "DeadlineRiskCount", "ForecastIssueCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount", "AnalyticsStatus")
+End Function
+
 Private Function Dashboard_EnsureSnapshotsTable() As ListObject
 
     Dim ws As Worksheet
@@ -2959,6 +2956,7 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     Dim headers As Variant
     Dim i As Long
     Dim nm As name
+    Dim analyticsColumn As ListColumn
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(DASHBOARD_SNAPSHOT_SHEET)
@@ -2973,12 +2971,21 @@ Private Function Dashboard_EnsureSnapshotsTable() As ListObject
     On Error GoTo 0
 
     If tbl Is Nothing Then
-        headers = Array("SnapshotId", "SnapshotDateTime", "SnapshotLabel", "ActualProgress", "PlannedProgress", "ProgressVariance", "ForecastFinish", "BaselineFinish", "DriftDays", "ContractStatus", "DeadlineRiskCount", "ForecastIssueCount", "LongestPathCount", "LongestPathRemaining", "CriticalPathCount")
+        headers = Dashboard_SnapshotKeys()
         For i = LBound(headers) To UBound(headers)
             ws.cells(1, i + 1).value = CStr(headers(i))
         Next i
         Set tbl = ws.ListObjects.Add(xlSrcRange, ws.Range(ws.cells(1, 1), ws.cells(1, UBound(headers) + 1)), , xlYes)
         tbl.name = DASHBOARD_SNAPSHOT_TABLE
+    End If
+
+    On Error Resume Next
+    Set analyticsColumn = tbl.ListColumns("AnalyticsStatus")
+    On Error GoTo 0
+    If analyticsColumn Is Nothing Then
+        Set analyticsColumn = tbl.ListColumns.Add
+        analyticsColumn.Name = "AnalyticsStatus"
+        If Not analyticsColumn.DataBodyRange Is Nothing Then analyticsColumn.DataBodyRange.Value2 = "UNKNOWN"
     End If
 
     On Error Resume Next
@@ -3121,6 +3128,10 @@ Private Function Dashboard_MomentumStatus(ByVal fromLabel As String, ByVal toLab
     If CStr(fromRow("SnapshotId")) = CStr(toRow("SnapshotId")) Then Exit Function
 
     progressDelta = CDbl(toRow("ActualProgress")) - CDbl(fromRow("ActualProgress"))
+    If Not Dashboard_SnapshotAnalyticsAvailable(fromRow) Or Not Dashboard_SnapshotAnalyticsAvailable(toRow) Then
+        subText = TextCatalog_Get("DASHBOARD.ANALYTICS.UNAVAILABLE", Dashboard_CurrentLanguage())
+        Exit Function
+    End If
     forecastDelta = Dashboard_DateNumber(toRow("ForecastFinish")) - Dashboard_DateNumber(fromRow("ForecastFinish"))
     riskDelta = CDbl(toRow("DeadlineRiskCount")) - CDbl(fromRow("DeadlineRiskCount"))
     subText = TextCatalog_Format("DASHBOARD.MOMENTUM.SUMMARY", Dashboard_CurrentLanguage(), TextCatalog_Arguments("Progress", Dashboard_FormatPercentSigned(progressDelta), "Forecast", Dashboard_FormatSignedCompactDays(forecastDelta), "Risks", Dashboard_FormatSignedNumber(riskDelta)))
@@ -3323,6 +3334,16 @@ Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal
     Dashboard_CriticalActivitiesHero = "-"
 
     If toRow Is Nothing Then Exit Function
+    If Not Dashboard_SnapshotAnalyticsAvailable(toRow) Then
+        subText = TextCatalog_Get("DASHBOARD.ANALYTICS.UNAVAILABLE", Dashboard_CurrentLanguage())
+        Exit Function
+    End If
+    If Not fromRow Is Nothing Then
+        If Not Dashboard_SnapshotAnalyticsAvailable(fromRow) Then
+            subText = TextCatalog_Get("DASHBOARD.ANALYTICS.UNAVAILABLE", Dashboard_CurrentLanguage())
+            Exit Function
+        End If
+    End If
 
     toCount = CLng(toRow("CriticalPathCount"))
     If fromRow Is Nothing Then
@@ -3347,6 +3368,12 @@ Private Function Dashboard_CriticalActivitiesHero(ByVal fromRow As Object, ByVal
         subText = TextCatalog_Get("DASHBOARD.STATUS.CRITICAL_UNCHANGED", Dashboard_CurrentLanguage())
     End If
 
+End Function
+
+Private Function Dashboard_SnapshotAnalyticsAvailable(ByVal snapshot As Object) As Boolean
+    If snapshot Is Nothing Then Exit Function
+    If Not snapshot.Exists("AnalyticsStatus") Then Exit Function
+    Dashboard_SnapshotAnalyticsAvailable = (CStr(snapshot("AnalyticsStatus")) = "ON")
 End Function
 
 '------------------------------------------------------------------------------
@@ -3501,6 +3528,7 @@ Private Function Dashboard_BuildSummaryProgress(ByRef arr As Variant, ByVal mapT
     Dim finishVal As Variant
     Dim progressVal As Double
     Dim leafColor As Variant
+    Dim zeroProgressOverdue As Boolean
     Dim completeColor As Long
     Dim metrics As Variant
     Dim coveredThrough As Variant
@@ -3550,6 +3578,10 @@ NextParent:
         If CDbl(finishVal) < CDbl(startVal) Then GoTo NextTask
         progressVal = Dashboard_RowProgress(arr, mapTbl, progressById, r, taskId)
         leafColor = GetProgressFillColor(startVal, finishVal, progressVal, coveredThrough)
+        zeroProgressOverdue = False
+        If progressVal = 0# And CDbl(startVal) < CDbl(Date) Then
+            zeroProgressOverdue = Not Dashboard_TaskIsComplete(arr, mapTbl, r, progressById)
+        End If
         If TaskTypeRules_IsMilestoneRow(arr, mapTbl, r) Then leafColor = Empty
         completeColor = CLng(GetProgressFillColor(startVal, finishVal, 1#))
         parentWbs = GetParentWBS(NormalizeWBS(CStr(Dashboard_ArrayVal(arr, mapTbl, r, "WBS"))))
@@ -3567,6 +3599,7 @@ NextParent:
                 If Not IsEmpty(leafColor) Then
                     If CLng(leafColor) <> completeColor Then metrics(2) = CLng(leafColor)
                 End If
+                If zeroProgressOverdue Then metrics(2) = COLOR_PROGRESS_ORANGE
                 result(parentWbs) = metrics
             End If
             parentWbs = GetParentWBS(parentWbs)
